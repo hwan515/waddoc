@@ -7,6 +7,8 @@
 
 # 1. Branch Strategy
 
+![branch](./docs/assets/branch.png)
+
 ## 1.1 Branch Model
 
 - master    : 배포 가능한 안정 버전
@@ -24,7 +26,7 @@
 예:
 
 feat/ros2-cartographer
-refactor/ai-module
+ref/ai-module
 
 ---
 
@@ -105,13 +107,13 @@ refactor: split state machine module
 
 # 6. Issue-based Branch Workflow
 
-- 모든 작업은 Issue로 시작합니다.
-- 브랜치는 Issue 페이지의 `Create branch` 버튼을 통해 생성합니다.
-- 브랜치명은 자동 생성된 `<iid>-<slug>` 형식을 기본으로 사용합니다.
+- 모든 작업은 Issue로 시작
+- 브랜치는 Issue 페이지의 `Create branch` 버튼을 통해 생성
+- 브랜치명은 자동 생성된 `<iid>-<slug>` 형식을 기본으로 사용
 
 권장 Prefix:
 
-- feature/<iid>-<slug>
+- feat/<iid>-<slug>
 - fix/<iid>-<slug>
 - refactor/<iid>-<slug>
 - 브랜치명에 Issue 번호 포함
