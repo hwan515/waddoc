@@ -15,9 +15,11 @@
 - In:
 - Out:
 
-### 수용 기준 (Acceptance Criteria)
+### 완료 기준 (Done)
+- [ ] Due day 확인(필요 시 조정)
 - [ ] 
-- [ ] 
+
+> ⚠️ 할 수 있는 범위 내에서 작성 
 
 ### 구현 메모 (Implementation Notes)
 - 설계/로직 요약
