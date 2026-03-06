@@ -1,15 +1,15 @@
-# 1. Branch Strategy
+# Branch Strategy
 
 ![branch](../assets/branch.jpg)
 
-## 1.1 Branch Model
+## 1. Branch Model
 
 - master : Production 배포 브랜치 (항상 배포 가능한 상태 유지)
 -  dev : Development 통합 브랜치 (기능 개발 머지 대상)
 - `<JIRA-KEY>/<type>/<scope>-<short-desc>` : 작업 브랜치(기능/버그/리팩터링 등)
 - 기본 흐름: 작업 브랜치 → dev → master
 
-## 1.2 Work Branch Naming Convention
+## 2. Work Branch Naming Convention
 
 Role
 - `<JIRA_ISSUE_KEY>/<type>/<scope>-<short-desc>`
@@ -34,7 +34,7 @@ short-desc 규칙
 - kebab-case 사용 (예: be-auth, fe-user-login, ai-model-loader)
 - 너무 길게 쓰지 않음 (의미 전달 최소 단위)
 
-## 1.3 Workflow
+## 3. Workflow
 1. `dev`에서 작업 브랜치 생성
 2. 기능 개발 완료 후 PR 생성 (Jira 이슈 링크 + 테스트 결과 필수)
 3. Code Review 통과 후 `dev`로 Merge
