@@ -11,25 +11,29 @@
 
 ## 2. Work Branch Naming Convention
 
-Role
-- `<JIRA_ISSUE_KEY>/<type>/<scope>-<short-desc>`
+Rule
+
+``` text
+<JIRA_ISSUE_KEY>/<type>/<scope>-<short-desc>
+```
 - JIRA ISSUE KEY 반드시 포함 (예: S14P21A603-2)
 - 브랜치 1개 = Jira 이슈 1개 원칙
 
 Type 목록 (Allowed)
-- feat : 기능 개발
-- fix : 버그 수정
-- ref : 리팩터링
-- docs : 문서 수정
-- test : 테스트 코드
-- chore : 빌드/설정/의존성 변경
-- perf : 성능 개선
+- `feat` : 기능 개발
+- `fix` : 버그 수정
+- `ref` : 리팩터링
+- `docs` : 문서 수정
+- `test` : 테스트 코드
+- `chore` : 빌드/설정/의존성 변경
+- `perf` : 성능 개선
 
 Scope 목록 (Monorepo 고정)
-- fe : Frontend
-- be : Backend API
-- ws : 
-- ai : AI 서비스/모델/파이프라인
+- `fe` : Frontend
+- `be` : Backend API
+- `ws` : ROS2 Workspace
+- `ai` : AI 서비스/모델/파이프라인
+
 short-desc 규칙
 - kebab-case 사용 (예: be-auth, fe-user-login, ai-model-loader)
 - 너무 길게 쓰지 않음 (의미 전달 최소 단위)
@@ -43,3 +47,5 @@ short-desc 규칙
 예:
 - `feat/ros2-cartographer`
 - `ref/ai-module`
+
+---
