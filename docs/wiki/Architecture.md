@@ -427,7 +427,7 @@ volumes:
 
 ### 4.5 AI 통신 방식 (배포)
 
-배포 환경에서는 공유 디렉터리가 없으므로 **multipart로 파일을 직접 전송**합니다.
+배포 환경에서는 공유 디렉터리가 없으므로 **multipart로 파일을 직접 전송**한다.
 
 ```
 Spring Boot → IDV AI (POST http://<AI_IP>:8000/api/v1/verify)
@@ -472,7 +472,7 @@ Response (JSON):
 
 ## 5. 파일 전달 추상화 레이어
 
-개발/배포 환경에 따라 파일 전달 방식이 달라지므로, **Spring Boot 내부에 추상화 레이어**를 둡니다.
+개발/배포 환경에 따라 파일 전달 방식이 달라지므로, **Spring Boot 내부에 추상화 레이어**를 둔다.
 
 ```
 interface AiFileTransferStrategy {
@@ -509,7 +509,7 @@ ai:
 
 ## 6. AI API 스펙 (양쪽 호환)
 
-AI 서버는 **두 가지 모드를 모두 지원**하도록 설계합니다.
+AI 서버는 **두 가지 모드를 모두 지원**하도록 설계한다.
 
 ### 6.1 IDV AI API
 
@@ -580,10 +580,10 @@ Parts: verificationId, referenceImage(file), probeImage(file)
 
 ### 7.1 TURN 서버 전제
 
-NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 필수로 구성**합니다.
+NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 필수로 구성**한다.
 
 > [!NOTE]
-> **사용 가능 포트**: 서버에서 80, 443, 8000–8999 포트가 개방되어 있으므로, LiveKit 관련 포트는 8000번대로 매핑합니다.
+> **사용 가능 포트**: 서버에서 80, 443, 8000–8999 포트가 개방되어 있으므로, LiveKit 관련 포트는 8000번대로 한다.
 >
 > **포트 모델**: 단일 UDP mux (`rtc.udp_port`) 사용. 모든 ICE/UDP 미디어가 단일 포트(7882)를 통과하므로 포트 범위(port_range) 불필요.
 >
@@ -643,9 +643,9 @@ turn:
 
 #### Nginx 설정 (배포 환경)
 
-Nginx는 API + 프론트엔드 + **LiveKit signaling WebSocket** 프록시를 담당합니다.
-LiveKit의 7880(API+WS) 포트는 Nginx 뒤에서 SSL termination을 거쳐 WSS로 서비스됩니다.
-ICE/TCP, ICE/UDP, TURN은 미디어 전용이므로 직접 노출합니다.
+Nginx는 API + 프론트엔드 + **LiveKit signaling WebSocket** 프록시를 담당한다.
+LiveKit의 7880(API+WS) 포트는 Nginx 뒤에서 SSL termination을 거쳐 WSS로 서비스된다.
+ICE/TCP, ICE/UDP, TURN은 미디어 전용이므로 직접 노출한다.
 
 ```nginx
 # nginx/prod.conf (발취)
@@ -710,14 +710,14 @@ sudo ufw enable
 ```
 
 > [!NOTE]
-> **8880 포트 불필요**: LiveKit signaling(7880)은 Nginx가 443 포트에서 `/livekit` 경로로 WSS 프록시하므로, 8880 포트를 별도로 개방할 필요가 없습니다.
+> **8880 포트 불필요**: LiveKit signaling(7880)은 Nginx가 443 포트에서 `/livekit` 경로로 WSS 프록시하므로, 8880 포트를 별도로 개방할 필요가 없다.
 
 > [!WARNING]
-> **ICE/UDP mux (8882/udp)** 포트가 방화벽에서 차단되면 UDP 미디어가 불가능하고 ICE/TCP(8881)로 fallback됩니다. TURN/UDP(8478)도 차단되면 NAT traversal이 실패할 수 있습니다.
+> **ICE/UDP mux (8882/udp)** 포트가 방화벽에서 차단되면 UDP 미디어가 불가능하고 ICE/TCP(8881)로 fallback된다. TURN/UDP(8478)도 차단되면 NAT traversal이 실패할 수 있다.
 
 ### 7.2 네트워크 품질 저하 대응
 
-프론트엔드(React)에서 LiveKit SDK의 connection quality 이벤트를 감지하여 단계별로 대응합니다.
+프론트엔드(React)에서 LiveKit SDK의 connection quality 이벤트를 감지하여 단계별로 대응한다.
 
 ```
 품질 상태       조건                     대응
