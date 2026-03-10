@@ -1,0 +1,122 @@
+services:
+  # === Reverse Proxy ===
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - spring-api
+      - frontend
+      - livekit
+    networks:
+      - waddoc-net
+
+  # === Frontend ===
+  frontend:
+    build: ../src/FE
+    expose:
+      - "3000"
+    networks:
+      - waddoc-net
+
+  # === Backend ===
+  spring-api:
+    build: ../src/BE
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - AI_IDV_URL=http://idv-ai:8000
+      - AI_STT_URL=http://stt-ai:8001
+      - FILE_STORAGE_ROOT=/data/uploads
+      - AI_FILE_TRANSFER_MODE=shared_directory
+    volumes:
+      - ./local-storage/uploads:/data/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - waddoc-net
+
+  # === Database ===
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: waddoc
+      POSTGRES_USER: waddoc
+      POSTGRES_PASSWORD: waddoc_dev
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - waddoc-net
+
+  # === Cache ===
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - waddoc-net
+
+  # === WebRTC ===
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
+    environment:
+      - LIVEKIT_KEYS=devkey:devsecret
+    networks:
+      - waddoc-net
+
+  # === AI - IDV (본인확인) ===
+  idv-ai:
+    build: ../src/AI/idv
+    expose:
+      - "8000"
+    environment:
+      - FILE_STORAGE_ROOT=/data/uploads
+    volumes:
+      - ./local-storage/uploads:/data/uploads:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    networks:
+      - waddoc-net
+
+  # === AI - STT ===
+  stt-ai:
+    build: ../src/AI/stt
+    expose:
+      - "8001"
+    environment:
+      - FILE_STORAGE_ROOT=/data/uploads
+    volumes:
+      - ./local-storage/uploads:/data/uploads:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    networks:
+      - waddoc-net
+
+volumes:
+  pg_data:
+  redis_data:
+
+networks:
+  waddoc-net:
+    driver: bridge
