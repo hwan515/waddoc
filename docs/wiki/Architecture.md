@@ -102,9 +102,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: waddak
-      POSTGRES_USER: waddak
-      POSTGRES_PASSWORD: waddak_dev
+      POSTGRES_DB: waddoc
+      POSTGRES_USER: waddoc
+      POSTGRES_PASSWORD: waddoc_dev
     volumes:
       - pg_data:/var/lib/postgresql/data
     expose:
@@ -167,7 +167,7 @@ volumes:
 ### 3.3 네트워크 구성
 
 ```
-docker network: waddak-net (bridge, 모든 컨테이너 연결)
+docker network: waddoc-net (bridge, 모든 컨테이너 연결)
 
 외부 공개 포트:
   - 80        → nginx (HTTP)
@@ -340,8 +340,8 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: waddak
-      POSTGRES_USER: waddak
+      POSTGRES_DB: waddoc
+      POSTGRES_USER: waddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql/data
