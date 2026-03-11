@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import { generateECGData, mockConsultationDetails, mockVitals } from '../../mockdata/consultations';
+import { useWebRTC } from '../../hooks/useWebRTC';
 
 const VideoConference = () => {
     // eslint-disable-next-line no-unused-vars
@@ -13,6 +14,38 @@ const VideoConference = () => {
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [ecgData, setEcgData] = useState(generateECGData(50));
+
+    // WebRTC Hook 로드 (의사는 방을 여는 Initiator 역할)
+    const {
+        localVideoRef,
+        remoteVideoRef,
+        localStream,
+        initCamera,
+        joinRoom,
+        toggleMedia,
+        cleanupMedia
+    } = useWebRTC(id || 'test-room', true);
+
+    // 카메라/마이크 On/Off 상태 동기화
+    useEffect(() => {
+        toggleMedia('audio', micEnabled);
+    }, [micEnabled, toggleMedia]);
+
+    useEffect(() => {
+        toggleMedia('video', videoEnabled);
+    }, [videoEnabled, toggleMedia]);
+
+    // 마운트 시 카메라 권한 요청 및 비디오/오디오 스트림 미리 켜두기 (방 접속 전)
+    useEffect(() => {
+        initCamera(videoEnabled, micEnabled);
+
+        // 언마운트 시 미디어 스트림 정리
+        return () => {
+            cleanupMedia();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
 
     // 심전도 차트 실시간 업데이트
     useEffect(() => {
@@ -34,8 +67,13 @@ const VideoConference = () => {
     }, [isJoined]);
 
     const handleEndCall = () => {
-        // 진료 종료 시 대시보드로 이동
+        cleanupMedia(); // 미디어 스트림 정리
         navigate('/doctor/dashboard');
+    };
+
+    const handleJoin = () => {
+        setIsJoined(true);
+        joinRoom(); // 화상 통신 시작 및 방 접속
     };
 
     // 의사는 화면 확인용 준비 라운지(Pre-join)를 거치도록 함
@@ -47,7 +85,8 @@ const VideoConference = () => {
                 setMicEnabled={setMicEnabled}
                 videoEnabled={videoEnabled}
                 setVideoEnabled={setVideoEnabled}
-                onJoin={() => setIsJoined(true)}
+                onJoin={handleJoin}
+                localVideoRef={localVideoRef}
             />
         );
     }
@@ -64,6 +103,9 @@ const VideoConference = () => {
             setVideoEnabled={setVideoEnabled}
             onEndCall={handleEndCall}
             role="DOCTOR"
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            localStream={localStream}
         />
     );
 };

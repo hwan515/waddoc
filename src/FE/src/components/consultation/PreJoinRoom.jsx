@@ -6,7 +6,8 @@ const PreJoinRoom = ({
     setMicEnabled,
     videoEnabled,
     setVideoEnabled,
-    onJoin
+    onJoin,
+    localVideoRef
 }) => {
     return (
         <div className="min-h-screen bg-[#111315] text-white flex flex-col font-sans">
@@ -31,11 +32,16 @@ const PreJoinRoom = ({
                 {/* 비디오 프리뷰 영역 */}
                 <div className="w-[800px] h-[450px] bg-[#1C1F22] rounded-2xl flex relative overflow-hidden ring-1 ring-white/10 shadow-2xl">
                     {videoEnabled ? (
-                        <div className="w-full h-full object-cover bg-slate-800 flex items-center justify-center">
-                            {/* 비디오 피드 목업 */}
-                            <div className="w-32 h-32 rounded-full bg-slate-600 flex items-center justify-center text-4xl font-bold text-slate-300">
-                                나
-                            </div>
+                        <div className="w-full h-full bg-black flex items-center justify-center">
+                            {/* 실제 로컬 카메라 프리뷰 */}
+                            <video
+                                ref={localVideoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                style={{ transform: 'scaleX(-1)' }}
+                                className="w-full h-full object-cover"
+                            />
                         </div>
                     ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center">
