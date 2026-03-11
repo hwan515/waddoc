@@ -12,11 +12,11 @@ services:
       - spring-api
       - frontend
       - livekit
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: '0.5'
+    # deploy: # 리소스 제한
+    #   resources:
+    #     limits:
+    #       memory: 128M
+    #       cpus: '0.5'
     networks:
       - waddoc-net
 
@@ -28,11 +28,11 @@ services:
         - VITE_API_URL=/api
     expose:
       - "3000"
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
+    # deploy: # 리소스 제한
+    #   resources:
+    #     limits:
+    #       memory: 256M
+    #       cpus: '0.5'
     networks:
       - waddoc-net
 
@@ -59,11 +59,11 @@ services:
     depends_on:
       - postgres
       - redis
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '2.0'
+    # deploy: # 리소스 제한
+    #   resources:
+    #     limits:
+    #       memory: 1G
+    #       cpus: '2.0'
     networks:
       - waddoc-net
 
@@ -78,13 +78,13 @@ services:
       - pg_data:/var/lib/postgresql/data
     expose:
       - "5432"
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 512M
+    # deploy: # 리소스 제한
+    #   resources:
+    #     limits:
+    #       memory: 1G
+    #       cpus: '1.0'
+    #     reservations:
+    #       memory: 512M
     networks:
       - waddoc-net
 
@@ -96,11 +96,11 @@ services:
       - redis_data:/data
     expose:
       - "6379"
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
+    # deploy: # 리소스 제한
+    #   resources:
+    #     limits:
+    #       memory: 256M
+    #       cpus: '0.5'
     networks:
       - waddoc-net
 
@@ -118,11 +118,11 @@ services:
     environment:
       - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
       - LIVEKIT_CONFIG=/etc/livekit.yaml
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
+    # deploy: # 리소스 제한
+    #   resources:
+    #     limits:
+    #       memory: 1G
+    #       cpus: '1.0'
     networks:
       - waddoc-net
 
@@ -130,6 +130,7 @@ volumes:
   pg_data:
   redis_data:
   uploads:
+
 
 networks:
   waddoc-net:
