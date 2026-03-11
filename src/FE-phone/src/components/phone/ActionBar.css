@@ -1,0 +1,75 @@
+.action-bar {
+  display: grid;
+  grid-template-columns: 64px 64px 64px;
+  gap: 8px;
+  justify-content: center;
+  padding: 6px 16px;
+}
+
+.action-btn-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.action-btn {
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s, box-shadow 0.1s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.action-btn:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.action-btn--call {
+  background: #4caf50;
+  color: #fff;
+}
+
+.action-btn--hangup {
+  background: #e53935;
+  color: #fff;
+}
+
+.action-btn--mic {
+  background: #fff;
+  color: #333;
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
+
+.action-btn--recording {
+  background: #e53935;
+  color: #fff;
+  animation: mic-pulse 1s infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(229, 57, 53, 0); }
+}
+
+.action-btn--send {
+  background: #2196f3;
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
