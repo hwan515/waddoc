@@ -1,0 +1,13 @@
+.dial-buffer {
+  text-align: center;
+  padding: 4px 12px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #444;
+}
+
+.dial-buffer-text {
+  font-family: 'Courier New', monospace;
+  font-size: 18px;
+  color: #8bc34a;
+  letter-spacing: 3px;
+}
