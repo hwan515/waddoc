@@ -14,7 +14,10 @@ const ConsultationRoom = ({
     videoEnabled,
     setVideoEnabled,
     onEndCall,
-    role = 'DOCTOR' // 'DOCTOR' 또는 'PATIENT'
+    role = 'DOCTOR', // 'DOCTOR' 또는 'PATIENT'
+    localVideoRef,
+    remoteVideoRef,
+    localStream
 }) => {
     const [durationSec, setDurationSec] = useState(0);
 
@@ -25,6 +28,16 @@ const ConsultationRoom = ({
         }, 1000);
         return () => clearInterval(timerInterval);
     }, []);
+
+    // 페이지 진입 또는 스트림 변경 시, 내 비디오 태그에 스트림을 명시적으로 연결
+    useEffect(() => {
+        if (localVideoRef && localVideoRef.current && localStream) {
+            // srcObject가 현재 스트림과 다를 때만 업데이트 (안그러면 깜빡임 발생)
+            if (localVideoRef.current.srcObject !== localStream) {
+                localVideoRef.current.srcObject = localStream;
+            }
+        }
+    }, [localStream, localVideoRef]);
 
     const formatTime = (sec) => {
         const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -73,11 +86,14 @@ const ConsultationRoom = ({
                     {/* 메인 비디오 (상대방) */}
                     <div className="flex-1 bg-slate-900 rounded-2xl relative overflow-hidden shadow-lg border border-slate-200">
                         <div className="absolute inset-0 flex items-center justify-center text-slate-500 bg-[#1A1C20]">
-                            <img
-                                src={mainVideoSrc}
-                                alt="Remote"
-                                className="w-full h-full object-cover opacity-90"
+                            {/* 실제 화상 통신 비디오 (상대방) */}
+                            <video
+                                ref={remoteVideoRef}
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-cover"
                             />
+                            {/* fallback: 스트림이 비어보이지 않게 z-index 아래에 배치할 수 있지만, 기본적으로 video가 보임 */}
                         </div>
                         {/* 레이블 및 상태 표시 */}
                         <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-2">
@@ -94,9 +110,14 @@ const ConsultationRoom = ({
                         <div className="w-64 bg-slate-900 rounded-2xl relative overflow-hidden shadow-lg border border-slate-200">
                             <div className="absolute inset-0 flex items-center justify-center text-slate-500 bg-[#2A2D31]">
                                 {videoEnabled ? (
-                                    <div className="w-16 h-16 rounded-full bg-slate-600 flex items-center justify-center text-xl font-bold text-white">
-                                        나
-                                    </div>
+                                    <video
+                                        ref={localVideoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        style={{ transform: 'scaleX(-1)' }}
+                                        className="w-full h-full object-cover"
+                                    />
                                 ) : (
                                     <div className="flex flex-col items-center">
                                         <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-xl font-bold text-slate-400">
