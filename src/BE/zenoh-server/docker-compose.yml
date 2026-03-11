@@ -1,0 +1,36 @@
+# docker-compose.yml
+# 이 파일은 Zenoh 라우터와 구독자 컨테이너를 정의하는
+# Docker Compose 설정입니다. 두 서비스를 함께 띄워
+# 네트워크를 통해 메시지를 주고받을 수 있도록 구성합니다.
+
+services:
+  zenoh:
+    image: eclipse/zenoh:1.7.2  # Eclipse Zenoh 공식 라우터 이미지
+    container_name: zenoh-router # 컨테이너 식별자
+    ports:
+      - "8081:8081"           # 호스트 포트:컨테이너 포트
+    volumes:
+      - ./router/zenoh.json5:/zenoh.json5  # 라우터 설정 파일을
+                                         # 컨테이너 내부로 마운트
+    command: ["-c", "/zenoh.json5"]     # 시작 시 설정 파일 사용
+    restart: unless-stopped                 # 비정상 종료 시 자동 재시작
+
+    logging:
+      driver: "json-file"                  # 기본 로그 드라이버
+      options:
+        max-size: "10m"                    # 로그 파일 최대 크기
+        max-file: "3"                      # 유지할 로그 파일 개수
+
+  subscriber:
+    # 파이썬 앱을 빌드하기 위한 컨텍스트 경로
+    build: ./router_app
+    container_name: zenoh-router_app
+    depends_on:
+      - zenoh                              # zenoh 서비스가 먼저 시작되어야 함
+    restart: unless-stopped
+    # Python 컨테이너에도 동일한 로그 제한 적용
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
