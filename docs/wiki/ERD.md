@@ -113,6 +113,7 @@ erDiagram
 
     INTAKE_TURN {
         bigint turn_id PK
+        varchar public_id UK "외부 노출 ID (turn_xxxx)"
         bigint intake_session_id FK
         int turn_order
         enum turn_type "DTMF | VOICE"
@@ -523,4 +524,5 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `BOOKING` | `UNIQUE (slot_id)` WHERE `status != 'CANCELLED'` | 동일 슬롯 이중 예약 방지 (부분 unique) |
 | `CARE_CASE` | `UNIQUE (booking_id)` | 예약-케이스 1:1 보장 |
 | `CONSULTATION_SUMMARY` | `UNIQUE (session_id)` | 세션당 요약 1건 보장 |
+| `INTAKE_TURN` | `UNIQUE (intake_session_id, turn_order)` | 세션 내 턴 순서 중복 방지 |
 | 모든 테이블 `public_id` | `UNIQUE` | 외부 노출 ID 유일성 보장 |

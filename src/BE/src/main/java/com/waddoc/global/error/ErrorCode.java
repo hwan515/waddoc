@@ -33,7 +33,10 @@ public enum ErrorCode {
     SLOT_NOT_IN_RECOMMENDATION(HttpStatus.BAD_REQUEST, "SLOT_NOT_IN_RECOMMENDATION", "해당 세션의 추천 결과에 포함되지 않은 슬롯입니다."),
 
     // Recommendation
-    RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "RECOMMENDATION_NOT_FOUND", "추천 결과를 찾을 수 없습니다.");
+    RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "RECOMMENDATION_NOT_FOUND", "추천 결과를 찾을 수 없습니다."),
+
+    // File
+    FILE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_SAVE_FAILED", "파일 저장에 실패했습니다.");
 
     private final HttpStatus status;
     private final String code;

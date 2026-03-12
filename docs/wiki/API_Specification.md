@@ -33,7 +33,7 @@
 > **이중 ID 전략**:
 > - DB 내부 PK는 `bigint` 자동 증가이며, 외부 API에는 **`public_id`** (접두사 + nanoid)를 노출한다.
 > - API 요청/응답의 모든 ID 필드는 `public_id` 값이다 (예: `userId` → `"usr_V1StGXR8"`, `patientId` → `"pat_Zk3mQ9"`).
-> - 접두사 규칙: `usr_` (USER), `pat_` (PATIENT), `doc_` (DOCTOR_PROFILE), `ints_` (INTAKE_SESSION), `rec_` (RECOMMENDATION), `slot_` (SCHEDULE_SLOT), `bk_` (BOOKING), `case_` (CARE_CASE), `ms_` (MISSION), `vrf_` (VERIFICATION), `ses_` (CONSULTATION_SESSION), `ntf_` (NOTIFICATION), `log_` (AUDIT_LOG), `cns_` (PATIENT_CONSENT), `vit_` (VITAL_RECORD), `evt_` (MISSION_EVENT), `link_` (PATIENT_GUARDIAN_LINK), `sms_` (SMS_LOG), `face_` (PATIENT_FACE_REFERENCE)
+> - 접두사 규칙: `usr_` (USER), `pat_` (PATIENT), `doc_` (DOCTOR_PROFILE), `ints_` (INTAKE_SESSION), `turn_` (INTAKE_TURN), `rec_` (RECOMMENDATION), `slot_` (SCHEDULE_SLOT), `bk_` (BOOKING), `case_` (CARE_CASE), `ms_` (MISSION), `vrf_` (VERIFICATION), `ses_` (CONSULTATION_SESSION), `ntf_` (NOTIFICATION), `log_` (AUDIT_LOG), `cns_` (PATIENT_CONSENT), `vit_` (VITAL_RECORD), `evt_` (MISSION_EVENT), `link_` (PATIENT_GUARDIAN_LINK), `sms_` (SMS_LOG), `face_` (PATIENT_FACE_REFERENCE)
 > - Path parameter의 ID도 `public_id` 값을 사용한다 (예: `/api/v1/bookings/bk_Abc123`).
 
 ---
@@ -509,21 +509,28 @@
 **Request Body**
 ```json
 {
-  "turnType": "DTMF",
   "dtmfInput": "1",
-  "prompt": "새로운 예약을 원하시면 1번, 기존 예약 조회·취소를 원하시면 2번을 눌러주세요."
+  "prompt": "새로운 예약을 원하시면 1번, 기존 예약 조회·취소를 원하시면 2번을 눌러주세요.",
+  "nextAction": "ASK_SYMPTOM",
+  "ttsMessage": "홍길동 어르신, 어디가 불편하신가요?"
 }
 ```
+
+> - `turnType`은 서버가 `DTMF`로 고정하므로 요청에 포함하지 않는다.
+> - `dtmfInput`: 숫자, `*`, `#`만 허용 (`^[0-9*#]+$`), 최대 10자.
+> - `nextAction`, `ttsMessage`: 프론트(시뮬레이터)에서 전달, 서버는 저장만 수행한다.
 
 **Response** `201 Created`
 ```json
 {
   "turnId": "turn_M4nPq8",
+  "turnOrder": 1,
   "intakeSessionId": "ints_R8kxPw",
   "turnType": "DTMF",
   "dtmfInput": "1",
   "nextAction": "ASK_SYMPTOM",
-  "ttsMessage": "홍길동 어르신, 어디가 불편하신가요?"
+  "ttsMessage": "홍길동 어르신, 어디가 불편하신가요?",
+  "createdAt": "2026-03-10T10:01:00+09:00"
 }
 ```
 
@@ -537,23 +544,30 @@
 | Path | `/api/v1/intake/sessions/{intakeSessionId}/turns/voice` |
 | Auth | 불필요 |
 
+> **MVP STT**: 실제 AI STT 호출 없이 Mock/Stub 응답을 반환한다. `audioFile`은 로컬 저장만 수행한다.
+
 **Request Body** (`multipart/form-data`)
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `audioFile` | file | O | 녹음 파일 (webm, wav) |
 | `prompt` | string | X | 직전 TTS 안내문 |
+| `nextAction` | string | X | 프론트에서 전달하는 다음 행동 |
+| `ttsMessage` | string | X | 프론트에서 전달하는 TTS 응답 |
 
 **Response** `200 OK`
 ```json
 {
   "turnId": "turn_W5vBx9",
+  "turnOrder": 2,
+  "intakeSessionId": "ints_R8kxPw",
   "turnType": "VOICE",
   "sttText": "어제부터 머리가 너무 아프고 열이 많이 나요",
   "sttConfidence": 0.92,
   "exceptionCode": null,
   "nextAction": "RECOMMEND",
-  "ttsMessage": "머리가 아프고 열이 나시는군요. 적합한 선생님을 찾아볼게요."
+  "ttsMessage": "머리가 아프고 열이 나시는군요.",
+  "createdAt": "2026-03-10T10:02:00+09:00"
 }
 ```
 
@@ -635,6 +649,8 @@
   "completionReason": "BOOKING_CREATED"
 }
 ```
+
+> `completionReason`은 enum으로 관리되며, 아래 값만 허용된다.
 
 | completionReason | 설명 |
 |------------------|------|
@@ -1994,6 +2010,8 @@ data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"�
 | `VITAL_RECORDED` | 바이탈 기록 |
 | `INTAKE_SESSION_CREATED` | 인테이크 세션 생성 (`actorRole=SYSTEM`) |
 | `INTAKE_PATIENT_BOUND` | 인테이크 세션 환자 바인딩 (`actorRole=SYSTEM`) |
+| `INTAKE_TURN_RECORDED` | 인테이크 턴 기록 (DTMF/VOICE) (`actorRole=SYSTEM`) |
+| `INTAKE_SESSION_COMPLETED` | 인테이크 세션 종료 (`actorRole=SYSTEM`) |
 | `INTAKE_SESSION_TIMEOUT` | 인테이크 세션 타임아웃 (후속 이슈) |
 
 > **`actorRole=SYSTEM` 처리**: 무인증 공개 API(인테이크 세션 등)에서 발생하는 감사 로그는 `actorId="SYSTEM"`, `actorRole="SYSTEM"`으로 기록한다.

@@ -44,8 +44,9 @@ public class IntakeSession extends BaseCreatedEntity {
     @Column(nullable = false, length = 20)
     private IntakeStatus status;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "completion_reason", length = 50)
-    private String completionReason;
+    private CompletionReason completionReason;
 
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
@@ -73,10 +74,11 @@ public class IntakeSession extends BaseCreatedEntity {
     }
 
     /** 세션 종료 처리 */
-    public void complete(String completionReason) {
+    public void complete(CompletionReason completionReason) {
         this.status = IntakeStatus.COMPLETED;
         this.completionReason = completionReason;
         this.endedAt = LocalDateTime.now();
+        touch();
     }
 
     public void markInProgress() {

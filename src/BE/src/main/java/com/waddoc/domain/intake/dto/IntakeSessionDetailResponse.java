@@ -1,6 +1,7 @@
 package com.waddoc.domain.intake.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.waddoc.domain.intake.entity.CompletionReason;
 import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.entity.IntakeStatus;
@@ -22,7 +23,7 @@ public class IntakeSessionDetailResponse {
     private String callerNumber;
     private IntakeChannel channel;
     private IntakeStatus status;
-    private String completionReason;
+    private CompletionReason completionReason;
     private OffsetDateTime createdAt;
     private OffsetDateTime endedAt;
     private OffsetDateTime lastActivityAt;

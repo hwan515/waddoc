@@ -1,6 +1,7 @@
 package com.waddoc.domain.intake.entity;
 
 import com.waddoc.global.audit.BaseCreatedEntity;
+import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -13,7 +14,10 @@ import java.math.BigDecimal;
  * 인테이크 턴별 기록. DTMF 키입력 또는 VOICE(STT) 입력과 TTS 응답을 저장.
  */
 @Entity
-@Table(name = "intake_turn")
+@Table(name = "intake_turn", uniqueConstraints = {
+        @UniqueConstraint(name = "uq_intake_turn_public_id", columnNames = "public_id"),
+        @UniqueConstraint(name = "uq_intake_turn_session_order", columnNames = {"intake_session_id", "turn_order"})
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IntakeTurn extends BaseCreatedEntity {
@@ -22,6 +26,9 @@ public class IntakeTurn extends BaseCreatedEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "turn_id")
     private Long id;
+
+    @Column(name = "public_id", nullable = false, unique = true, length = 20)
+    private String publicId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "intake_session_id", nullable = false)
@@ -62,6 +69,7 @@ public class IntakeTurn extends BaseCreatedEntity {
     public IntakeTurn(IntakeSession intakeSession, int turnOrder, TurnType turnType,
                       String dtmfInput, String prompt, String sttText, BigDecimal sttConfidence,
                       String exceptionCode, String nextAction, String ttsMessage, String audioFilePath) {
+        this.publicId = PublicIdGenerator.generate("turn_");
         this.intakeSession = intakeSession;
         this.turnOrder = turnOrder;
         this.turnType = turnType;
