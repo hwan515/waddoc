@@ -34,6 +34,7 @@ public enum ErrorCode {
 
     // Recommendation
     RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "RECOMMENDATION_NOT_FOUND", "추천 결과를 찾을 수 없습니다."),
+    NO_AVAILABLE_SLOT(HttpStatus.NOT_FOUND, "NO_AVAILABLE_SLOT", "해당 진료과에 예약 가능한 슬롯이 없습니다."),
 
     // File
     FILE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE_SAVE_FAILED", "파일 저장에 실패했습니다.");

@@ -2012,6 +2012,7 @@ data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"�
 | `INTAKE_PATIENT_BOUND` | 인테이크 세션 환자 바인딩 (`actorRole=SYSTEM`) |
 | `INTAKE_TURN_RECORDED` | 인테이크 턴 기록 (DTMF/VOICE) (`actorRole=SYSTEM`) |
 | `INTAKE_SESSION_COMPLETED` | 인테이크 세션 종료 (`actorRole=SYSTEM`) |
+| `SYMPTOM_CLASSIFIED` | 증상 분류 및 진료과 추천 (`actorRole=SYSTEM`) |
 | `INTAKE_SESSION_TIMEOUT` | 인테이크 세션 타임아웃 (후속 이슈) |
 
 > **`actorRole=SYSTEM` 처리**: 무인증 공개 API(인테이크 세션 등)에서 발생하는 감사 로그는 `actorId="SYSTEM"`, `actorRole="SYSTEM"`으로 기록한다.
