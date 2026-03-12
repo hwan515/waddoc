@@ -51,8 +51,9 @@ services:
       POSTGRES_PASSWORD: waddoc_dev
     volumes:
       - pg_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
+    ports:
+      # 추후 배포할떄는 expose로 변경
+      - "5432:5432"
     networks:
       - waddoc-net
 
@@ -116,6 +117,7 @@ services:
 volumes:
   pg_data:
   redis_data:
+
 
 networks:
   waddoc-net:

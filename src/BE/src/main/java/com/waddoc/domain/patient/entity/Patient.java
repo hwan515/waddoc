@@ -34,7 +34,7 @@ public class Patient extends BaseTimeEntity {
     @Column(name = "birth_date", nullable = false)
     private LocalDate birthDate;
 
-    @Column(name = "birth_date6", nullable = false, length = 6)
+    @Column(name = "birth_date6", nullable = false, columnDefinition = "bpchar(6)")
     private String birthDate6;
 
     @Column(name = "region_code", length = 30)
