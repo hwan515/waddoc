@@ -25,6 +25,7 @@ public enum ErrorCode {
     PATIENT_NOT_BOUND(HttpStatus.BAD_REQUEST, "PATIENT_NOT_BOUND", "세션에 환자가 아직 바인딩되지 않았습니다."),
 
     // Booking
+    PATIENT_MISMATCH(HttpStatus.FORBIDDEN, "PATIENT_MISMATCH", "세션의 환자와 예약의 환자가 일치하지 않습니다."),
     BOOKING_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다."),
     BOOKING_SLOT_CONFLICT(HttpStatus.CONFLICT, "BOOKING_SLOT_CONFLICT", "이미 예약된 슬롯입니다."),
     BOOKING_ALREADY_CANCELLED(HttpStatus.BAD_REQUEST, "BOOKING_ALREADY_CANCELLED", "이미 취소된 예약입니다."),

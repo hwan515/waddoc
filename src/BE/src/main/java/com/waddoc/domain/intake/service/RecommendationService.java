@@ -10,6 +10,7 @@ import com.waddoc.domain.intake.dto.RecommendRequest;
 import com.waddoc.domain.intake.dto.RecommendResponse;
 import com.waddoc.domain.intake.entity.*;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
+import com.waddoc.domain.intake.repository.RecommendationAvailableSlotRepository;
 import com.waddoc.domain.intake.repository.RecommendationRepository;
 import com.waddoc.domain.intake.repository.SymptomIntakeRepository;
 import com.waddoc.global.error.BusinessException;
@@ -31,6 +32,7 @@ public class RecommendationService {
     private final RecommendationRepository recommendationRepository;
     private final DoctorProfileRepository doctorProfileRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
+    private final RecommendationAvailableSlotRepository recSlotRepository;
     private final AuditLogService auditLogService;
 
     /**
@@ -72,6 +74,14 @@ public class RecommendationService {
                 .reason(classification.reason)
                 .build();
         recommendationRepository.save(recommendation);
+
+        // 추천 결과에 포함된 가용 슬롯을 중간 테이블에 저장
+        slots.forEach(slot -> recSlotRepository.save(
+                RecommendationAvailableSlot.builder()
+                        .recommendation(recommendation)
+                        .slot(slot)
+                        .build()
+        ));
 
         session.touch();
 
