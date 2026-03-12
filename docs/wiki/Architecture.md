@@ -10,6 +10,8 @@
 | 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 + 동의 → room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
 | JWT 분리 저장 | Access Token = 메모리(JS 변수), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
+| 이중 ID | 내부 PK는 bigint 자동 증가, 외부 API에는 `public_id`(접두사 + nanoid) 노출. PK 추론 방지, API 가독성 향상 |
+| 환자 SMS 알림 | 환자는 계정이 없으므로 예약 결과/취소 알림은 SOLAPI SMS 게이트웨이로 발송. 개발환경은 Mock |
 
 ---
 
@@ -27,7 +29,7 @@
                             │ HTTPS
 ┌───────────────────────────┴─────────────────────────────┐
 │                    Reverse Proxy (Nginx)                 │
-│            /api → spring       /app → react             │
+│            /api → spring       / → react               │
 └──────┬──────────────┬───────────────┬───────────────────┘
        │              │               │
 ┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐
@@ -178,7 +180,7 @@ docker network: waddoc-net (bridge, 모든 컨테이너 연결)
 
 Nginx 내부 라우팅:
   - /api      → spring-api:8080
-  - /app      → frontend:3000
+  - /         → frontend:3000
 
 내부 전용 (expose only):
   - 8080  → spring-api
@@ -254,7 +256,7 @@ Spring Boot → STT AI (POST http://stt-ai:8001/api/v1/transcribe)
 │  │  ┌───────────────────────────────────────────┐ │  │
 │  │  │              Nginx (SSL termination)      │ │  │
 │  │  │  :80 :443                                 │ │  │
-│  │  │  /api → spring-api   /app → react         │ │  │
+│  │  │  /api → spring-api   / → react              │ │  │
 │  │  │  /livekit → livekit (WSS→WS proxy)        │ │  │
 │  │  └───┬──────────┬──────────┬─────────────────┘ │  │
 │  │      │          │          │                     │  │
@@ -750,16 +752,33 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 
 ### 7.4 토큰 발급 및 재발급 정책
 
+> **의사와 환자의 토큰은 별도 엔드포인트에서 발급한다.**
+
+| 참가자 | 발급 시점 | API | Auth | 발급 조건 |
+|--------|-----------|-----|------|-----------|
+| 의사 | 세션 생성 시 | `POST /cases/{caseId}/sessions` | Bearer Token (DOCTOR) | 로그인 + 케이스 배정 확인 |
+| 환자 | 본인확인+동의 후 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | VERIFICATION.status = VERIFIED + CONSENT 완료 |
+
 | 항목 | 정책 |
 |------|------|
 | 토큰 발급 주체 | Spring Boot (LiveKit Server SDK) |
 | 토큰 유효시간 | 2시간 (진료 세션 최대 시간) |
-| 발급 조건 (환자) | VERIFICATION.status = VERIFIED + CONSENT 완료 |
-| 발급 조건 (의사) | 로그인 + 해당 케이스 배정 확인 |
-| 재발급 | 토큰 만료 시 프론트에서 `/api/v1/sessions/{id}/token` 재요청 |
+| 재발급 | 토큰 만료 시 `/api/v1/sessions/{id}/token` 재요청 |
 | 재발급 검증 | 세션 상태가 IN_PROGRESS인 경우에만 재발급 허용 |
 
 ```
+의사 토큰 발급 흐름:
+1. 의사가 "진료 시작" 클릭
+2. POST /api/v1/cases/{caseId}/sessions (Bearer Token)
+3. 응답: doctorToken + room 정보
+4. 의사 WebRTC 입장
+
+환자 토큰 발급 흐름:
+1. 차량 도착 → 본인확인 VERIFIED → 동의 완료
+2. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
+3. 서버: VERIFICATION + CONSENT 상태 검증 → patientToken 발급
+4. 환자 WebRTC 입장
+
 LiveKit Room Token 생성 시 포함 정보:
 - room: "session_{consultation_session_id}"
 - identity: "doctor_{user_id}" 또는 "patient_{patient_id}"
@@ -898,8 +917,22 @@ Set-Cookie: refresh_token={token};
 | 관리자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
 | 보호자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
 | 환자 | 계정 없음 | 본인확인+동의 → LiveKit Room Token만 |
+| 환자 (인테이크) | 계정 없음 | `intakeSessionId`(nanoid)를 capability token으로 사용 |
 
-### 8.8 CSRF 분석
+### 8.8 공개 인테이크 세션 접근 제어
+
+공개 인테이크 플로우(전화 시뮬레이터)에서는 Bearer 인증이 없으므로, `intakeSessionId`(`public_id`)가 사실상 세션 접근 권한을 가진 식별자(capability token)로 동작한다.
+
+| 정책 | 구현 |
+|------|------|
+| ID 생성 | nanoid (충분히 랜덤, 예측 불가능) |
+| TTL | 서버에서 무활동 타임아웃 관리 (예: 10분) |
+| 재사용 방지 | 세션 종료(`COMPLETED`/`ABANDONED`/`FAILED`) 후 상태 변경 요청 거부 |
+| 접근 범위 | 해당 세션의 식별/턴/추천/예약/조회만 가능 |
+| 로그 | 세션 내 모든 API 호출을 `AUDIT_LOG`에 기록. `actorId="SYSTEM"`, `actorRole="SYSTEM"` (무인증 공개 API) |
+| correlationId | `corr_ints_<publicId>` (인테이크 세션), `corr_case_<publicId>` (케이스). 전 구간 흐름 추적용 |
+
+### 8.9 CSRF 분석
 
 ```
 CSRF 공격 조건: 브라우저가 쿠키를 자동으로 인증에 사용할 때 위험
@@ -911,6 +944,93 @@ CSRF 공격 조건: 브라우저가 쿠키를 자동으로 인증에 사용할 �
 
 결론: CSRF 토큰 불필요 (Authorization 헤더 기반이므로)
 단, SameSite=Strict + Path=/api/v1/auth 제한은 반드시 유지
+```
+
+### 8.10 SSE 인증 전략
+
+> [!WARNING]
+> 브라우저의 표준 `EventSource` API는 커스텀 헤더를 지원하지 않는다. 따라서 `Authorization: Bearer` 헤더 전송이 불가능하며, 현재 인증 전략과 **직접적으로 충돌**한다.
+
+**해결: `@microsoft/fetch-event-source` 폴리필 사용**
+
+React에서 `fetch` 기반 SSE 라이브러리를 사용하여 커스텀 헤더 전송을 허용한다.
+
+```javascript
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+
+fetchEventSource('/api/v1/notifications/subscribe', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+  },
+  onmessage(ev) {
+    const notification = JSON.parse(ev.data);
+    // 알림 처리
+  },
+  onerror(err) {
+    // AT 만료 시: refresh 후 재연결
+    // 네트워크 오류 시: exponential backoff 재연결
+  },
+  onclose() {
+    // 재연결 로직
+  },
+});
+```
+
+| 항목 | 정책 |
+|------|------|
+| 라이브러리 | `@microsoft/fetch-event-source` |
+| 인증 | `Authorization: Bearer {AT}` 헤더 전송 (기존 전략 유지) |
+| AT 만료 시 | `onerror`에서 refresh API 호출 후 새 AT로 재연결 |
+| 재연결 | 네트워크 오류 시 exponential backoff |
+| 표준 EventSource | 사용 금지 (커스텀 헤더 불가) |
+
+---
+
+## 8.11 SMS 게이트웨이 (SOLAPI)
+
+환자는 시스템 계정이 없으므로 웹 내 알림 수신이 불가능하다. **예약 생성/취소 결과는 SOLAPI SMS 게이트웨이를 통해 환자 휴대전화로 발송**한다.
+
+```
+Spring Boot → SOLAPI SDK → 환자 SMS 발송
+
+발송 대상:
+  - 예약 확정 시: 예약 일시/의사/진료과 안내 SMS
+  - 예약 취소 시: 취소 완료 안내 SMS
+
+환경별 처리:
+  - 개발 (local): SMS를 실제 발송하지 않고 로그로 기록 (MockSmsService)
+  - 배포 (prod):  SOLAPI API로 실제 발송 (SolapiSmsService)
+```
+
+```
+추상화 레이어 (Spring Boot):
+
+interface SmsService {
+    SmsResult send(String recipientPhone, String senderPhone, String messageBody);
+}
+
+class MockSmsService implements SmsService {
+    // 개발: 로그만 기록, 실제 발송 안 함
+}
+
+class SolapiSmsService implements SmsService {
+    // 배포: SOLAPI SDK로 실제 SMS 발송
+}
+```
+
+```yaml
+# application-local.yml
+sms:
+  provider: mock
+  sender-number: "01000000000"
+
+# application-prod.yml
+sms:
+  provider: solapi
+  api-key: ${SOLAPI_API_KEY}
+  api-secret: ${SOLAPI_API_SECRET}
+  sender-number: ${SOLAPI_SENDER_NUMBER}
 ```
 
 ---
@@ -982,7 +1102,10 @@ sudo ufw enable
 | 항목 | 타임아웃 | 재시도 | 실패 시 |
 |------|---------|--------|---------|
 | Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
-| Spring → STT AI | 15초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
+| Spring → STT AI | 12초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
+
+> [!NOTE]
+> STT UX 목표는 10초 이내 응답 (MVP_Requirements §9.2). 서버 hard timeout은 12초로 네트워크 오버헤드를 포함한다.
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |

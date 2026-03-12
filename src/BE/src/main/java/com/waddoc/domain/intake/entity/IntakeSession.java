@@ -36,8 +36,9 @@ public class IntakeSession extends BaseCreatedEntity {
     @Column(name = "caller_number", length = 20)
     private String callerNumber;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private String channel;
+    private IntakeChannel channel;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -49,13 +50,17 @@ public class IntakeSession extends BaseCreatedEntity {
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
 
+    @Column(name = "last_activity_at", nullable = false)
+    private LocalDateTime lastActivityAt;
+
     @Builder
-    public IntakeSession(Patient patient, String callerNumber, String channel) {
+    public IntakeSession(Patient patient, String callerNumber, IntakeChannel channel) {
         this.publicId = PublicIdGenerator.generate("ints_");
         this.patient = patient;
         this.callerNumber = callerNumber;
-        this.channel = channel != null ? channel : "WEB_SIMULATOR";
+        this.channel = channel != null ? channel : IntakeChannel.WEB_SIMULATOR;
         this.status = IntakeStatus.STARTED;
+        this.lastActivityAt = LocalDateTime.now();
     }
 
     /** 환자 식별 완료 후 세션에 바인딩 */
@@ -64,6 +69,7 @@ public class IntakeSession extends BaseCreatedEntity {
         if (this.status == IntakeStatus.STARTED) {
             this.status = IntakeStatus.IN_PROGRESS;
         }
+        touch();
     }
 
     /** 세션 종료 처리 */
@@ -82,5 +88,10 @@ public class IntakeSession extends BaseCreatedEntity {
     /** 세션이 활성 상태(STARTED 또는 IN_PROGRESS)인지 확인 */
     public boolean isActive() {
         return this.status == IntakeStatus.STARTED || this.status == IntakeStatus.IN_PROGRESS;
+    }
+
+    /** 마지막 활동 시각 갱신 */
+    public void touch() {
+        this.lastActivityAt = LocalDateTime.now();
     }
 }
