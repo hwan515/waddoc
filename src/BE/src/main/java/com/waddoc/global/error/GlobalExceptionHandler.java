@@ -1,0 +1,44 @@
+package com.waddoc.global.error;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * 전역 예외 처리. BusinessException과 Validation 에러를 공통 형식으로 변환.
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    protected ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
+        log.warn("BusinessException: {}", e.getMessage());
+        ErrorCode errorCode = e.getErrorCode();
+        return ResponseEntity.status(errorCode.getStatus()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    protected ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException e) {
+        List<ErrorResponse.FieldError> details = e.getBindingResult().getFieldErrors().stream()
+                .map(fe -> ErrorResponse.FieldError.builder()
+                        .field(fe.getField())
+                        .reason(fe.getDefaultMessage())
+                        .build())
+                .toList();
+
+        ErrorResponse response = ErrorResponse.builder()
+                .errorCode("INVALID_INPUT")
+                .message("입력값이 올바르지 않습니다.")
+                .timestamp(LocalDateTime.now())
+                .details(details)
+                .build();
+
+        return ResponseEntity.badRequest().body(response);
+    }
+}
