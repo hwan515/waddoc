@@ -1,0 +1,174 @@
+:root {
+  font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+  color: #f8f5ed;
+  background:
+    radial-gradient(circle at top, rgba(247, 196, 114, 0.24), transparent 32%),
+    linear-gradient(180deg, #0b1320 0%, #111d31 55%, #081018 100%);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.shell {
+  width: min(980px, calc(100vw - 32px));
+  margin: 32px auto;
+  display: grid;
+  gap: 20px;
+}
+
+.hero {
+  padding: 24px 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  background: rgba(8, 15, 24, 0.64);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.24);
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  letter-spacing: -0.04em;
+}
+
+.hero p {
+  margin: 12px 0 0;
+  max-width: 64ch;
+  color: rgba(248, 245, 237, 0.72);
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: 2.1fr 0.9fr;
+  gap: 20px;
+}
+
+.chat-card,
+.side-card {
+  padding: 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 20, 34, 0.82);
+}
+
+.chat-log {
+  min-height: 420px;
+  max-height: 62vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 8px;
+}
+
+.bubble {
+  max-width: 78%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  line-height: 1.45;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #f29e4c, #f6c667);
+  color: #16120b;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background: rgba(241, 242, 244, 0.08);
+}
+
+.bubble.live {
+  align-self: flex-end;
+  border: 1px dashed rgba(246, 198, 103, 0.5);
+  color: rgba(255, 241, 220, 0.88);
+}
+
+.controls {
+  display: grid;
+  gap: 12px;
+}
+
+.mic-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 16px 20px;
+  cursor: pointer;
+  color: #16120b;
+  background: linear-gradient(135deg, #f7c26f, #ff9f6e);
+  font-weight: 700;
+}
+
+.mic-button.secondary {
+  background: linear-gradient(135deg, #9cc7ff, #8ff0d9);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 245, 237, 0.78);
+  font-size: 0.92rem;
+}
+
+.status-pill.warn {
+  color: #ffe9b6;
+}
+
+.side-card h2 {
+  margin-top: 0;
+}
+
+.metric {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.metric .label {
+  font-size: 0.88rem;
+  color: rgba(248, 245, 237, 0.62);
+}
+
+.metric .value {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.error {
+  color: #ffb7a2;
+}
+
+.helper {
+  color: rgba(248, 245, 237, 0.62);
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 860px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+
+  .bubble {
+    max-width: 92%;
+  }
+}

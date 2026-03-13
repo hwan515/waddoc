@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Qwen ARS Auto Demo</title>
+  <style>
+    body { font-family: "Noto Sans KR", sans-serif; margin: 20px; background: #f7f9fc; color: #111827; }
+    .card { max-width: 760px; background: #fff; border: 1px solid #d1d9e6; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+    label { display:block; margin-top:8px; font-weight:600; }
+    input, select, button { margin-top: 4px; padding: 8px; font-size: 14px; }
+    button { border: 0; border-radius: 8px; color: #fff; background: #155eef; cursor: pointer; margin-right: 6px; }
+    button.secondary { background: #4b5563; }
+    .status { color: #0f766e; font-size: 13px; }
+    .error { color: #b42318; font-size: 13px; }
+    #log { white-space: pre-wrap; background: #0b1020; color: #e8edf7; border-radius: 8px; padding: 12px; min-height: 140px; }
+  </style>
+</head>
+<body>
+  <h2>로컬 ARS 자동 데모</h2>
+
+  <div class="card">
+    <label for="branch">브랜치</label>
+    <select id="branch">
+      <option value="registered">registered</option>
+      <option value="unregistered">unregistered</option>
+    </select>
+
+    <label for="patientName">등록 환자 이름(registered일 때)</label>
+    <input id="patientName" type="text" placeholder="김영희" />
+
+    <div style="margin-top: 10px;">
+      <button id="startAutoBtn">자동 시작</button>
+      <button id="stopAutoBtn" class="secondary">중지</button>
+    </div>
+    <p id="status" class="status">시작 버튼 1회만 누르면 상태에 맞춰 자동 진행됩니다.</p>
+    <p id="error" class="error"></p>
+  </div>
+
+  <div class="card">
+    <audio id="ttsPlayer" controls style="width:100%;"></audio>
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const errorEl = document.getElementById("error");
+    const logEl = document.getElementById("log");
+    const ttsPlayer = document.getElementById("ttsPlayer");
+
+    let sessionId = null;
+    let autoRunning = false;
+    let micStream = null;
+
+    const AUDIO_REQUIRED_STATES = new Set([
+      "REGISTERED_GREETING",
+      "UNREGISTERED_ASK_NAME",
+      "UNREGISTERED_CONFIRM_NAME",
+      "UNREGISTERED_RETRY_NAME",
+      "ASK_SYMPTOM",
+    ]);
+
+    function setStatus(msg) { statusEl.textContent = msg || ""; }
+    function setError(msg) { errorEl.textContent = msg || ""; }
+    function appendLog(msg, data) {
+      const line = data ? `${msg}\n${JSON.stringify(data, null, 2)}\n\n` : `${msg}\n`;
+      logEl.textContent = line + logEl.textContent;
+    }
+
+    async function requestJson(url, options) {
+      const res = await fetch(url, options);
+      const data = await res.json().catch(() => ({ detail: "응답 파싱 실패" }));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      return data;
+    }
+
+    async function playPromptIfAny(resp) {
+      if (!resp.prompt_audio_url) return;
+      ttsPlayer.src = resp.prompt_audio_url;
+      try {
+        await ttsPlayer.play();
+        await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, 8000);
+          ttsPlayer.onended = () => { clearTimeout(timeout); resolve(); };
+        });
+      } catch (_) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    function audioBufferToWav(audioBuffer) {
+      const samples = audioBuffer.getChannelData(0);
+      const sampleRate = audioBuffer.sampleRate;
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+      const write = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+      write(0, "RIFF");
+      view.setUint32(4, 36 + samples.length * 2, true);
+      write(8, "WAVE");
+      write(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      write(36, "data");
+      view.setUint32(40, samples.length * 2, true);
+      let off = 44;
+      for (let i = 0; i < samples.length; i++, off += 2) {
+        const s = Math.max(-1, Math.min(1, samples[i]));
+        view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      }
+      return buffer;
+    }
+
+    async function toWav(blob) {
+      const ctx = new AudioContext();
+      const arr = await blob.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(arr.slice(0));
+      const wav = audioBufferToWav(decoded);
+      await ctx.close();
+      return new Blob([wav], { type: "audio/wav" });
+    }
+
+    async function recordAutoWav() {
+      if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(micStream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+      recorder.start(200);
+      setStatus("3초 동안 듣고 있습니다...");
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (recorder.state !== "inactive") recorder.stop();
+
+      const rawBlob = await new Promise((resolve) => {
+        recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+      });
+      return await toWav(rawBlob);
+    }
+
+    async function postNext(audioBlob) {
+      const form = new FormData();
+      form.append("session_id", sessionId);
+      if (audioBlob) form.append("audio_file", audioBlob, "auto.wav");
+      const res = await fetch("/scenario/next", { method: "POST", body: form });
+      const data = await res.json().catch(() => ({ detail: "응답 파싱 실패" }));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      return data;
+    }
+
+    async function runLoop(resp) {
+      while (autoRunning && resp) {
+        appendLog(`상태: ${resp.current_state} -> ${resp.next_state}`, resp);
+        if (resp.metadata && resp.metadata.tts_error) setError(`TTS 미생성: ${resp.metadata.tts_error}`);
+        await playPromptIfAny(resp);
+        if (!autoRunning) break;
+
+        if (resp.next_state === "END") {
+          setStatus("시나리오가 종료되었습니다.");
+          break;
+        }
+
+        if (AUDIO_REQUIRED_STATES.has(resp.next_state)) {
+          let wavBlob = null;
+          try {
+            wavBlob = await recordAutoWav();
+          } catch (err) {
+            setError(`녹음 실패: ${err.message}`);
+            setStatus("중지됨");
+            break;
+          }
+          setStatus("인식 중...");
+          resp = await postNext(wavBlob);
+        } else {
+          setStatus("다음 안내로 진행 중...");
+          await new Promise((r) => setTimeout(r, 300));
+          resp = await postNext(null);
+        }
+      }
+    }
+
+    async function startAuto() {
+      autoRunning = true;
+      setError("");
+      setStatus("시작 중...");
+      const branch = document.getElementById("branch").value;
+      const patientName = document.getElementById("patientName").value.trim();
+      try {
+        const resp = await requestJson("/scenario/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ branch, patient_name: patientName || null }),
+        });
+        sessionId = resp.session_id;
+        await runLoop(resp);
+      } catch (err) {
+        setError(`시작 실패: ${err.message}`);
+        setStatus("중지됨");
+      }
+    }
+
+    function stopAuto() {
+      autoRunning = false;
+      setStatus("중지됨");
+    }
+
+    document.getElementById("startAutoBtn").addEventListener("click", startAuto);
+    document.getElementById("stopAutoBtn").addEventListener("click", stopAuto);
+  </script>
+</body>
+</html>
