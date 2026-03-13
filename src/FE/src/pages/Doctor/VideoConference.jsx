@@ -68,7 +68,7 @@ const VideoConference = () => {
 
     const handleEndCall = () => {
         cleanupMedia(); // 미디어 스트림 정리
-        navigate('/doctor/dashboard');
+        navigate('/emr/dashboard');
     };
 
     const handleJoin = () => {
