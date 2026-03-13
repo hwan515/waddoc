@@ -1,0 +1,19 @@
+# Qwen 패키지는 2026-03-08 기준으로 transformers 고정 버전이 충돌합니다.
+# 아래 파일은 충돌 없는 공통 기반 의존성만 먼저 맞추고, qwen-*은 --no-deps로 설치합니다.
+
+transformers==4.57.6
+accelerate==1.12.0
+tokenizers>=0.22.0,<=0.23.0
+huggingface_hub>=0.36.0,<1.0
+safetensors>=0.7.0
+torchaudio>=2.3.0
+librosa>=0.11.0
+onnxruntime>=1.24.0
+einops>=0.8.0
+sox
+flask
+gradio
+pytz
+nagisa==0.2.11
+soynlp==0.0.493
+qwen-omni-utils
