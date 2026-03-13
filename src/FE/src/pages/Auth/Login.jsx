@@ -10,7 +10,7 @@ const Login = () => {
     const [formData, setFormData] = useState({
         email: '',
         password: '',
-        role: 'doctor' // default mock role
+        role: 'patient' // 고정
     });
 
     const [showPassword, setShowPassword] = useState(false);
@@ -19,9 +19,9 @@ const Login = () => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleRoleSelect = (role) => {
-        setFormData({ ...formData, role });
-    };
+    // const handleRoleSelect = (role) => {
+    //     setFormData({ ...formData, role });
+    // };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -33,27 +33,9 @@ const Login = () => {
         // Auth Store 로그인 (Mock)
         login(formData);
 
-        // 권한별 목적지 리다이렉트 (실제 페이지는 추후 추가 예정)
-        switch (formData.role) {
-            case 'doctor':
-                navigate('/doctor/dashboard');
-                break;
-            case 'operator':
-                navigate('/operator/control');
-                break;
-            case 'patient':
-                navigate('/patient/portal');
-                break;
-            default:
-                navigate('/');
-                break;
-        }
+        // 환자 전용 플랫폼이므로 무조건 patient portal로 접속
+        navigate('/patient/portal');
     };
-
-    const roles = [
-        { id: 'patient', label: '환자/보호자' },
-        { id: 'doctor', label: '의료진' }
-    ];
 
     return (
         <div className="h-screen flex font-sans bg-white relative overflow-hidden">
@@ -80,24 +62,7 @@ const Login = () => {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
 
-                        {/* Mock Role Selector for Development */}
-                        <div>
-                            <div className="flex flex-wrap gap-2 mb-2 justify-center lg:justify-start">
-                                {roles.map((r) => (
-                                    <button
-                                        key={r.id}
-                                        type="button"
-                                        onClick={() => handleRoleSelect(r.id)}
-                                        className={`px-3 py-1.5 text-xs font-semibold rounded-full border transition-all ${formData.role === r.id
-                                            ? 'bg-primary border-primary text-white shadow-md shadow-primary/20'
-                                            : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                                            }`}
-                                    >
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        {/* Role Selector Removes (Patient Only) */}
 
                         {/* Email Input */}
                         <div>

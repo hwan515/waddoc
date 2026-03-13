@@ -12,6 +12,10 @@ import PatientMyPage from './pages/Patient/MyPage';
 import AuthStep from './pages/Robot/AuthStep';
 import Conference from './pages/Robot/Conference';
 
+// Mock EMR
+import EMRLogin from './pages/Doctor/EMRLogin';
+import EMRDashboard from './pages/Doctor/EMR/Dashboard';
+
 function App() {
   return (
     <Router>
@@ -29,6 +33,10 @@ function App() {
 
         {/* 관제/운영 풀스크린 단독화면 */}
         <Route path="/operator/control" element={<ControlCenter />} />
+
+        {/* 의사용 외부 EMR 모의 시스템 */}
+        <Route path="/emr/login" element={<EMRLogin />} />
+        <Route path="/emr/dashboard" element={<EMRDashboard />} />
 
         {/* 환자/보호자 전용 포털 화면 */}
         <Route path="/patient/portal" element={<PatientPortal />} />
