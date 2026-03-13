@@ -9,4 +9,6 @@ import java.util.Optional;
 public interface PatientPhoneBindingRepository extends JpaRepository<PatientPhoneBinding, Long> {
 
     Optional<PatientPhoneBinding> findFirstByPatientAndPrimaryTrue(Patient patient);
+
+    Optional<PatientPhoneBinding> findByPhone(String phone);
 }
