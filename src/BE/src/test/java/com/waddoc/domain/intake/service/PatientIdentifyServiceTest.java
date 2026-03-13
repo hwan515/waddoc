@@ -3,6 +3,7 @@ package com.waddoc.domain.intake.service;
 import com.waddoc.domain.audit.service.AuditLogService;
 import com.waddoc.domain.intake.dto.IdentifyByCallerNumberRequest;
 import com.waddoc.domain.intake.dto.IdentifyByInfoRequest;
+import com.waddoc.domain.intake.dto.IdentifyByPhoneRequest;
 import com.waddoc.domain.intake.dto.IdentifyPatientResponse;
 import com.waddoc.domain.intake.entity.CompletionReason;
 import com.waddoc.domain.intake.entity.IntakeSession;
@@ -12,6 +13,7 @@ import com.waddoc.domain.patient.entity.PatientPhoneBinding;
 import com.waddoc.domain.patient.repository.PatientPhoneBindingRepository;
 import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.global.error.BusinessException;
+import com.waddoc.global.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -88,6 +90,34 @@ class PatientIdentifyServiceTest {
                 eq("corr_ints_" + session.getPublicId()),
                 argThat(detail -> hasBoolean(detail, "identified", true)
                         && patient.getPublicId().equals(detail.get("patientId")))
+        );
+    }
+
+    @Test
+    void identifyByPhone_returnsNotIdentified_whenPhoneBindingDoesNotExist() {
+        IntakeSession session = IntakeSession.builder()
+                .callerNumber("01012345678")
+                .build();
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId()))
+                .thenReturn(Optional.of(session));
+        when(patientPhoneBindingRepository.findByPhone("01099998888"))
+                .thenReturn(Optional.empty());
+
+        IdentifyPatientResponse response = patientIdentifyService.identifyByPhone(
+                session.getPublicId(),
+                new IdentifyByPhoneRequest("01099998888")
+        );
+
+        assertThat(response.isIdentified()).isFalse();
+        assertThat(response.getPatient()).isNull();
+
+        verify(auditLogService).log(
+                eq("PATIENT_LOOKUP_BY_PHONE"),
+                eq("INTAKE_SESSION"),
+                eq(session.getPublicId()),
+                eq("corr_ints_" + session.getPublicId()),
+                argThat(detail -> hasBoolean(detail, "identified", false))
         );
     }
 
@@ -177,6 +207,19 @@ class PatientIdentifyServiceTest {
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("현재 세션 상태");
+    }
+
+    @Test
+    void identifyByCallerNumber_throwsException_whenSessionDoesNotExist() {
+        when(intakeSessionRepository.findByPublicId("ints_missing"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> patientIdentifyService.identifyByCallerNumber(
+                "ints_missing",
+                new IdentifyByCallerNumberRequest("01012345678")
+        ))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INTAKE_SESSION_NOT_FOUND));
     }
 
     private boolean hasBoolean(Map<String, Object> detail, String key, boolean expected) {
