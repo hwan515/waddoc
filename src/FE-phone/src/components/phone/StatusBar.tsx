@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import type { IntakePhase } from '../../types/intake';
 import './StatusBar.css';
 
@@ -14,6 +13,7 @@ const PHASE_LABELS: Partial<Record<IntakePhase, string>> = {
   SLOT_SELECT: '예약 시간 선택',
   BOOKING_CONFIRMED: '예약 완료',
   EXISTING_IDENTIFY: '환자 식별',
+  EXISTING_IDENTIFY_BY_VOICE: '음성 식별',
   BOOKING_LOOKUP: '예약 조회',
   BOOKING_DETAIL: '예약 상세',
   BOOKING_CANCEL: '예약 취소',
@@ -26,20 +26,6 @@ interface StatusBarProps {
 }
 
 export default function StatusBar({ phase, isActive }: StatusBarProps) {
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    if (!isActive) {
-      setElapsed(0);
-      return;
-    }
-    const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const seconds = String(elapsed % 60).padStart(2, '0');
-
   return (
     <div className="status-bar">
       <div className="status-bar-left">
@@ -47,9 +33,7 @@ export default function StatusBar({ phase, isActive }: StatusBarProps) {
       </div>
       <div className="status-bar-center">왔닥</div>
       <div className="status-bar-right">
-        {isActive && (
-          <span className="status-timer">{minutes}:{seconds}</span>
-        )}
+        {isActive && <span className="status-timer">00:00</span>}
       </div>
     </div>
   );
