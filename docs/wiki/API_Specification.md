@@ -226,6 +226,7 @@
 | Auth | 불필요 |
 
 > 2차 전화번호 식별도 실패 시, 이름 + 생년월일(STT 입력)로 최종 시도한다.
+> 이름 + 생년월일 조회 결과가 0건이거나 다건인 경우에는 임의 선택하지 않고 `identified=false, patient=null` 을 반환한다.
 
 **Request Body**
 ```json
@@ -544,7 +545,8 @@
 | Path | `/api/v1/intake/sessions/{intakeSessionId}/turns/voice` |
 | Auth | 불필요 |
 
-> **MVP STT**: 실제 AI STT 호출 없이 Mock/Stub 응답을 반환한다. `audioFile`은 로컬 저장만 수행한다.
+> **현재 구현 기준**: 음성 턴 API는 `audioFile` 을 로컬 저장하고 Mock/Stub STT 응답을 반환한다.
+> **목표 아키텍처**: MVP 요구사항/아키텍처 문서 기준으로는 `Spring Boot -> STT AI` 연동을 목표로 하며, 실제 AI 연동 전까지는 현재 구현을 따른다.
 
 **Request Body** (`multipart/form-data`)
 
@@ -2009,10 +2011,14 @@ data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"�
 | `GUARDIAN_ACCESS` | 보호자 조회 |
 | `VITAL_RECORDED` | 바이탈 기록 |
 | `INTAKE_SESSION_CREATED` | 인테이크 세션 생성 (`actorRole=SYSTEM`) |
+| `PATIENT_LOOKUP_BY_CALLER_NUMBER` | 발신번호 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
+| `PATIENT_LOOKUP_BY_PHONE` | 전화번호 직접 입력 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
+| `PATIENT_LOOKUP_BY_INFO` | 이름+생년월일 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
 | `INTAKE_PATIENT_BOUND` | 인테이크 세션 환자 바인딩 (`actorRole=SYSTEM`) |
 | `INTAKE_TURN_RECORDED` | 인테이크 턴 기록 (DTMF/VOICE) (`actorRole=SYSTEM`) |
 | `INTAKE_SESSION_COMPLETED` | 인테이크 세션 종료 (`actorRole=SYSTEM`) |
 | `SYMPTOM_CLASSIFIED` | 증상 분류 및 진료과 추천 (`actorRole=SYSTEM`) |
+| `BOOKING_VIEWED` | 예약 상세 조회 |
 | `INTAKE_SESSION_TIMEOUT` | 인테이크 세션 타임아웃 (후속 이슈) |
 
 > **`actorRole=SYSTEM` 처리**: 무인증 공개 API(인테이크 세션 등)에서 발생하는 감사 로그는 `actorId="SYSTEM"`, `actorRole="SYSTEM"`으로 기록한다.
