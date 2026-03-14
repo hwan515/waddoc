@@ -28,10 +28,13 @@ export default function FeaturePhone() {
 
   // 마이크 버튼: 음성 입력이 필요한 단계에서만 표시
   const showMic =
-    phase === 'IDENTIFY_BY_VOICE' || phase === 'SYMPTOM_COLLECT';
+    phase === 'IDENTIFY_BY_VOICE' ||
+    phase === 'EXISTING_IDENTIFY_BY_VOICE' ||
+    phase === 'SYMPTOM_COLLECT';
 
   // 전송 버튼: 번호 입력 모드에서 표시
-  const showSend = phase === 'IDENTIFY_BY_INPUT';
+  const showSend =
+    phase === 'IDENTIFY_BY_INPUT' || phase === 'EXISTING_IDENTIFY';
 
   return (
     <div className="feature-phone">

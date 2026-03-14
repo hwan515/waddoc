@@ -13,6 +13,7 @@ export type IntakePhase =
   | 'BOOKING_CONFIRMED'
   // 기존 예약 조회 흐름
   | 'EXISTING_IDENTIFY'
+  | 'EXISTING_IDENTIFY_BY_VOICE'
   | 'BOOKING_LOOKUP'
   | 'BOOKING_DETAIL'
   | 'BOOKING_CANCEL'
@@ -33,6 +34,8 @@ export interface AvailableSlot {
   slotId: string;
   doctorId: string;
   doctorName: string;
+  department: string;
+  departmentName: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -40,27 +43,33 @@ export interface AvailableSlot {
 
 export interface RecommendationResult {
   recommendationId: string;
+  symptomCategory: string | null;
   department: string;
   departmentName: string;
   confidenceLevel: string;
+  isEmergency: boolean;
   reason: string;
   availableSlots: AvailableSlot[];
+  ttsMessage: string;
 }
 
 export interface BookingResult {
   bookingId: string;
   status: string;
+  caseId?: string;
   appointmentDate: string;
   startTime: string;
+  endTime?: string;
   doctorName: string;
   departmentName: string;
+  ttsMessage?: string;
 }
 
 export interface IdentifyResult {
   patientId: string;
   name: string;
-  birthDate: string;
-  phone: string;
+  birthDate6: string;
+  regionCode: string;
 }
 
 export interface VoiceTurnResult {
@@ -69,5 +78,12 @@ export interface VoiceTurnResult {
   sttConfidence: number;
   exceptionCode: string | null;
   nextAction: string;
+  ttsMessage: string;
+}
+
+export interface CancelBookingResult {
+  bookingId: string;
+  status: string;
+  cancelledAt: string | null;
   ttsMessage: string;
 }

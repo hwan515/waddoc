@@ -1,0 +1,41 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/waddoc
+    username: waddoc
+    password: waddoc_dev
+
+  jpa:
+    # flyway를 사용할 것이므로 ddl-auto는 none으로 설정
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+jwt:
+  secret: waddoc-dev-secret-key-must-be-at-least-32-chars-long
+  access-token-expiry: 900
+  refresh-token-expiry: 604800
+
+ai:
+  file-transfer-mode: shared_directory
+  idv-url: ${AI_IDV_URL:http://idv-ai:8000}
+  stt-url: ${AI_STT_URL:http://stt-ai:8001}
+
+file:
+  storage-root: ${FILE_STORAGE_ROOT:/data/uploads}
+
+sms:
+  provider: mock
+  sender-number: "01000000000"
+
+livekit:
+  host: ${LIVEKIT_HOST:http://livekit:7880}
+  api-key: devkey
+  api-secret: devsecret
+  url: ${LIVEKIT_URL:ws://localhost:7880}

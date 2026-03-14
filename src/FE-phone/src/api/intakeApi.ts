@@ -1,37 +1,112 @@
 import api from './axiosInstance';
 import type {
+  CancelBookingResult,
   IdentifyResult,
   VoiceTurnResult,
   RecommendationResult,
   BookingResult,
 } from '../types/intake';
 
-export async function createSession(): Promise<{ intakeSessionId: string }> {
-  const { data } = await api.post('/intake/sessions');
+interface IdentifyPatientApiResponse {
+  identified: boolean;
+  patient: {
+    patientId: string;
+    name: string;
+    birthDate6: string;
+    regionCode: string;
+  } | null;
+}
+
+interface ExistingBookingsApiResponse {
+  bookings: BookingResult[];
+  totalCount: number;
+}
+
+interface CreateBookingApiResponse {
+  bookingId: string;
+  status: string;
+  caseId: string;
+  doctor: {
+    doctorId: string;
+    name: string;
+    department: string;
+    departmentName: string;
+  };
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
+  ttsMessage: string;
+}
+
+function mapIdentifyResponse(data: IdentifyPatientApiResponse): IdentifyResult | null {
+  if (!data.identified || !data.patient) {
+    return null;
+  }
+
+  return {
+    patientId: data.patient.patientId,
+    name: data.patient.name,
+    birthDate6: data.patient.birthDate6,
+    regionCode: data.patient.regionCode,
+  };
+}
+
+function mapBookingResponse(data: CreateBookingApiResponse): BookingResult {
+  return {
+    bookingId: data.bookingId,
+    status: data.status,
+    caseId: data.caseId,
+    appointmentDate: data.appointmentDate,
+    startTime: data.startTime,
+    endTime: data.endTime,
+    doctorName: data.doctor.name,
+    departmentName: data.doctor.departmentName,
+    ttsMessage: data.ttsMessage,
+  };
+}
+
+export async function createSession(
+  callerNumber: string,
+): Promise<{ intakeSessionId: string }> {
+  const { data } = await api.post('/intake/sessions', {
+    callerNumber,
+    channel: 'WEB_SIMULATOR',
+  });
   return data;
+}
+
+export async function identifyByCallerNumber(
+  sessionId: string,
+  callerNumber: string,
+): Promise<IdentifyResult | null> {
+  const { data } = await api.post<IdentifyPatientApiResponse>(
+    `/intake/sessions/${sessionId}/identify/by-caller-number`,
+    { callerNumber },
+  );
+  return mapIdentifyResponse(data);
 }
 
 export async function identifyByPhone(
   sessionId: string,
   phone: string,
-): Promise<IdentifyResult> {
-  const { data } = await api.post(
+): Promise<IdentifyResult | null> {
+  const { data } = await api.post<IdentifyPatientApiResponse>(
     `/intake/sessions/${sessionId}/identify/by-phone`,
     { phone },
   );
-  return data;
+  return mapIdentifyResponse(data);
 }
 
 export async function identifyByInfo(
   sessionId: string,
   name: string,
-  birthDate: string,
-): Promise<IdentifyResult> {
-  const { data } = await api.post(
+  birthDate6: string,
+): Promise<IdentifyResult | null> {
+  const { data } = await api.post<IdentifyPatientApiResponse>(
     `/intake/sessions/${sessionId}/identify/by-info`,
-    { name, birthDate },
+    { name, birthDate6 },
   );
-  return data;
+  return mapIdentifyResponse(data);
 }
 
 export async function bindPatient(
@@ -79,20 +154,28 @@ export async function createBooking(
   sessionId: string,
   slotId: string,
 ): Promise<BookingResult> {
-  const { data } = await api.post(
+  const { data } = await api.post<CreateBookingApiResponse>(
     `/intake/sessions/${sessionId}/bookings`,
     { slotId },
   );
-  return data;
+  return mapBookingResponse(data);
 }
 
-export async function searchBookings(
-  phone: string,
+export async function getExistingBookings(
+  sessionId: string,
 ): Promise<BookingResult[]> {
-  const { data } = await api.get('/bookings/search', { params: { phone } });
-  return data;
+  const { data } = await api.get<ExistingBookingsApiResponse>(
+    `/intake/sessions/${sessionId}/existing-bookings`,
+  );
+  return data.bookings;
 }
 
-export async function cancelBooking(bookingId: string): Promise<void> {
-  await api.post(`/bookings/${bookingId}/cancel`);
+export async function cancelBooking(
+  sessionId: string,
+  bookingId: string,
+): Promise<CancelBookingResult> {
+  const { data } = await api.post<CancelBookingResult>(
+    `/intake/sessions/${sessionId}/existing-bookings/${bookingId}/cancel`,
+  );
+  return data;
 }
