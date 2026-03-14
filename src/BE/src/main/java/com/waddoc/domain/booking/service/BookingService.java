@@ -168,6 +168,9 @@ public class BookingService {
     public BookingDetailResponse getBookingDetail(String bookingId, String actorId, String actorRole) {
         Booking booking = bookingRepository.findByPublicId(bookingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BOOKING_NOT_FOUND));
+        String caseId = careCaseRepository.findByBooking(booking)
+                .map(CareCase::getPublicId)
+                .orElse(null);
 
         String phone = phoneBindingRepository.findFirstByPatientAndPrimaryTrue(booking.getPatient())
                 .map(PatientPhoneBinding::getPhone)
@@ -185,7 +188,7 @@ public class BookingService {
                 Map.of("viewedBy", actorId != null ? actorId : "SYSTEM")
         );
 
-        return BookingDetailResponse.from(booking, phone);
+        return BookingDetailResponse.from(booking, phone, caseId);
     }
 
     /** 4.4 — 세션 기반 예약 취소 (무인증, 시뮬레이터) */
