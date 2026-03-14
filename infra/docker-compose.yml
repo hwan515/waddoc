@@ -30,10 +30,11 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - AI_IDV_URL=http://idv-ai:8000
-      - AI_STT_URL=http://stt-ai:8001
+      - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
+      - AI_STT_WS_URL=wss://${DEV_GPU_SERVER_HOST}/stt/ws/transcribe
+      - AI_TRIAGE_URL=https://${DEV_GPU_SERVER_HOST}/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
-      - AI_FILE_TRANSFER_MODE=shared_directory
+      - AI_IDV_TRANSFER_MODE=multipart
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
@@ -77,40 +78,6 @@ services:
       - "3478:3478/udp"
     environment:
       - LIVEKIT_KEYS=devkey:devsecret
-    networks:
-      - waddoc-net
-
-  # === AI - IDV (본인확인) ===
-  idv-ai:
-    build: ../src/AI/idv
-    expose:
-      - "8000"
-    environment:
-      - FILE_STORAGE_ROOT=/data/uploads
-    volumes:
-      - ./local-storage/uploads:/data/uploads:ro
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-    networks:
-      - waddoc-net
-
-  # === AI - STT ===
-  stt-ai:
-    build: ../src/AI/stt
-    expose:
-      - "8001"
-    environment:
-      - FILE_STORAGE_ROOT=/data/uploads
-    volumes:
-      - ./local-storage/uploads:/data/uploads:ro
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
     networks:
       - waddoc-net
 

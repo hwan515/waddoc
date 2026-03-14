@@ -1,7 +1,7 @@
 spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST}:5432/waddoc
-    username: ${DB_USER}
+    username: ${DB_USER:${POSTGRES_USER}}
     password: ${DB_PASSWORD}
 
   data:
@@ -16,9 +16,10 @@ jwt:
   refresh-token-expiry: 604800
 
 ai:
-  file-transfer-mode: multipart
+  file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
   idv-url: ${AI_IDV_URL}
-  stt-url: ${AI_STT_URL}
+  stt-ws-url: ${AI_STT_WS_URL}
+  triage-url: ${AI_TRIAGE_URL}
 
 file:
   storage-root: ${FILE_STORAGE_ROOT:/data/uploads}
@@ -30,10 +31,10 @@ sms:
   sender-number: ${SOLAPI_SENDER_NUMBER}
 
 livekit:
-  host: ${LIVEKIT_HOST}
+  host: ${LIVEKIT_HOST:http://livekit:7880}
   api-key: ${LIVEKIT_API_KEY}
   api-secret: ${LIVEKIT_API_SECRET}
-  url: ${LIVEKIT_URL}
+  url: ${LIVEKIT_URL:wss://${SERVER_DOMAIN}/livekit}
 
 server:
   servlet:

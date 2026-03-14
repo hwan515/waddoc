@@ -44,15 +44,19 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - DB_HOST=postgres
+      - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - AI_IDV_URL=http://${AI_SERVER_IP}:8000
-      - AI_STT_URL=http://${AI_SERVER_IP}:8001
+      - AI_IDV_URL=https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify
+      - AI_STT_WS_URL=wss://${PROD_GPU_SERVER_HOST}/stt/ws/transcribe
+      - AI_TRIAGE_URL=https://${PROD_GPU_SERVER_HOST}/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
-      - AI_FILE_TRANSFER_MODE=multipart
+      - AI_IDV_TRANSFER_MODE=multipart
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_HOST=http://livekit:7880
+      - LIVEKIT_URL=wss://${SERVER_DOMAIN}/livekit
       - JWT_SECRET=${JWT_SECRET}
     volumes:
       - uploads:/data/uploads

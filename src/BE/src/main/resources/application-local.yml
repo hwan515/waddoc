@@ -23,9 +23,10 @@ jwt:
   refresh-token-expiry: 604800
 
 ai:
-  file-transfer-mode: shared_directory
-  idv-url: ${AI_IDV_URL:http://idv-ai:8000}
-  stt-url: ${AI_STT_URL:http://stt-ai:8001}
+  file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
+  idv-url: ${AI_IDV_URL:https://localhost/idv/api/v1/verify}
+  stt-ws-url: ${AI_STT_WS_URL:wss://localhost/stt/ws/transcribe}
+  triage-url: ${AI_TRIAGE_URL:https://localhost/triage/api/v1/recommend}
 
 file:
   storage-root: ${FILE_STORAGE_ROOT:/data/uploads}
