@@ -50,10 +50,7 @@ erDiagram
         varchar public_id UK "외부 노출 ID (face_xxxx)"
         bigint patient_id FK
         varchar photo_path "사진 상대경로"
-        enum status "PENDING | APPROVED | REJECTED"
-        bigint uploaded_by FK "USER.user_id — 등록자"
-        bigint approved_by FK "USER.user_id — 승인 관리자 (nullable)"
-        timestamp approved_at
+        bigint uploaded_by FK "USER.user_id — 등록 관리자"
         timestamp deleted_at "소프트 삭제"
         timestamp created_at
     }
@@ -240,19 +237,6 @@ erDiagram
         timestamp updated_at
     }
 
-    %% ============ 동의 ============
-    PATIENT_CONSENT {
-        bigint consent_id PK
-        varchar public_id UK "외부 노출 ID (cns_xxxx)"
-        bigint patient_id FK
-        bigint case_id FK
-        enum consent_type "TELEMEDICINE | PRIVACY"
-        boolean agreed
-        varchar channel "TABLET_TOUCH 등"
-        varchar witness
-        timestamp consented_at
-    }
-
     %% ============ 바이탈 ============
     VITAL_RECORD {
         bigint vital_record_id PK
@@ -358,7 +342,6 @@ erDiagram
     PATIENT ||--o{ BOOKING : "makes bookings"
     PATIENT ||--o{ CARE_CASE : "has cases"
     PATIENT ||--o{ VERIFICATION : "verified in"
-    PATIENT ||--o{ PATIENT_CONSENT : "gives consent"
     PATIENT ||--o{ NOTIFICATION : "receives (sms)"
 
     DOCTOR_PROFILE ||--o{ SCHEDULE_SLOT : "has slots"
@@ -377,7 +360,6 @@ erDiagram
     BOOKING ||--|| CARE_CASE : "creates case 1:1"
 
     CARE_CASE ||--o| MISSION : "has mission"
-    CARE_CASE ||--o{ PATIENT_CONSENT : "requires consent"
     CARE_CASE ||--o{ VITAL_RECORD : "has vitals"
     CARE_CASE ||--o| CONSULTATION_SESSION : "has session"
 
@@ -407,7 +389,7 @@ erDiagram
 | 테이블 | 설명 |
 |--------|------|
 | `PATIENT` | 환자 기본 정보. 얼굴 사진은 `PATIENT_FACE_REFERENCE`에서 관리. `birth_date`(원본)와 `birth_date6`(조회용 6자리) 분리 |
-| `PATIENT_FACE_REFERENCE` | 환자 사전 등록 얼굴 사진. 상태(PENDING/APPROVED/REJECTED) 관리. APPROVED 상태의 reference가 존재해야 본인확인 가능 |
+| `PATIENT_FACE_REFERENCE` | 환자 사전 등록 얼굴 사진. MVP에서는 관리자가 직접 등록하며, `deleted_at IS NULL`인 사진이 1건 이상 존재해야 본인확인 가능. 첫 방문 현장 촬영 후 관리자 승인 등록은 P1 |
 | `PATIENT_PHONE_BINDING` | 환자 전화번호 바인딩. 1차/2차 식별에 사용. 전역 unique 제약 (1번호=1환자) |
 | `PATIENT_GUARDIAN_LINK` | 환자-보호자 연결 (관리자가 사전 등록) |
 
@@ -436,12 +418,13 @@ erDiagram
 | `MISSION` | 차량 출동. 단계: `CREATED → DISPATCHED → EN_ROUTE → ARRIVED → … → COMPLETED` |
 | `MISSION_EVENT` | 차량 이벤트 (위치 업데이트, 단계 변경, 장애 보고/복구). `UNIQUE (source, source_event_id)` 제약으로 중복 수신 방지 |
 
-### 2.6 본인확인 / 동의 도메인
+### 2.6 본인확인 도메인
 
 | 테이블 | 설명 |
 |--------|------|
-| `VERIFICATION` | 사전 등록 사진 vs 현장 촬영 비교 결과. 최대 3회 재시도. 3차 실패 시 `MANUAL_REVIEW` |
-| `PATIENT_CONSENT` | 비대면 진료 동의, 개인정보 처리 동의 기록 |
+| `VERIFICATION` | 사전 등록 사진 vs 현장 촬영 비교 결과. 최대 3회 재시도. 3차 실패 시 `MANUAL_REVIEW`. 여기서의 수동 개입은 현장 본인확인 실패 처리이며, 기준 사진 최초 등록 승인과는 별개 |
+
+> 동의 도메인(`PATIENT_CONSENT`)은 P1 별도 문서 [P1_Consent_Extension.md](./P1_Consent_Extension.md)에서 관리한다.
 
 ### 2.7 바이탈 도메인
 
@@ -479,7 +462,6 @@ erDiagram
 | `VERIFICATION.status` | `PENDING → IN_PROGRESS → VERIFIED \| FAILED \| MANUAL_REVIEW \| TIMEOUT` |
 | `INTAKE_SESSION.status` | `STARTED → IN_PROGRESS → COMPLETED \| ABANDONED \| FAILED` |
 | `RECOMMENDATION.confidenceLevel` | `HIGH \| MEDIUM \| LOW` |
-| `CONSENT.type` | `TELEMEDICINE \| PRIVACY` |
 | `VITAL_MEASUREMENT.type` | `HEART_RATE \| SPO2 \| BLOOD_PRESSURE_SYSTOLIC \| BLOOD_PRESSURE_DIASTOLIC \| TEMPERATURE` |
 | `USER.role` | `ADMIN \| DOCTOR \| GUARDIAN` |
 
@@ -506,12 +488,13 @@ PATIENT → INTAKE_SESSION → INTAKE_TURN       (인테이크 흐름)
 
 PATIENT → BOOKING → CARE_CASE → MISSION → MISSION_EVENT     (진료 라이프사이클)
                                → VERIFICATION
-                               → PATIENT_CONSENT
                                → VITAL_RECORD → VITAL_MEASUREMENT
                                → CONSULTATION_SESSION → CONSULTATION_SUMMARY
 
 USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정 흐름)
 ```
+
+> `PATIENT_CONSENT`를 포함한 동의 도메인 ERD는 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
 
 ---
 

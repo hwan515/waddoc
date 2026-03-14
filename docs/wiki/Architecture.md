@@ -7,7 +7,7 @@
 | 제어면 / 미디어면 / 추론면 분리 | Spring Boot = 상태·권한·오케스트레이션, LiveKit = WebRTC 미디어, AI = 추론 전용 |
 | AI 내부망 격리 | AI 서버는 외부 직접 노출 금지. React → AI 직접 호출 금지 |
 | 환경별 파일 전달 추상화 | 개발: 공유 디렉터리, 배포: REST multipart |
-| 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 + 동의 → room token만 발급 |
+| 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 완료 후 room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
 | JWT 분리 저장 | Access Token = 메모리(JS 변수), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
 | 이중 ID | 내부 PK는 bigint 자동 증가, 외부 API에는 `public_id`(접두사 + nanoid) 노출. PK 추론 방지, API 가독성 향상 |
@@ -757,7 +757,7 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 | 참가자 | 발급 시점 | API | Auth | 발급 조건 |
 |--------|-----------|-----|------|-----------|
 | 의사 | 세션 생성 시 | `POST /cases/{caseId}/sessions` | Bearer Token (DOCTOR) | 로그인 + 케이스 배정 확인 |
-| 환자 | 본인확인+동의 후 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | VERIFICATION.status = VERIFIED + CONSENT 완료 |
+| 환자 | 본인확인 후 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | VERIFICATION.status = VERIFIED |
 
 | 항목 | 정책 |
 |------|------|
@@ -774,9 +774,9 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 4. 의사 WebRTC 입장
 
 환자 토큰 발급 흐름:
-1. 차량 도착 → 본인확인 VERIFIED → 동의 완료
+1. 차량 도착 → 본인확인 VERIFIED
 2. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
-3. 서버: VERIFICATION + CONSENT 상태 검증 → patientToken 발급
+3. 서버: VERIFICATION 상태 검증 → patientToken 발급
 4. 환자 WebRTC 입장
 
 LiveKit Room Token 생성 시 포함 정보:
@@ -916,7 +916,7 @@ Set-Cookie: refresh_token={token};
 | 의사 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
 | 관리자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
 | 보호자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
-| 환자 | 계정 없음 | 본인확인+동의 → LiveKit Room Token만 |
+| 환자 | 계정 없음 | 본인확인 완료 후 LiveKit Room Token만 |
 | 환자 (인테이크) | 계정 없음 | `intakeSessionId`(nanoid)를 capability token으로 사용 |
 
 ### 8.8 공개 인테이크 세션 접근 제어

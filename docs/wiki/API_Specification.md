@@ -33,7 +33,7 @@
 > **이중 ID 전략**:
 > - DB 내부 PK는 `bigint` 자동 증가이며, 외부 API에는 **`public_id`** (접두사 + nanoid)를 노출한다.
 > - API 요청/응답의 모든 ID 필드는 `public_id` 값이다 (예: `userId` → `"usr_V1StGXR8"`, `patientId` → `"pat_Zk3mQ9"`).
-> - 접두사 규칙: `usr_` (USER), `pat_` (PATIENT), `doc_` (DOCTOR_PROFILE), `ints_` (INTAKE_SESSION), `turn_` (INTAKE_TURN), `rec_` (RECOMMENDATION), `slot_` (SCHEDULE_SLOT), `bk_` (BOOKING), `case_` (CARE_CASE), `ms_` (MISSION), `vrf_` (VERIFICATION), `ses_` (CONSULTATION_SESSION), `ntf_` (NOTIFICATION), `log_` (AUDIT_LOG), `cns_` (PATIENT_CONSENT), `vit_` (VITAL_RECORD), `evt_` (MISSION_EVENT), `link_` (PATIENT_GUARDIAN_LINK), `sms_` (SMS_LOG), `face_` (PATIENT_FACE_REFERENCE)
+> - 접두사 규칙: `usr_` (USER), `pat_` (PATIENT), `doc_` (DOCTOR_PROFILE), `ints_` (INTAKE_SESSION), `turn_` (INTAKE_TURN), `rec_` (RECOMMENDATION), `slot_` (SCHEDULE_SLOT), `bk_` (BOOKING), `case_` (CARE_CASE), `ms_` (MISSION), `vrf_` (VERIFICATION), `ses_` (CONSULTATION_SESSION), `ntf_` (NOTIFICATION), `log_` (AUDIT_LOG), `vit_` (VITAL_RECORD), `evt_` (MISSION_EVENT), `link_` (PATIENT_GUARDIAN_LINK), `sms_` (SMS_LOG), `face_` (PATIENT_FACE_REFERENCE)
 > - Path parameter의 ID도 `public_id` 값을 사용한다 (예: `/api/v1/bookings/bk_Abc123`).
 
 ---
@@ -47,7 +47,7 @@
 5. [케이스 API](#5-케이스-api-apiv1cases)
 6. [미션(차량 출동) API](#6-미션차량-출동-api-apiv1missions)
 7. [본인확인 API](#7-본인확인-api-apiv1verifications)
-8. [동의 API](#8-동의-api-apiv1consents)
+8. [동의 API (P1 별도 문서)](#8-동의-api-p1)
 9. [바이탈(더미) API](#9-바이탈더미-api-apiv1casesvitals)
 10. [화상진료 세션 API](#10-화상진료-세션-api-apiv1sessions)
 11. [보호자 API](#11-보호자-api-apiv1guardians)
@@ -269,7 +269,9 @@
   "facePhotoRegistered": true
 }
 ```
-> `facePhotoRegistered`는 DB 저장 필드가 아닌 **파생 값**이다. 계산 기준: `PATIENT_FACE_REFERENCE`에 `status = APPROVED` **AND** `deleted_at IS NULL`인 레코드가 **1건 이상** 존재하면 `true`. 이 기준은 본인확인 전제조건 판단과 동일하게 적용한다.
+> `facePhotoRegistered`는 DB 저장 필드가 아닌 **파생 값**이다. 계산 기준: `PATIENT_FACE_REFERENCE`에 `deleted_at IS NULL`인 레코드가 **1건 이상** 존재하면 `true`. 이 기준은 본인확인 전제조건 판단과 동일하게 적용한다.
+>
+> **MVP 정책**: 초기 환자는 관리자가 직접 등록한다. 첫 방문 현장 촬영 후 관리자 승인으로 기준 사진을 등록하는 흐름은 P1 범위다.
 
 ---
 
@@ -292,11 +294,12 @@
 {
   "faceRefId": "face_Q4rTx9",
   "patientId": "pat_Zk3mQ9",
-  "status": "PENDING",
   "photoPath": "patient-reference/9f2c...jpg",
   "uploadedAt": "2026-03-10T09:00:00+09:00"
 }
 ```
+
+> MVP에서는 관리자 업로드만 지원한다. 첫 방문 현장 촬영본을 승인 후 기준 사진으로 승격하는 흐름은 P1 범위다.
 
 ---
 
@@ -314,63 +317,18 @@
   "facePhotos": [
     {
       "faceRefId": "face_Q4rTx9",
-      "status": "APPROVED",
       "photoPath": "patient-reference/9f2c...jpg",
-      "uploadedAt": "2026-03-10T09:00:00+09:00",
-      "approvedAt": "2026-03-10T09:05:00+09:00"
+      "uploadedAt": "2026-03-10T09:00:00+09:00"
     }
   ]
 }
 ```
 
----
-
-### 2.7 환자 사전 등록 사진 승인
-
-| 항목 | 값 |
-|------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/patients/{patientId}/face-photos/{faceRefId}/approve` |
-| Auth | Bearer Token (ADMIN) |
-
-**Response** `200 OK`
-```json
-{
-  "faceRefId": "face_Q4rTx9",
-  "status": "APPROVED",
-  "approvedBy": "usr_A3dMn1",
-  "approvedAt": "2026-03-10T09:05:00+09:00"
-}
-```
+> 삭제되지 않은(`deleted_at IS NULL`) 사진만 조회한다.
 
 ---
 
-### 2.8 환자 사전 등록 사진 반려
-
-| 항목 | 값 |
-|------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/patients/{patientId}/face-photos/{faceRefId}/reject` |
-| Auth | Bearer Token (ADMIN) |
-
-**Request Body**
-```json
-{
-  "reason": "얼굴이 명확하지 않음"
-}
-```
-
-**Response** `200 OK`
-```json
-{
-  "faceRefId": "face_Q4rTx9",
-  "status": "REJECTED"
-}
-```
-
----
-
-### 2.9 환자 사전 등록 사진 삭제
+### 2.7 환자 사전 등록 사진 삭제
 
 | 항목 | 값 |
 |------|-----|
@@ -906,9 +864,6 @@
   "verification": {
     "status": "PENDING"
   },
-  "consent": {
-    "telemedicineAgreed": false
-  },
   "createdAt": "2026-03-10T10:05:00+09:00"
 }
 ```
@@ -1197,6 +1152,8 @@
 | Path | `/api/v1/verifications/{verificationId}/manual-approve` |
 | Auth | Bearer Token (ADMIN) |
 
+> 이 API는 `MANUAL_REVIEW`로 전환된 본인확인 건에 대한 운영자 개입용이다. 환자 기준 사진의 최초 등록/승인 흐름과는 별개다.
+
 **Request Body**
 ```json
 {
@@ -1217,83 +1174,11 @@
 
 ---
 
-## 8. 동의 API (`/api/v1/consents`)
+## 8. 동의 API (P1)
 
-### 8.1 동의 기록
-
-| 항목 | 값 |
-|------|-----|
-| Method | `POST` |
-| Path | `/api/v1/consents` |
-| Auth | Bearer Token (ADMIN) 또는 내부 서비스 |
-
-**Request Body**
-```json
-{
-  "patientId": "pat_Zk3mQ9",
-  "caseId": "case_T7nLp4",
-  "consentTypes": [
-    {
-      "type": "TELEMEDICINE",
-      "agreed": true
-    },
-    {
-      "type": "PRIVACY",
-      "agreed": true
-    }
-  ],
-  "channel": "TABLET_TOUCH",
-  "witness": "운영자"
-}
-```
-
-**Response** `201 Created`
-```json
-{
-  "consents": [
-    { "consentId": "cns_A1bXq2", "type": "TELEMEDICINE", "agreed": true },
-    { "consentId": "cns_C3dYr4", "type": "PRIVACY", "agreed": true }
-  ],
-  "patientId": "pat_Zk3mQ9",
-  "caseId": "case_T7nLp4",
-  "allAgreed": true,
-  "consentedAt": "2026-03-11T09:50:00+09:00"
-}
-```
-
----
-
-### 8.2 동의 현황 조회
-
-| 항목 | 값 |
-|------|-----|
-| Method | `GET` |
-| Path | `/api/v1/consents` |
-| Auth | Bearer Token (DOCTOR, ADMIN) |
-
-**Query Params**: `?caseId=case_T7nLp4`
-
-**Response** `200 OK`
-```json
-{
-  "consents": [
-    {
-      "consentId": "cns_A1bXq2",
-      "type": "TELEMEDICINE",
-      "agreed": true,
-      "channel": "TABLET_TOUCH",
-      "consentedAt": "2026-03-11T09:50:00+09:00"
-    },
-    {
-      "consentId": "cns_C3dYr4",
-      "type": "PRIVACY",
-      "agreed": true,
-      "channel": "TABLET_TOUCH",
-      "consentedAt": "2026-03-11T09:50:00+09:00"
-    }
-  ]
-}
-```
+> 동의 UI 및 동의 기록은 MVP 제외 범위다.
+>
+> 상세 API 초안은 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
 
 ---
 
@@ -1391,7 +1276,7 @@
 >
 > **토큰 발급 정책**: 의사와 환자의 토큰은 **별도 엔드포인트**에서 발급한다.
 > - 의사: 세션 생성 시 (10.1) 자신의 토큰만 발급
-> - 환자: 본인확인 + 동의 완료 후 차량 태블릿에서 별도 요청 (10.2)
+> - 환자: 본인확인 완료 후 차량 태블릿에서 별도 요청 (10.2)
 
 ### 10.1 진료 세션 생성 — 의사 토큰 발급
 
@@ -1439,8 +1324,8 @@
 | Auth | Bearer Token (ADMIN) |
 
 > 차량 태블릿은 **운영 단말**로 정의하며, 관리자 계정으로 로그인되어 있다.
-> 본인확인(VERIFIED) + 동의 완료된 환자의 WebRTC 토큰을 발급한다.
-> 서버는 `sessionId` 기반으로 VERIFICATION + CONSENT 상태를 검증한다.
+> 본인확인(VERIFIED) 완료된 환자의 WebRTC 토큰을 발급한다.
+> 서버는 `sessionId` 기반으로 VERIFICATION 상태를 검증한다.
 
 **Request Body**
 ```json
@@ -1467,7 +1352,6 @@
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 403 | `VERIFICATION_NOT_COMPLETED` | 본인확인 미완료 |
-| 403 | `CONSENT_NOT_COMPLETED` | 동의 미완료 |
 | 404 | `SESSION_NOT_FOUND` | 세션 없음 |
 | 400 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
 
@@ -1838,7 +1722,7 @@ event: BOOKING_CREATED
 data: {"notificationId":"ntf_Xw2Bq7","title":"새 예약","message":"홍길동 환자 3/11 10:00 내과 예약","createdAt":"2026-03-10T10:05:00+09:00"}
 
 event: SESSION_READY
-data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"홍길동 환자 본인확인/동의 완료","createdAt":"2026-03-11T09:58:00+09:00"}
+data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"홍길동 환자 본인확인 완료","createdAt":"2026-03-11T09:58:00+09:00"}
 ```
 
 **알림 이벤트 종류**
@@ -2004,7 +1888,6 @@ data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"�
 | `VERIFICATION_SUCCEEDED` | 본인확인 성공 |
 | `VERIFICATION_FAILED` | 본인확인 실패 |
 | `VERIFICATION_MANUAL_APPROVED` | 수동 승인 |
-| `CONSENT_RECORDED` | 동의 기록 |
 | `SESSION_STARTED` | 진료 세션 시작 |
 | `SESSION_COMPLETED` | 진료 세션 완료 |
 | `SESSION_ABANDONED` | 진료 세션 이탈 |
@@ -2070,11 +1953,6 @@ STARTED → IN_PROGRESS → COMPLETED | ABANDONED | FAILED
 ### INTAKE_SESSION.completionReason
 ```
 BOOKING_CREATED | NO_INPUT_TIMEOUT | USER_HANGUP | EXISTING_BOOKING_CHECKED
-```
-
-### CONSENT.type
-```
-TELEMEDICINE | PRIVACY
 ```
 
 ### VITAL_MEASUREMENT.type
