@@ -6,7 +6,9 @@
 |------|------|
 | 제어면 / 미디어면 / 추론면 분리 | Spring Boot = 상태·권한·오케스트레이션, LiveKit = WebRTC 미디어, AI = 추론 전용 |
 | AI 내부망 격리 | AI 서버는 외부 직접 노출 금지. React → AI 직접 호출 금지 |
-| 환경별 파일 전달 추상화 | 개발: 공유 디렉터리, 배포: REST multipart |
+| AI 분리 배포 | DEV/PROD 공통으로 AI 추론은 별도 GPU 서버에서 실행. 메인 서버 Compose에 AI 컨테이너를 포함하지 않음 |
+| AI 프로토콜 분리 | IDV/OCR = REST multipart, 실시간 STT/문진 = WebSocket, 최종 추천 계산/저장 = REST JSON |
+| 파일 전달 표준화 | IDV/OCR 이미지 전달은 DEV/PROD 공통 multipart 전송. 공유 디렉터리 방식 미사용 |
 | 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 완료 후 room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
 | JWT 분리 저장 | Access Token = 메모리(JS 변수), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
@@ -28,42 +30,60 @@
 └───────────────────────────┬─────────────────────────────┘
                             │ HTTPS
 ┌───────────────────────────┴─────────────────────────────┐
-│                    Reverse Proxy (Nginx)                 │
-│            /api → spring       / → react               │
-└──────┬──────────────┬───────────────┬───────────────────┘
-       │              │               │
-┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐
-│ Spring Boot │ │  React    │ │   LiveKit   │
-│ (제어면)    │ │ (프론트)  │ │ (미디어면)  │
-│             │ └───────────┘ └─────────────┘
-│ - 인증/권한 │
-│ - 도메인 API│         ┌─────────────────────┐
-│ - 오케스트레│────REST──│   AI 서버 (추론면)  │
-│   이션      │   API    │ ┌───────┐ ┌───────┐│
-│ - 감사 로그 │         │ │IDV AI │ │STT AI ││
-│ - 파일 관리 │         │ └───────┘ └───────┘│
-└──────┬──────┘         └─────────────────────┘
-       │
- ┌─────┴─────┐ ┌───────┐
- │ PostgreSQL │ │ Redis │
- └────────────┘ └───────┘
+│                 Main App Server / Cluster               │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │               Reverse Proxy (Nginx)               │  │
+│  │         /api → spring       / → react            │  │
+│  └──────┬──────────────┬───────────────┬────────────┘  │
+│         │              │               │               │
+│  ┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐         │
+│  │ Spring Boot │ │  React    │ │   LiveKit   │         │
+│  │ (제어면)    │ │ (프론트)  │ │ (미디어면)  │         │
+│  │ - 인증/권한 │ └───────────┘ └─────────────┘         │
+│  │ - 도메인 API│                                       │
+│  │ - 오케스트레│                                       │
+│  │   이션      │                                       │
+│  │ - 감사 로그 │                                       │
+│  │ - 파일 관리 │                                       │
+│  └──────┬──────┘                                       │
+│         │                                              │
+│   ┌─────┴─────┐ ┌───────┐                              │
+│   │ PostgreSQL │ │ Redis │                              │
+│   └────────────┘ └───────┘                              │
+└───────────────────────────┬─────────────────────────────┘
+                            │ REST multipart / WebSocket / REST JSON
+┌───────────────────────────┴─────────────────────────────┐
+│                  GPU Server (AI Inference)              │
+│              ┌─────────┐   ┌────────────────┐           │
+│              │ IDV AI  │   │ STT / Triage AI│           │
+│              └─────────┘   └────────────────┘           │
+└─────────────────────────────────────────────────────────┘
 ```
+
+- DEV와 PROD 모두 `Spring Boot -> GPU Server` 경로로만 AI 추론을 호출한다.
+- `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
+- `Spring Boot <-> STT AI` 는 WebSocket 스트리밍으로 partial/final transcript를 주고받는다.
+- `Spring Boot -> Recommendation/Triage API` 는 REST JSON으로 최종 분류/추천 결과를 요청한다.
+- React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
 
 ---
 
-## 3. 개발 환경 (Local)
+## 3. 개발 환경 (Dev)
 
 ### 3.1 구성 원칙
 
-- **전체 서비스를 단일 Docker Compose로 실행**
-- AI 서버 포함하여 한 번에 올림
-- 이미지 파일은 **호스트 공유 디렉터리 (bind mount)** 로 Spring Boot ↔ AI 공유
-- 외부 의존성 없음 (AWS, SMS 등 사용 안 함)
+- 메인 애플리케이션 스택만 로컬 Docker Compose로 실행한다.
+- IDV AI, STT/추천 AI는 **별도 GPU 서버**에서 실행한다.
+- DEV와 PROD 모두 Spring Boot는 GPU 서버의 AI 엔드포인트를 직접 호출한다.
+- 본인확인(IDV/OCR)은 **REST multipart**를 사용한다.
+- 실시간 문진/STT는 **WebSocket 스트리밍**을 사용한다.
+- 최종 추천 계산/저장은 **REST JSON**을 사용한다.
+- 로컬 개발에서도 React → AI 직접 호출은 금지하고, 반드시 Spring Boot를 경유한다.
 
 ### 3.2 컨테이너 구성
 
 ```yaml
-# docker-compose.yml (개발 환경 - 전체 올리기)
+# docker-compose.yml (개발 환경 - 메인 스택만)
 services:
   # === Reverse Proxy ===
   nginx:
@@ -90,10 +110,11 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - AI_IDV_URL=http://idv-ai:8000
-      - AI_STT_URL=http://stt-ai:8001
+      - AI_IDV_URL=https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
+      - AI_STT_WS_URL=wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
+      - AI_TRIAGE_URL=https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
-      - AI_FILE_TRANSFER_MODE=shared_directory  # 개발: 공유 디렉터리
+      - AI_IDV_TRANSFER_MODE=multipart
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
@@ -124,42 +145,12 @@ services:
   livekit:
     image: livekit/livekit-server:latest
     ports:
-      - "7880:7880"      # API + signaling WebSocket (직접 접속)
-      - "7881:7881"      # ICE/TCP
-      - "7882:7882/udp"  # ICE/UDP mux
-      - "3478:3478/udp"  # TURN UDP
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
     environment:
       - LIVEKIT_KEYS=devkey:devsecret
-
-  # === AI - IDV (본인확인) ===
-  idv-ai:
-    build: ./src/AI/idv
-    expose:
-      - "8000"
-    environment:
-      - FILE_STORAGE_ROOT=/data/uploads
-    volumes:
-      - ./local-storage/uploads:/data/uploads:ro  # 읽기 전용
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-
-  # === AI - STT ===
-  stt-ai:
-    build: ./src/AI/stt
-    expose:
-      - "8001"
-    environment:
-      - FILE_STORAGE_ROOT=/data/uploads
-    volumes:
-      - ./local-storage/uploads:/data/uploads:ro  # 읽기 전용
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
 
 volumes:
   pg_data:
@@ -169,7 +160,7 @@ volumes:
 ### 3.3 네트워크 구성
 
 ```
-docker network: waddoc-net (bridge, 모든 컨테이너 연결)
+docker network: waddoc-net (bridge, 메인 스택 컨테이너 연결)
 
 외부 공개 포트:
   - 80        → nginx (HTTP)
@@ -187,19 +178,17 @@ Nginx 내부 라우팅:
   - 3000  → frontend
   - 5432  → postgres
   - 6379  → redis
-  - 8000  → idv-ai
-  - 8001  → stt-ai
+
+원격 의존성:
+  - spring-api → https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (IDV AI REST)
+  - spring-api ↔ wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe (STT AI WebSocket)
+  - spring-api → https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend (추천 AI REST)
 ```
 
-### 3.4 파일 공유 방식 (개발)
+### 3.4 파일 저장 방식 (개발)
 
 ```
-Host Bind Mount: ./local-storage/uploads
-
-공유 구조:
-  spring-api  → /data/uploads (read/write)
-  idv-ai      → /data/uploads (read-only)
-  stt-ai      → /data/uploads (read-only)
+Spring Boot 로컬 저장소: ./local-storage/uploads → /data/uploads
 
 디렉터리 레이아웃:
   /data/uploads/
@@ -208,27 +197,52 @@ Host Bind Mount: ./local-storage/uploads
     ├── audio/
     │   └── intake/           # STT용 오디오
     └── temp/                 # 임시 파일
+
+※ AI 서버와의 bind mount 공유는 하지 않는다.
+※ Spring Boot가 IDV/OCR 요청 시 파일을 읽어 GPU 서버로 multipart 전송한다.
 ```
 
 ### 3.5 AI 통신 방식 (개발)
 
-```
-개발 환경에서는 공유 디렉터리 + JSON 경로 전달:
+```text
+개발 환경에서도 GPU 서버를 직접 호출한다.
+다만 작업 유형에 따라 프로토콜을 분리한다.
 
-Spring Boot → IDV AI (POST http://idv-ai:8000/api/v1/verify)
-{
-  "verificationId": "vrf_001",
-  "patientId": "patient_001",
-  "referencePath": "patient-reference/abc123.jpg",    ← 상대경로
-  "probePath": "verification-probe/vrf_001.jpg",      ← 상대경로
-  "thresholdProfile": "MEDICAL_REMOTE_VISIT"
-}
+Spring Boot → IDV AI (POST https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify)
+Content-Type: multipart/form-data
 
-Spring Boot → STT AI (POST http://stt-ai:8001/api/v1/transcribe)
+Parts:
+  - verificationId: "vrf_001"
+  - patientId: "patient_001"
+  - referenceImage: (binary)
+  - probeImage: (binary)
+  - thresholdProfile: "MEDICAL_REMOTE_VISIT"
+
+Spring Boot ↔ STT AI
+Connect: wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
+
+Client → Server:
+  {"type":"start","requestId":"stt_001","language":"ko","sampleRate":16000}
+  [binary audio chunk #1]
+  [binary audio chunk #2]
+  {"type":"end","requestId":"stt_001"}
+
+Server → Client:
+  {"type":"partial","requestId":"stt_001","text":"머리가"}
+  {"type":"partial","requestId":"stt_001","text":"머리가 아프고"}
+  {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
+
+Spring Boot → Recommendation AI (POST https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend)
+Content-Type: application/json
+
 {
-  "requestId": "stt_001",
-  "audioPath": "audio/intake/stt_001.wav",            ← 상대경로
-  "language": "ko"
+  "requestId": "rec_001",
+  "intakeSessionId": "its_001",
+  "transcript": "머리가 아프고 어지러워요",
+  "patientContext": {
+    "age": 78,
+    "region": "GANGWON"
+  }
 }
 ```
 
@@ -239,9 +253,9 @@ Spring Boot → STT AI (POST http://stt-ai:8001/api/v1/transcribe)
 ### 4.1 구성 원칙
 
 - **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, LiveKit
-- **AI 서버 (별도)**: IDV AI, STT AI
-- 서버 간 통신: **REST API** (HTTP/HTTPS)
-- 파일 전달: **HTTP multipart** (공유 디렉터리 없음)
+- **AI 서버 (별도)**: IDV AI, STT/추천 AI
+- 서버 간 통신: **REST + WebSocket**
+- 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
 - AI 서버는 메인 서버에서만 접근 가능 (외부 직접 노출 금지)
 
 ### 4.2 서버 구성도
@@ -272,7 +286,7 @@ Spring Boot → STT AI (POST http://stt-ai:8001/api/v1/transcribe)
 │  │  └────────────┘  └──────────┘  └───────────┘  │  │
 │  │        │                                       │  │
 │  └────────┼───────────────────────────────────────┘  │
-│           │ REST API + multipart                     │
+│           │ REST multipart + WS + REST JSON         │
 └───────────┼──────────────────────────────────────────┘
             │ HTTPS (내부 네트워크 or VPN)
 ┌───────────┴──────────────────────────────────────────┐
@@ -282,7 +296,7 @@ Spring Boot → STT AI (POST http://stt-ai:8001/api/v1/transcribe)
 │  ┌─────────────────────────────────────────────────┐ │
 │  │                                                  │ │
 │  │  ┌───────────┐          ┌────────────┐          │ │
-│  │  │  IDV AI   │          │  STT AI    │          │ │
+│  │  │  IDV AI   │          │ STT/Triage │          │ │
 │  │  │  :8000    │          │  :8001     │          │ │
 │  │  └───────────┘          └────────────┘          │ │
 │  │                                                  │ │
@@ -328,10 +342,11 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - AI_IDV_URL=http://<AI_SERVER_IP>:8000      # AI 서버 내부 IP
-      - AI_STT_URL=http://<AI_SERVER_IP>:8001      # AI 서버 내부 IP
+      - AI_IDV_URL=https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
+      - AI_STT_WS_URL=wss://<PROD_GPU_SERVER_HOST>/stt/ws/transcribe
+      - AI_TRIAGE_URL=https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
-      - AI_FILE_TRANSFER_MODE=multipart             # 배포: multipart 전송
+      - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
     volumes:
       - uploads:/data/uploads
     deploy:
@@ -388,51 +403,42 @@ volumes:
   uploads:
 ```
 
-### 4.4 AI 서버 Docker Compose
+### 4.4 GPU 서버 런타임 구성 (DEV/PROD 공통)
 
-```yaml
-# docker-compose.ai.yml (AI 서버)
-services:
-  idv-ai:
-    build: ./src/AI/idv
-    ports:
-      - "8000:8000"
-    environment:
-      - FILE_STORAGE_ROOT=/data/uploads
-      - FILE_RECEIVE_MODE=multipart                 # multipart로 파일 수신
-    volumes:
-      - ai_uploads:/data/uploads
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
+GPU 서버의 AI 서비스는 Docker Compose가 아니라 별도 프로세스로 운영한다.
 
-  stt-ai:
-    build: ./src/AI/stt
-    ports:
-      - "8001:8001"
-    environment:
-      - FILE_STORAGE_ROOT=/data/uploads
-      - FILE_RECEIVE_MODE=multipart
-    volumes:
-      - ai_uploads:/data/uploads
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
+```text
+GPU Server
+  - reverse proxy (nginx 등)
+      - listen 443 ssl
+      - /idv/*    -> 127.0.0.1:8000
+      - /stt/*    -> 127.0.0.1:8001
+      - /triage/* -> 127.0.0.1:8001
 
-volumes:
-  ai_uploads:
+  - idv-ai process
+      - bind 127.0.0.1:8000
+      - 역할: 얼굴 비교 / OCR
+
+  - stt-triage-ai process
+      - bind 127.0.0.1:8001
+      - 역할: 실시간 STT WebSocket / 추천 REST
+
+  - process manager
+      - systemd, supervisor, pm2, 또는 전용 ML serving runtime 사용
 ```
+
+운영 원칙:
+
+- 메인 서버는 GPU 서버의 `443`만 호출한다.
+- 내부 서비스 포트 `8000`, `8001`은 loopback 또는 내부망에서만 바인딩한다.
+- TLS 종료와 경로 라우팅은 GPU 서버 reverse proxy가 담당한다.
 
 ### 4.5 AI 통신 방식 (배포)
 
-배포 환경에서는 공유 디렉터리가 없으므로 **multipart로 파일을 직접 전송**한다.
+배포 환경에서도 작업 유형별로 프로토콜을 분리한다.
 
 ```
-Spring Boot → IDV AI (POST http://<AI_IP>:8000/api/v1/verify)
+Spring Boot → IDV AI (POST https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify)
 Content-Type: multipart/form-data
 
 Parts:
@@ -450,87 +456,85 @@ Response (JSON):
   "similarityScore": 0.93,
   "reasonCodes": []
 }
-```
+Spring Boot ↔ STT AI (WS wss://<PROD_GPU_SERVER_HOST>/stt/ws/transcribe)
 
-```
-Spring Boot → STT AI (POST http://<AI_IP>:8001/api/v1/transcribe)
-Content-Type: multipart/form-data
+Client → Server:
+  {"type":"start","requestId":"stt_001","language":"ko","sampleRate":16000}
+  [binary audio chunks ...]
+  {"type":"end","requestId":"stt_001"}
 
-Parts:
-  - requestId: "stt_001"
-  - audioFile: (binary) ← 오디오 파일
-  - language: "ko"
+Server → Client:
+  {"type":"partial","requestId":"stt_001","text":"머리가"}
+  {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
 
-Response (JSON):
+Spring Boot → Recommendation AI (POST https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend)
+Content-Type: application/json
+
 {
-  "requestId": "stt_001",
-  "text": "머리가 아프고 어지러워요",
-  "confidence": 0.87,
-  "language": "ko"
+  "requestId": "rec_001",
+  "intakeSessionId": "its_001",
+  "transcript": "머리가 아프고 어지러워요"
 }
 ```
 
 ---
 
-## 5. 파일 전달 추상화 레이어
+## 5. AI 통신 추상화 레이어
 
-개발/배포 환경에 따라 파일 전달 방식이 달라지므로, **Spring Boot 내부에 추상화 레이어**를 둔다.
+현재 표준 운영 모델은 **역할별 프로토콜 분리**다.
+- IDV/OCR: multipart REST
+- 실시간 STT: WebSocket
+- 최종 추천/분류: REST JSON
+
+과거의 공유 디렉터리(JSON 경로 전달) 전략은 더 이상 기본 아키텍처에 포함하지 않는다.
 
 ```
-interface AiFileTransferStrategy {
-    VerificationResult sendVerification(VerificationRequest request);
-    TranscriptionResult sendTranscription(TranscriptionRequest request);
+interface IdvAiClient {
+    VerificationResult verify(VerificationRequest request);
 }
 
-class SharedDirectoryStrategy implements AiFileTransferStrategy {
-    // 개발 환경: JSON에 상대경로만 담아서 전송
-    // AI 서버가 같은 볼륨 마운트로 파일 접근
+interface RealtimeSttClient {
+    void openSession(SttSessionRequest request);
+    void sendAudioChunk(byte[] chunk);
+    void closeSession(String requestId);
 }
 
-class MultipartStrategy implements AiFileTransferStrategy {
-    // 배포 환경: 파일 바이너리를 multipart로 전송
-    // AI 서버가 수신 후 로컬에 저장하여 처리
+interface RecommendationAiClient {
+    RecommendationResult recommend(RecommendationRequest request);
 }
 ```
 
 ```yaml
 # application-local.yml
 ai:
-  file-transfer-mode: shared_directory
-  idv-url: http://idv-ai:8000
-  stt-url: http://stt-ai:8001
+  idv-url: https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
+  stt-ws-url: wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
+  triage-url: https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
 
 # application-prod.yml
 ai:
-  file-transfer-mode: multipart
-  idv-url: http://<AI_SERVER_IP>:8000
-  stt-url: http://<AI_SERVER_IP>:8001
+  idv-url: https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
+  stt-ws-url: wss://<PROD_GPU_SERVER_HOST>/stt/ws/transcribe
+  triage-url: https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
 ```
 
 ---
 
-## 6. AI API 스펙 (양쪽 호환)
+## 6. AI API 스펙
 
-AI 서버는 **두 가지 모드를 모두 지원**하도록 설계한다.
+AI 서버는 **업무 성격에 따라 프로토콜을 분리**한다.
+- 본인확인/신분증 OCR: multipart REST
+- 실시간 STT: WebSocket
+- 최종 증상 분류/추천: REST JSON
 
 ### 6.1 IDV AI API
 
 | Endpoint | Method | 설명 |
 |----------|--------|------|
-| `/api/v1/verify` | POST | 본인확인 요청 |
+| `/api/v1/verify` | POST | 본인확인 요청 (multipart) |
 | `/api/v1/health` | GET | 헬스체크 |
 
-**요청 모드 A: JSON (공유 디렉터리)**
-```json
-Content-Type: application/json
-{
-  "verificationId": "vrf_001",
-  "referencePath": "patient-reference/abc.jpg",
-  "probePath": "verification-probe/vrf_001.jpg"
-}
-```
-
-**요청 모드 B: Multipart (파일 직접 전송)**
+**요청 모드**
 ```
 Content-Type: multipart/form-data
 Parts: verificationId, referenceImage(file), probeImage(file)
@@ -555,24 +559,134 @@ Parts: verificationId, referenceImage(file), probeImage(file)
 }
 ```
 
-### 6.2 STT AI API
+### 6.1.1 확장형 IDV + OCR API (P1 선택)
+
+신분증 OCR 기반 확장형 본인확인을 적용하는 경우, GPU 서버는 얼굴 이미지와 신분증 이미지를 함께 받아 OCR과 얼굴 대조를 수행한다.
+
+```text
+Spring Boot → IDV AI/OCR (POST https://<GPU_SERVER_HOST>/idv/api/v1/verify)
+Content-Type: multipart/form-data
+
+Parts:
+  - verificationId: "vrf_001"
+  - patientId: "patient_001"
+  - referenceImage: (binary)   ← 사전 등록 얼굴 사진
+  - faceImage: (binary)        ← 실시간 촬영 얼굴 사진
+  - idCardImage: (binary)      ← 신분증 촬영 이미지
+  - verificationMode: "FACE_AND_IDCARD"
+```
+
+```json
+Response:
+{
+  "verificationId": "vrf_001",
+  "status": "SUCCEEDED",
+  "ocr": {
+    "name": "홍길동",
+    "rrnMasked": "580315-1******",
+    "address": "강원도 강릉시 ..."
+  },
+  "matches": {
+    "liveVsRegisteredScore": 0.94,
+    "liveVsIdCardFaceScore": 0.91,
+    "idCardFaceVsRegisteredScore": 0.89
+  },
+  "qualityChecks": {
+    "faceDetected": true,
+    "singleFace": true,
+    "idCardDetected": true,
+    "ocrConfidence": 0.97
+  },
+  "reasonCodes": [],
+  "modelVersion": "idv-ocr-face-v1"
+}
+```
+
+Spring Boot는 위 응답을 받아 다음을 수행한다.
+
+1. OCR 추출 이름과 `PATIENT.name` 비교
+2. 생년월일 또는 주민등록번호 마스킹값과 `PATIENT.birth_date6` 비교
+3. OCR 주소와 `PATIENT.address` 비교
+4. 얼굴 3자 점수와 OCR 신뢰도를 함께 사용해 최종 `VERIFIED`, `FAILED`, `MANUAL_REVIEW` 판정
+
+보안 원칙:
+
+- 주민등록번호 전체 원문은 GPU 서버 응답, Spring 로그, DB에 저장하지 않는다.
+- 응답에는 `rrnMasked` 또는 해시 비교 결과만 포함한다.
+- 원본 신분증 이미지는 운영 정책에 따라 단기 보관 후 삭제하거나, 저장이 필요하면 암호화 저장과 접근 감사를 필수로 한다.
+
+### 6.2 실시간 STT AI API
 
 | Endpoint | Method | 설명 |
 |----------|--------|------|
-| `/api/v1/transcribe` | POST | 음성→텍스트 변환 |
+| `/ws/transcribe` | WS | 음성 스트리밍 → partial/final transcript |
 | `/api/v1/health` | GET | 헬스체크 |
 
-**요청 모드 A: JSON** — `{ "requestId", "audioPath", "language" }`
-**요청 모드 B: Multipart** — `requestId, audioFile(binary), language`
+**연결**
+```text
+wss://<GPU_SERVER_HOST>/stt/ws/transcribe
+```
 
-**응답 (공통)**
+**클라이언트 → 서버**
+```json
+{ "type": "start", "requestId": "stt_001", "language": "ko", "sampleRate": 16000 }
+```
+
+```text
+[binary audio chunk...]
+```
+
+```json
+{ "type": "end", "requestId": "stt_001" }
+```
+
+**서버 → 클라이언트**
+```json
+{ "type": "partial", "requestId": "stt_001", "text": "머리가" }
+```
+
 ```json
 {
+  "type": "final",
   "requestId": "stt_001",
   "text": "머리가 아프고 어지러워요",
   "confidence": 0.87,
   "language": "ko",
   "durationMs": 3200
+}
+```
+
+### 6.3 추천/분류 AI API
+
+| Endpoint | Method | 설명 |
+|----------|--------|------|
+| `/api/v1/recommend` | POST | STT 결과 기반 최종 증상 분류 및 추천 |
+| `/api/v1/health` | GET | 헬스체크 |
+
+**요청**
+```json
+{
+  "requestId": "rec_001",
+  "intakeSessionId": "its_001",
+  "transcript": "머리가 아프고 어지러워요",
+  "patientContext": {
+    "age": 78,
+    "region": "GANGWON"
+  }
+}
+```
+
+**응답**
+```json
+{
+  "requestId": "rec_001",
+  "classification": "INTERNAL_MEDICINE",
+  "confidence": 0.82,
+  "doctorRecommendation": {
+    "doctorId": "doc_001",
+    "doctorName": "김OO"
+  },
+  "reason": "두통 + 어지럼 증상으로 내과 진료 추천"
 }
 ```
 
@@ -1040,8 +1154,10 @@ sms:
 ### 9.1 개발 환경
 
 ```
-단일 Docker bridge network - 별도 보안 조치 불필요
-AI 서버 포트는 expose만 (호스트 바인딩 안 함)
+개발 환경에서도 AI는 별도 GPU 서버에서 동작
+메인 서버/개발 PC → GPU 서버 443 outbound만 허용
+GPU 서버 방화벽은 개발용 메인 서버 IP 또는 VPN 대역에서 오는 443만 허용
+GPU 서버 내부 서비스 포트 8000, 8001은 외부 직접 공개하지 않음
 ```
 
 ### 9.2 배포 환경
@@ -1053,9 +1169,10 @@ AI 서버 포트는 expose만 (호스트 바인딩 안 함)
   내부 전용: 8080 (Spring), 7880 (LiveKit WS), 5432 (PostgreSQL), 6379 (Redis)
 
 AI 서버:
-  외부 공개: 없음
-  메인 서버에서만 접근: 8000, 8001
+  외부 공개: 443 (TLS reverse proxy)
+  메인 서버에서만 접근: 443
   방화벽: 메인 서버 IP만 허용 (iptables/ufw)
+  내부 전용: 8000 (IDV), 8001 (STT/Triage)
 
 서버 간 통신:
   - 같은 VPC/내부 네트워크 내에서 private IP 사용
@@ -1065,8 +1182,7 @@ AI 서버:
 ```bash
 # AI 서버 방화벽 설정 예시
 sudo ufw default deny incoming
-sudo ufw allow from <MAIN_SERVER_IP> to any port 8000  # IDV AI
-sudo ufw allow from <MAIN_SERVER_IP> to any port 8001  # STT AI
+sudo ufw allow from <MAIN_SERVER_IP> to any port 443   # AI Gateway (HTTPS/WSS)
 sudo ufw allow 22/tcp                                    # SSH
 sudo ufw enable
 ```
@@ -1089,10 +1205,10 @@ sudo ufw enable
 
 ### 10.2 AI 서버 (권장 최소: 8GB RAM, 4 CPU, GPU 권장)
 
-| 컨테이너 | Memory Limit | CPU Limit | 비고 |
+| 프로세스 | Memory Limit | CPU Limit | 비고 |
 |-----------|-------------|-----------|------|
-| idv-ai | 4G | 4.0 | 얼굴 비교 모델 |
-| stt-ai | 4G | 4.0 | 음성 인식 모델 |
+| idv-ai process | 4G | 4.0 | 얼굴 비교 / OCR 모델 |
+| stt-triage-ai process | 4G | 4.0 | 실시간 음성 인식 + 추천 보조 |
 | **합계** | **8G** | **8.0** | GPU 있으면 CPU 부담 감소 |
 
 ---
@@ -1102,14 +1218,16 @@ sudo ufw enable
 | 항목 | 타임아웃 | 재시도 | 실패 시 |
 |------|---------|--------|---------|
 | Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
-| Spring → STT AI | 12초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
-
-> [!NOTE]
-> STT UX 목표는 10초 이내 응답 (MVP_Requirements §9.2). 서버 hard timeout은 12초로 네트워크 오버헤드를 포함한다.
+| Spring ↔ STT AI (WS 연결) | 3초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
+| STT final 응답 대기 | 12초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
+| Spring → Recommendation AI | 5초 | 1회 자동 | LOW confidence fallback |
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |
 | WebRTC 재연결 | 30초 | 3회 (SDK 자동) | ABANDONED 판정 |
+
+> [!NOTE]
+> STT UX 목표는 10초 이내 응답 (MVP_Requirements §9.2). 서버 hard timeout은 12초로 네트워크 오버헤드를 포함한다.
 
 ---
 
@@ -1147,7 +1265,7 @@ sudo ufw enable
 
 ### 개발 환경
 ```bash
-# 전체 올리기
+# 메인 스택 올리기 (AI 제외)
 docker compose up -d
 
 # 로그 확인
@@ -1155,6 +1273,10 @@ docker compose logs -f spring-api
 
 # 특정 서비스만 재빌드
 docker compose up -d --build spring-api
+
+# 원격 GPU 서버 헬스체크 예시
+curl https://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
+curl https://<DEV_GPU_SERVER_HOST>/triage/api/v1/health
 ```
 
 ### 배포 환경 — 메인 서버
@@ -1162,27 +1284,34 @@ docker compose up -d --build spring-api
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-### 배포 환경 — AI 서버
+### GPU 서버
 ```bash
-docker compose -f docker-compose.ai.yml up -d
+# reverse proxy 재시작
+sudo systemctl restart nginx
+
+# AI 프로세스 재시작 예시
+sudo systemctl restart idv-ai
+sudo systemctl restart stt-triage-ai
 ```
 
 ---
 
 ## 14. 환경별 차이 요약
 
-| 항목 | 개발 (Local) | 배포 (Prod) |
-|------|-------------|-------------|
-| Compose 파일 | `docker-compose.yml` | `docker-compose.prod.yml` + `docker-compose.ai.yml` |
-| AI 서버 위치 | 같은 Compose | 별도 서버 |
-| Spring → AI 통신 | http://idv-ai:8000 (컨테이너명) | http://\<AI_IP\>:8000 (서버 IP) |
-| 파일 전달 | bind mount + JSON 경로 | REST multipart |
-| AI 파일 접근 | read-only bind mount | 수신 후 로컬 저장 |
+| 항목 | 개발 (Dev) | 배포 (Prod) |
+|------|------------|-------------|
+| Compose 파일 | `docker-compose.yml` (메인 스택) + 원격 GPU 서버 | `docker-compose.prod.yml` (메인 스택) + 원격 GPU 서버 |
+| AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
+| Spring → IDV AI | https://\<DEV_GPU_SERVER_HOST\>/idv/api/v1/verify | https://\<PROD_GPU_SERVER_HOST\>/idv/api/v1/verify |
+| Spring ↔ STT AI | wss://\<DEV_GPU_SERVER_HOST\>/stt/ws/transcribe | wss://\<PROD_GPU_SERVER_HOST\>/stt/ws/transcribe |
+| Spring → Recommendation AI | https://\<DEV_GPU_SERVER_HOST\>/triage/api/v1/recommend | https://\<PROD_GPU_SERVER_HOST\>/triage/api/v1/recommend |
+| 프로토콜 모델 | IDV=REST multipart, STT=WebSocket, 추천=REST JSON | IDV=REST multipart, STT=WebSocket, 추천=REST JSON |
+| AI 파일 접근 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 |
 | Spring Profile | `local` | `prod` |
 | DB 비밀번호 | 하드코딩 (dev) | 환경 변수 / secrets |
 | TLS | 없음 | Nginx에서 종료 |
-| 방화벽 | 없음 | AI 서버 접근 제한 |
-| 자원 제한 | 느슨 | 컨테이너별 limits 설정 |
+| 방화벽 | GPU 서버에 Dev 메인 서버/VPN 대역만 허용 | GPU 서버에 Prod 메인 서버 IP만 허용 |
+| 자원 제한 | 느슨 | 프로세스별 limits / systemd 제어 권장 |
 | 인증 쿠키 Secure | 없음 (HTTP) | Secure 필수 (HTTPS) |
 | TURN | LiveKit 내장, 3478/udp (publish) | LiveKit 내장, 8478/udp (publish) |
 | LiveKit signaling | 7880 직접 접속 (HTTP) | Nginx WSS 프록시 (`/livekit` → 7880, SSL termination) |

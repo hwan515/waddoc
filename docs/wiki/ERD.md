@@ -426,6 +426,21 @@ erDiagram
 
 > 동의 도메인(`PATIENT_CONSENT`)은 P1 별도 문서 [P1_Consent_Extension.md](./P1_Consent_Extension.md)에서 관리한다.
 
+> **확장형 본인확인 (P1 선택)**: 신분증 OCR + 얼굴 3자 대조를 도입하는 경우, `VERIFICATION` 확장 컬럼 또는 별도 스냅샷 테이블(`VERIFICATION_EVIDENCE`)에 다음 저장 항목이 추가로 필요하다.
+>
+> - `face_image_path`
+> - `id_card_image_path`
+> - `ocr_name`
+> - `ocr_rrn_masked`
+> - `ocr_address`
+> - `ocr_confidence`
+> - `live_vs_registered_score`
+> - `live_vs_id_card_face_score`
+> - `id_card_face_vs_registered_score`
+> - `reason_codes_json`
+>
+> 주민등록번호 전체 원문은 저장하지 않는 것을 원칙으로 한다.
+
 ### 2.7 바이탈 도메인
 
 | 테이블 | 설명 |

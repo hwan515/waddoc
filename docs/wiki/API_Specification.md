@@ -1079,6 +1079,8 @@
 ## 7. 본인확인 API (`/api/v1/verifications`)
 
 > 사전 등록 사진(Reference)과 현장 촬영 사진(Probe)을 IDV AI로 비교한다.
+>
+> **확장형 본인확인 (P1 선택)**: 얼굴 이미지와 신분증 이미지를 함께 업로드하고, GPU 서버에서 OCR + 얼굴 대조를 수행하는 확장 모드를 추가할 수 있다. 현재 MVP 기본 경로는 face-only 비교다.
 
 ### 7.1 본인확인 요청
 
@@ -1141,6 +1143,68 @@
   "message": "관리자 확인이 필요합니다."
 }
 ```
+
+---
+
+### 7.1-Ext. 확장형 본인확인 요청 (P1 선택)
+
+> 차량 태블릿에서 **얼굴 사진**과 **신분증 사진**을 각각 촬영해 업로드한다.
+> GPU 서버는 OCR과 얼굴 비교를 수행하고, Spring Boot는 환자 기본정보와 대조해 최종 verification 상태를 결정한다.
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/verifications` |
+| Auth | Bearer Token (ADMIN) 또는 내부 서비스 |
+| Mode | `multipart/form-data` |
+
+**추가 Request 필드** (`multipart/form-data`)
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `faceImage` | file | O | 환자 얼굴 촬영 사진 (JPEG/PNG) |
+| `idCardImage` | file | O | 신분증 촬영 이미지 (JPEG/PNG) |
+| `verificationMode` | string | X | `FACE_AND_IDCARD` |
+
+> `verificationMode=FACE_AND_IDCARD`인 경우 `probeImage` 대신 `faceImage`를 사용한다.
+
+**Response** `200 OK`
+```json
+{
+  "verificationId": "vrf_T9xQa2",
+  "status": "VERIFIED",
+  "ocr": {
+    "name": "홍길동",
+    "rrnMasked": "580315-1******",
+    "address": "강원도 강릉시 ..."
+  },
+  "matches": {
+    "liveVsRegisteredScore": 0.94,
+    "liveVsIdCardFaceScore": 0.91,
+    "idCardFaceVsRegisteredScore": 0.89
+  },
+  "qualityChecks": {
+    "faceDetected": true,
+    "singleFace": true,
+    "idCardDetected": true,
+    "ocrConfidence": 0.97
+  },
+  "reasonCodes": [],
+  "message": "본인 확인이 완료되었습니다."
+}
+```
+
+**확장형 검증 규칙**
+
+| 검증 항목 | 설명 |
+|-----------|------|
+| OCR 이름 비교 | OCR 추출 이름과 `PATIENT.name` 비교 |
+| OCR 생년월일/주민번호 비교 | 주민등록번호 원문 저장 없이 `birthDate6` 또는 마스킹값/해시로 비교 |
+| OCR 주소 비교 | OCR 추출 주소와 `PATIENT.address` 비교 |
+| 얼굴 3자 대조 | 실시간 얼굴 vs 사전 등록 사진, 실시간 얼굴 vs 신분증 얼굴, 신분증 얼굴 vs 사전 등록 사진 |
+| 실패 처리 | OCR 신뢰도 부족, 얼굴 불검출, 정보 불일치 시 `FAILED` 또는 `MANUAL_REVIEW` |
+
+> 주민등록번호 전체 원문은 API 응답/DB에 저장하지 않는 것을 원칙으로 한다.
 
 ---
 
