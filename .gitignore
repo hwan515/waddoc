@@ -1,6 +1,12 @@
 /build
 /install
 /log
+.vscode
+.claude
+.pem
+.env
+# JetBrains IDEs
+.idea/
 
 __pycache__
 *.pyc
