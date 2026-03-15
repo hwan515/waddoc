@@ -187,7 +187,7 @@ Base URL:
 
 ### 7.1 Intake
 - `flow_type`: `FOLLOWUP`, `NEW_SYMPTOM`, `LOOKUP_CANCEL`
-- `input_mode`: `DTMF`, `VOICE`, `SYSTEM`
+- `input_mode`: `VOICE`, `SYSTEM`
 - `exception_code`: `NO_INPUT`, `NO_MATCH`, `ASR_FAIL`, `AMBIGUOUS_SYMPTOM`, `EMERGENCY_SUSPECTED`, `IDENTITY_MISMATCH`
 
 ### 7.2 Booking
@@ -499,7 +499,7 @@ Response
 - 실패 시 `IDENTITY_MISMATCH` 또는 수동 콜백 흐름
 
 ### 9.3.2 POST `/ivr/sessions/{intakeSessionId}/turns`
-설명: IVR turn 기록(ASR/DTMF/no-input/no-match 포함)
+설명: IVR voice turn 기록(ASR/no-input/no-match 포함)
 
 Request
 ```json
@@ -509,7 +509,6 @@ Request
   "input_mode": "VOICE",
   "recognized_text": "기침이 있고 어지러워요",
   "asr_confidence": 0.88,
-  "dtmf_value": null,
   "exception_code": null
 }
 ```
@@ -1607,4 +1606,3 @@ Payload
 3. DB DDL + enum + unique index 정의  
 4. API 계약 테스트(Pact or Spring Cloud Contract) 작성  
 5. Docker Compose에서 `backend`, `ai-stt`, `ai-triage`, `livekit`, `coturn`, `postgres`, `redis`, `rabbitmq` 연결  
-

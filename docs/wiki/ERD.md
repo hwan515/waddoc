@@ -113,8 +113,7 @@ erDiagram
         varchar public_id UK "외부 노출 ID (turn_xxxx)"
         bigint intake_session_id FK
         int turn_order
-        enum turn_type "DTMF | VOICE"
-        varchar dtmf_input
+        enum turn_type "VOICE"
         text prompt "TTS 안내문"
         text stt_text "STT 변환 결과"
         decimal stt_confidence
@@ -405,7 +404,7 @@ erDiagram
 | 테이블 | 설명 |
 |--------|------|
 | `INTAKE_SESSION` | 전화 시뮬레이터 인테이크 세션. **`patient_id`는 nullable** — 세션 시작 시 환자가 아직 식별되지 않을 수 있으므로, 식별 완료 후 바인딩한다 |
-| `INTAKE_TURN` | 턴별 DTMF/VOICE 입력, STT 결과, 예외 코드 기록 |
+| `INTAKE_TURN` | 턴별 VOICE 입력, STT 결과, 예외 코드 기록 |
 | `SYMPTOM_INTAKE` | 수집된 증상 원문 및 분류 결과 |
 | `RECOMMENDATION` | 진료과/의사 추천 결과 및 가용 슬롯 |
 

@@ -457,41 +457,19 @@
 
 ---
 
-### 3.4 턴(Turn) 기록 — DTMF 입력
+### 3.4 메뉴 선택 처리 (웹 시뮬레이터)
 
-| 항목 | 값 |
-|------|-----|
-| Method | `POST` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/turns` |
-| Auth | 불필요 |
+웹 전화 시뮬레이터에서는 별도 키패드 입력 턴을 저장하지 않는다.
+화면에서 `1`, `2` 버튼을 누르면 별도 `/turns` 저장 API 없이 다음 도메인 API를 직접 호출한다.
 
-**Request Body**
-```json
-{
-  "dtmfInput": "1",
-  "prompt": "새로운 예약을 원하시면 1번, 기존 예약 조회·취소를 원하시면 2번을 눌러주세요.",
-  "nextAction": "ASK_SYMPTOM",
-  "ttsMessage": "홍길동 어르신, 어디가 불편하신가요?"
-}
-```
+예시:
 
-> - `turnType`은 서버가 `DTMF`로 고정하므로 요청에 포함하지 않는다.
-> - `dtmfInput`: 숫자, `*`, `#`만 허용 (`^[0-9*#]+$`), 최대 10자.
-> - `nextAction`, `ttsMessage`: 프론트(시뮬레이터)에서 전달, 서버는 저장만 수행한다.
+- 신규 예약 버튼(`1`) 클릭 → 환자 식별 API 호출
+- 기존 예약 조회/취소 버튼(`2`) 클릭 → 환자 식별 후 기존 예약 조회 API 호출
+- 예약 확정 버튼(`1`) 클릭 → 예약 생성 API 호출
+- 다른 시간 버튼(`2`) 클릭 → 프론트에서 다음 후보 슬롯으로 진행
 
-**Response** `201 Created`
-```json
-{
-  "turnId": "turn_M4nPq8",
-  "turnOrder": 1,
-  "intakeSessionId": "ints_R8kxPw",
-  "turnType": "DTMF",
-  "dtmfInput": "1",
-  "nextAction": "ASK_SYMPTOM",
-  "ttsMessage": "홍길동 어르신, 어디가 불편하신가요?",
-  "createdAt": "2026-03-10T10:01:00+09:00"
-}
-```
+버튼 선택 자체는 별도 턴 엔티티로 저장하지 않고, 후속 API의 감사 로그와 세션 갱신으로 추적한다.
 
 ---
 
@@ -1962,7 +1940,7 @@ data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"�
 | `PATIENT_LOOKUP_BY_PHONE` | 전화번호 직접 입력 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
 | `PATIENT_LOOKUP_BY_INFO` | 이름+생년월일 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
 | `INTAKE_PATIENT_BOUND` | 인테이크 세션 환자 바인딩 (`actorRole=SYSTEM`) |
-| `INTAKE_TURN_RECORDED` | 인테이크 턴 기록 (DTMF/VOICE) (`actorRole=SYSTEM`) |
+| `INTAKE_TURN_RECORDED` | 인테이크 음성 턴 기록 (`actorRole=SYSTEM`) |
 | `INTAKE_SESSION_COMPLETED` | 인테이크 세션 종료 (`actorRole=SYSTEM`) |
 | `SYMPTOM_CLASSIFIED` | 증상 분류 및 진료과 추천 (`actorRole=SYSTEM`) |
 | `BOOKING_VIEWED` | 예약 상세 조회 |
