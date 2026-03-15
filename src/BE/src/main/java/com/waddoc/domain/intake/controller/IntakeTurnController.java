@@ -4,7 +4,6 @@ import com.waddoc.domain.intake.dto.*;
 import com.waddoc.domain.intake.service.IntakeTurnService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,14 +15,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class IntakeTurnController {
 
     private final IntakeTurnService intakeTurnService;
-
-    @PostMapping("/turns")
-    public ResponseEntity<IntakeTurnResponse> recordDtmfTurn(
-            @PathVariable String intakeSessionId,
-            @Valid @RequestBody RecordDtmfTurnRequest request) {
-        IntakeTurnResponse response = intakeTurnService.recordDtmfTurn(intakeSessionId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
 
     @PostMapping(value = "/turns/voice", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<IntakeTurnResponse> recordVoiceTurn(

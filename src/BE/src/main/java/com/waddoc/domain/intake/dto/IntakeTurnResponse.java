@@ -19,7 +19,6 @@ public class IntakeTurnResponse {
     private int turnOrder;
     private String intakeSessionId;
     private TurnType turnType;
-    private String dtmfInput;
     private String sttText;
     private BigDecimal sttConfidence;
     private String exceptionCode;
@@ -33,7 +32,6 @@ public class IntakeTurnResponse {
                 .turnOrder(turn.getTurnOrder())
                 .intakeSessionId(turn.getIntakeSession().getPublicId())
                 .turnType(turn.getTurnType())
-                .dtmfInput(turn.getDtmfInput())
                 .sttText(turn.getSttText())
                 .sttConfidence(turn.getSttConfidence())
                 .exceptionCode(turn.getExceptionCode())

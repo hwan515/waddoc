@@ -35,39 +35,6 @@ public class IntakeTurnService {
     private String storageRoot;
 
     @Transactional
-    public IntakeTurnResponse recordDtmfTurn(String sessionId, RecordDtmfTurnRequest request) {
-        IntakeSession session = findActiveSession(sessionId);
-
-        int nextOrder = getNextTurnOrder(session);
-
-        IntakeTurn turn = IntakeTurn.builder()
-                .intakeSession(session)
-                .turnOrder(nextOrder)
-                .turnType(TurnType.DTMF)
-                .dtmfInput(request.getDtmfInput())
-                .prompt(request.getPrompt())
-                .nextAction(request.getNextAction())
-                .ttsMessage(request.getTtsMessage())
-                .build();
-
-        intakeTurnRepository.save(turn);
-        session.touch();
-
-        String correlationId = "corr_ints_" + session.getPublicId();
-        auditLogService.log(
-                "INTAKE_TURN_RECORDED",
-                "INTAKE_SESSION",
-                session.getPublicId(),
-                correlationId,
-                Map.of("turnId", turn.getPublicId(),
-                       "turnOrder", nextOrder,
-                       "turnType", "DTMF")
-        );
-
-        return IntakeTurnResponse.from(turn);
-    }
-
-    @Transactional
     public IntakeTurnResponse recordVoiceTurn(String sessionId, MultipartFile audioFile,
                                               String prompt, String nextAction, String ttsMessage) {
         IntakeSession session = findActiveSession(sessionId);

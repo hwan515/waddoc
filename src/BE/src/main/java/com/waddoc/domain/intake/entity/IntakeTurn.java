@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 
 /**
- * 인테이크 턴별 기록. DTMF 키입력 또는 VOICE(STT) 입력과 TTS 응답을 저장.
+ * 인테이크 턴별 기록. VOICE(STT) 입력과 TTS 응답을 저장.
  */
 @Entity
 @Table(name = "intake_turn", uniqueConstraints = {
@@ -41,9 +41,6 @@ public class IntakeTurn extends BaseCreatedEntity {
     @Column(name = "turn_type", nullable = false, length = 10)
     private TurnType turnType;
 
-    @Column(name = "dtmf_input", length = 10)
-    private String dtmfInput;
-
     @Column(columnDefinition = "TEXT")
     private String prompt;
 
@@ -67,13 +64,12 @@ public class IntakeTurn extends BaseCreatedEntity {
 
     @Builder
     public IntakeTurn(IntakeSession intakeSession, int turnOrder, TurnType turnType,
-                      String dtmfInput, String prompt, String sttText, BigDecimal sttConfidence,
+                      String prompt, String sttText, BigDecimal sttConfidence,
                       String exceptionCode, String nextAction, String ttsMessage, String audioFilePath) {
         this.publicId = PublicIdGenerator.generate("turn_");
         this.intakeSession = intakeSession;
         this.turnOrder = turnOrder;
         this.turnType = turnType;
-        this.dtmfInput = dtmfInput;
         this.prompt = prompt;
         this.sttText = sttText;
         this.sttConfidence = sttConfidence;

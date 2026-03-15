@@ -28,7 +28,6 @@ CREATE TABLE intake_turn (
     intake_session_id   BIGINT          NOT NULL REFERENCES intake_session(intake_session_id),
     turn_order          INT             NOT NULL,
     turn_type           VARCHAR(10)     NOT NULL,
-    dtmf_input          VARCHAR(10),
     prompt              TEXT,
     stt_text            TEXT,
     stt_confidence      DECIMAL(5,4),
@@ -41,8 +40,7 @@ CREATE TABLE intake_turn (
 
 COMMENT ON TABLE intake_turn IS '인테이크 턴별 입력/응답 기록';
 COMMENT ON COLUMN intake_turn.turn_order IS '턴 순번';
-COMMENT ON COLUMN intake_turn.turn_type IS '입력 유형 (DTMF | VOICE)';
-COMMENT ON COLUMN intake_turn.dtmf_input IS 'DTMF 키 입력값';
+COMMENT ON COLUMN intake_turn.turn_type IS '입력 유형 (VOICE)';
 COMMENT ON COLUMN intake_turn.prompt IS 'TTS 안내문';
 COMMENT ON COLUMN intake_turn.stt_text IS 'STT 변환 결과';
 COMMENT ON COLUMN intake_turn.stt_confidence IS 'STT 신뢰도';
