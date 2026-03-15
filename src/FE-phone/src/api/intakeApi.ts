@@ -116,11 +116,11 @@ export async function bindPatient(
   await api.patch(`/intake/sessions/${sessionId}/bind-patient`, { patientId });
 }
 
-export async function submitDtmfTurn(
+export async function completeSession(
   sessionId: string,
-  dtmfInput: string,
+  completionReason: string,
 ): Promise<void> {
-  await api.post(`/intake/sessions/${sessionId}/turns`, { dtmfInput });
+  await api.put(`/intake/sessions/${sessionId}/complete`, { completionReason });
 }
 
 export async function submitVoiceTurn(

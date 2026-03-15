@@ -42,5 +42,19 @@ export function useAudioRecorder() {
     });
   }, []);
 
-  return { isRecording, startRecording, stopRecording };
+  const cleanupRecorder = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    if (recorder) {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+    }
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    setIsRecording(false);
+  }, []);
+
+  return { isRecording, startRecording, stopRecording, cleanupRecorder };
 }

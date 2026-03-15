@@ -1,3 +1,9 @@
+export type CompletionReason =
+  | 'BOOKING_CREATED'
+  | 'EXISTING_BOOKING_CHECKED'
+  | 'USER_HANGUP'
+  | 'NO_INPUT_TIMEOUT';
+
 // IVR 상태 머신 상태
 export type IntakePhase =
   | 'IDLE'

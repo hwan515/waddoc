@@ -3,9 +3,9 @@ import { useIntakeStore } from '../stores/intakeStore';
 import { useTTS } from './useTTS';
 import { useAudioRecorder } from './useAudioRecorder';
 import * as intakeApi from '../api/intakeApi';
-import type { IdentifyResult } from '../types/intake';
+import type { CompletionReason, IdentifyResult } from '../types/intake';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false';
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const DEFAULT_CALLER_PHONE =
   import.meta.env.VITE_CALLER_PHONE ?? '01012345678';
 
@@ -14,7 +14,8 @@ type LookupMode = 'new' | 'existing';
 export function useIntakeFlow() {
   const store = useIntakeStore();
   const { speak, stop: stopTTS } = useTTS();
-  const { isRecording, startRecording, stopRecording } = useAudioRecorder();
+  const { isRecording, startRecording, stopRecording, cleanupRecorder } =
+    useAudioRecorder();
 
   const submitDialBufferRef = useRef<(() => void) | undefined>(undefined);
   const micToggleRef = useRef<(() => void) | undefined>(undefined);
@@ -172,15 +173,39 @@ export function useIntakeFlow() {
     );
   }, [store, systemSay]);
 
+  const finishSession = useCallback(
+    async (reason?: CompletionReason, finalMessage?: string) => {
+      stopTTS();
+      cleanupRecorder();
+
+      if (finalMessage) {
+        await systemSay(finalMessage);
+      }
+
+      const { sessionId } = useIntakeStore.getState();
+      if (!USE_MOCK && sessionId && reason) {
+        try {
+          await intakeApi.completeSession(sessionId, reason);
+        } catch {
+          // 세션 종료 기록 실패가 UI 종료를 막지 않도록 무시한다.
+        }
+      }
+
+      store.setPhase('SESSION_END');
+      store.addMessage({
+        role: 'system',
+        text: '통화가 종료되었습니다.',
+        type: 'info',
+      });
+    },
+    [cleanupRecorder, stopTTS, store, systemSay],
+  );
+
   const endCall = useCallback(() => {
-    stopTTS();
-    store.setPhase('SESSION_END');
-    store.addMessage({
-      role: 'system',
-      text: '통화가 종료되었습니다.',
-      type: 'info',
-    });
-  }, [store, stopTTS]);
+    const { phase } = useIntakeStore.getState();
+    if (phase === 'SESSION_END') return;
+    finishSession('USER_HANGUP');
+  }, [finishSession]);
 
   const handleNewBookingFlow = useCallback(async () => {
     await handleCallerLookup('new');
@@ -203,15 +228,10 @@ export function useIntakeFlow() {
           await delay(800);
           store.setIsLoading(false);
           store.setPhase('BOOKING_CONFIRMED');
-          await systemSay(
+          await finishSession(
+            'BOOKING_CREATED',
             `${slot.date} ${slot.startTime} ${slot.doctorName} 선생님 예약이 확정되었습니다. 감사합니다.`,
           );
-          store.setPhase('SESSION_END');
-          store.addMessage({
-            role: 'system',
-            text: '통화가 종료되었습니다.',
-            type: 'info',
-          });
           return;
         }
 
@@ -227,11 +247,11 @@ export function useIntakeFlow() {
           const booking = await intakeApi.createBooking(sessionId, slot.slotId);
           store.setIsLoading(false);
           store.setPhase('BOOKING_CONFIRMED');
-          await systemSay(
+          await finishSession(
+            'BOOKING_CREATED',
             booking.ttsMessage ||
               `${booking.appointmentDate} ${booking.startTime} ${booking.doctorName} 선생님 예약이 확정되었습니다. 감사합니다.`,
           );
-          store.setPhase('SESSION_END');
         } catch {
           store.setIsLoading(false);
           await systemSay('예약 처리 중 오류가 발생했습니다.');
@@ -245,21 +265,17 @@ export function useIntakeFlow() {
             `${slot.departmentName} ${slot.doctorName} 선생님, ${slot.date} ${slot.startTime} 진료가 가능합니다. 예약하시겠습니까? 네이면 1번, 다른 시간은 2번을 눌러주세요.`,
           );
         } else {
-          await systemSay(
+          // TODO: BE에 NO_AVAILABLE_SLOT 같은 종료 사유가 추가되면 전용 completionReason을 전달하도록 변경한다.
+          await finishSession(
+            undefined,
             '더 이상 가능한 시간이 없습니다. 다시 전화해주세요. 감사합니다.',
           );
-          store.setPhase('SESSION_END');
-          store.addMessage({
-            role: 'system',
-            text: '통화가 종료되었습니다.',
-            type: 'info',
-          });
         }
       } else {
         await systemSay('1번 또는 2번을 눌러주세요.');
       }
     },
-    [store, systemSay],
+    [finishSession, store, systemSay],
   );
 
   const handleBookingAction = useCallback(
@@ -267,23 +283,17 @@ export function useIntakeFlow() {
       const { existingBookings, sessionId } = useIntakeStore.getState();
 
       if (existingBookings.length === 0) {
-        await systemSay('조회된 예약이 없습니다.');
-        store.setPhase('SESSION_END');
+        await finishSession('EXISTING_BOOKING_CHECKED', '조회된 예약이 없습니다.');
         return;
       }
 
       const booking = existingBookings[0];
 
       if (digit === '1') {
-        await systemSay(
+        await finishSession(
+          'EXISTING_BOOKING_CHECKED',
           `${booking.appointmentDate} ${booking.startTime} ${booking.doctorName} 선생님 ${booking.departmentName} 예약이 있습니다.`,
         );
-        store.setPhase('SESSION_END');
-        store.addMessage({
-          role: 'system',
-          text: '통화가 종료되었습니다.',
-          type: 'info',
-        });
         return;
       }
 
@@ -292,7 +302,10 @@ export function useIntakeFlow() {
           store.setIsLoading(true);
           await delay(600);
           store.setIsLoading(false);
-          await systemSay('예약이 취소되었습니다. 감사합니다.');
+          await finishSession(
+            'EXISTING_BOOKING_CHECKED',
+            '예약이 취소되었습니다. 감사합니다.',
+          );
         } else {
           if (!sessionId) {
             await systemSay(
@@ -308,7 +321,8 @@ export function useIntakeFlow() {
               booking.bookingId,
             );
             store.setIsLoading(false);
-            await systemSay(
+            await finishSession(
+              'EXISTING_BOOKING_CHECKED',
               result.ttsMessage || '예약이 취소되었습니다. 감사합니다.',
             );
           } catch {
@@ -317,19 +331,12 @@ export function useIntakeFlow() {
             return;
           }
         }
-
-        store.setPhase('SESSION_END');
-        store.addMessage({
-          role: 'system',
-          text: '통화가 종료되었습니다.',
-          type: 'info',
-        });
         return;
       }
 
       await systemSay('1번 또는 2번을 눌러주세요.');
     },
-    [store, systemSay],
+    [finishSession, store, systemSay],
   );
 
   const handleDigit = useCallback(
