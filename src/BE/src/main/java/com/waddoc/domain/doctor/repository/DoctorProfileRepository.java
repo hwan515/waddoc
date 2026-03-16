@@ -10,5 +10,7 @@ public interface DoctorProfileRepository extends JpaRepository<DoctorProfile, Lo
 
     Optional<DoctorProfile> findByPublicId(String publicId);
 
+    Optional<DoctorProfile> findByUserUsername(String username);
+
     List<DoctorProfile> findByDepartment(String department);
 }

@@ -85,4 +85,27 @@ public class IntakeSessionService {
 
         return IntakeSessionDetailResponse.from(session);
     }
+
+    @Transactional
+    public CompleteSessionResponse completeSession(String intakeSessionId, CompleteSessionRequest request) {
+        IntakeSession session = intakeSessionRepository.findByPublicId(intakeSessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INTAKE_SESSION_NOT_FOUND));
+
+        if (!session.isActive()) {
+            throw new BusinessException(ErrorCode.SESSION_STATE_INVALID);
+        }
+
+        session.complete(request.getCompletionReason());
+
+        String correlationId = "corr_ints_" + session.getPublicId();
+        auditLogService.log(
+                "INTAKE_SESSION_COMPLETED",
+                "INTAKE_SESSION",
+                session.getPublicId(),
+                correlationId,
+                Map.of("completionReason", request.getCompletionReason().name())
+        );
+
+        return CompleteSessionResponse.from(session);
+    }
 }

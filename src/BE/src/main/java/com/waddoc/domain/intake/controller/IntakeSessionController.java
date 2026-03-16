@@ -36,4 +36,12 @@ public class IntakeSessionController {
         IntakeSessionDetailResponse response = intakeSessionService.getSession(intakeSessionId);
         return ResponseEntity.ok(response);
     }
+
+    @PutMapping("/{intakeSessionId}/complete")
+    public ResponseEntity<CompleteSessionResponse> completeSession(
+            @PathVariable String intakeSessionId,
+            @Valid @RequestBody CompleteSessionRequest request) {
+        CompleteSessionResponse response = intakeSessionService.completeSession(intakeSessionId, request);
+        return ResponseEntity.ok(response);
+    }
 }
