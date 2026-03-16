@@ -27,6 +27,9 @@ public class JwtTokenProvider {
     @Value("${jwt.access-token-expiry}")
     private long accessTokenExpiry;
 
+    @Value("${jwt.refresh-token-expiry}")
+    private long refreshTokenExpiry;
+
     private SecretKey secretKey;
 
     @PostConstruct
@@ -37,6 +40,19 @@ public class JwtTokenProvider {
     public String createAccessToken(String userId, Role role) {
         Instant now = Instant.now();
         Instant expiry = now.plusSeconds(accessTokenExpiry);
+
+        return Jwts.builder()
+                .subject(userId)
+                .claim(ROLE_CLAIM, role.name())
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiry))
+                .signWith(secretKey)
+                .compact();
+    }
+
+    public String createRefreshToken(String userId, Role role) {
+        Instant now = Instant.now();
+        Instant expiry = now.plusSeconds(refreshTokenExpiry);
 
         return Jwts.builder()
                 .subject(userId)
@@ -67,6 +83,10 @@ public class JwtTokenProvider {
 
     public long getAccessTokenExpiry() {
         return accessTokenExpiry;
+    }
+
+    public long getRefreshTokenExpiry() {
+        return refreshTokenExpiry;
     }
 
     private Claims parseClaims(String token) {

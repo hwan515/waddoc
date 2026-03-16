@@ -2,7 +2,9 @@ package com.waddoc.domain.auth.controller;
 
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.LoginResponse;
+import com.waddoc.domain.auth.dto.TokenRefreshResponse;
 import com.waddoc.domain.auth.service.AuthService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,20 +18,29 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        LoginResponse response = authService.login(request);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletResponse response
+    ) {
+        LoginResponse loginResponse = authService.login(request, response);
+        return ResponseEntity.ok(loginResponse);
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<Void> refresh() {
-        // TODO: refresh API 구현 예정
-        return ResponseEntity.ok().build();
+    public ResponseEntity<TokenRefreshResponse> refresh(
+            @CookieValue(name = "refresh_token", required = false) String refreshToken,
+            HttpServletResponse response
+    ) {
+        TokenRefreshResponse refreshResponse = authService.refresh(refreshToken, response);
+        return ResponseEntity.ok(refreshResponse);
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout() {
-        // TODO: logout API 구현 예정
+    public ResponseEntity<Void> logout(
+            @CookieValue(name = "refresh_token", required = false) String refreshToken,
+            HttpServletResponse response
+    ) {
+        authService.logout(refreshToken, response);
         return ResponseEntity.noContent().build();
     }
 }
