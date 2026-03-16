@@ -2,12 +2,11 @@
 /build
 /install
 /log
+.idea/
 .vscode
 .claude
 .pem
 .env
-# JetBrains IDEs
-.idea/
 
 # Python
 __pycache__/
@@ -47,10 +46,6 @@ UserSettings/
 *.mdb
 *.opendb
 *.VC.db
-
-# IDE
-.vscode/
-.idea/
 
 # OS
 .DS_Store
