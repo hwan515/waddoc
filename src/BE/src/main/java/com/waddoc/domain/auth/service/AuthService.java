@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final String BEARER_PREFIX = "Bearer ";
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
 
@@ -30,14 +31,14 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request, HttpServletResponse response) {
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new IllegalArgumentException("아이디 또는 비밀번호가 올바르지 않습니다.");
+            throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
         if (!user.isActive()) {
-            throw new IllegalStateException("비활성화된 계정입니다.");
+            throw new BusinessException(ErrorCode.AUTH_ACCOUNT_LOCKED);
         }
 
         String accessToken = jwtTokenProvider.createAccessToken(user.getPublicId(), user.getRole());
@@ -51,15 +52,7 @@ public class AuthService {
 
         addRefreshTokenCookie(response, refreshToken, jwtTokenProvider.getRefreshTokenExpiry());
 
-        return LoginResponse.builder()
-                .accessToken(accessToken)
-                .expiresIn((int) jwtTokenProvider.getAccessTokenExpiry())
-                .user(LoginResponse.UserInfo.builder()
-                        .userId(user.getPublicId())
-                        .name(user.getName())
-                        .role(user.getRole())
-                        .build())
-                .build();
+        return buildLoginResponse(user, accessToken);
     }
 
     public TokenRefreshResponse refresh(String refreshToken, HttpServletResponse response) {
@@ -67,17 +60,23 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED);
         }
 
-        String savedUserId = refreshTokenService.findUserIdByRefreshToken(refreshToken)
-                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED));
-
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            refreshTokenService.delete(refreshToken);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED);
         }
+
+        String savedUserId = refreshTokenService.findUserIdByRefreshToken(refreshToken)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_TOKEN_REUSE));
 
         String userId = jwtTokenProvider.getUserId(refreshToken);
         Role role = jwtTokenProvider.getRole(refreshToken);
         if (!savedUserId.equals(userId)) {
+            refreshTokenService.delete(refreshToken);
+            throw new BusinessException(ErrorCode.AUTH_TOKEN_REUSE);
+        }
+
+        User user = userRepository.findByPublicId(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED));
+        if (user.getRole() != role || !user.isActive()) {
             refreshTokenService.delete(refreshToken);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED);
         }
@@ -97,10 +96,16 @@ public class AuthService {
         return TokenRefreshResponse.builder()
                 .accessToken(newAccessToken)
                 .expiresIn((int) jwtTokenProvider.getAccessTokenExpiry())
+                .user(buildUserInfo(user))
                 .build();
     }
 
-    public void logout(String refreshToken, HttpServletResponse response) {
+    public void logout(String authorizationHeader, String refreshToken, HttpServletResponse response) {
+        String accessToken = extractBearerToken(authorizationHeader);
+        if (!jwtTokenProvider.validateToken(accessToken)) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+
         if (refreshToken != null && !refreshToken.isBlank()) {
             refreshTokenService.delete(refreshToken);
         }
@@ -130,5 +135,28 @@ public class AuthService {
                 .build();
 
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private LoginResponse buildLoginResponse(User user, String accessToken) {
+        return LoginResponse.builder()
+                .accessToken(accessToken)
+                .expiresIn((int) jwtTokenProvider.getAccessTokenExpiry())
+                .user(buildUserInfo(user))
+                .build();
+    }
+
+    private String extractBearerToken(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith(BEARER_PREFIX)) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+        return authorizationHeader.substring(BEARER_PREFIX.length()).trim();
+    }
+
+    private LoginResponse.UserInfo buildUserInfo(User user) {
+        return LoginResponse.UserInfo.builder()
+                .userId(user.getPublicId())
+                .name(user.getName())
+                .role(user.getRole())
+                .build();
     }
 }
