@@ -217,7 +217,7 @@
 
 ---
 
-### 2.3 [Fallback] 이름 + 생년월일로 환자 조회 (3차 식별, STT)
+### 2.3 [보조 조회] 이름 + 생년월일로 환자 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -225,7 +225,8 @@
 | Path | `/api/v1/intake/sessions/{intakeSessionId}/identify/by-info` |
 | Auth | 불필요 |
 
-> 2차 전화번호 식별도 실패 시, 이름 + 생년월일(STT 입력)로 최종 시도한다.
+> 현재 기본 전화 예약 흐름은 발신번호/전화번호 입력까지만 사용한다.
+> 이 API는 운영 보조 경로나 별도 수기 입력 시나리오를 위해 유지한다.
 > 이름 + 생년월일 조회 결과가 0건이거나 다건인 경우에는 임의 선택하지 않고 `identified=false, patient=null` 을 반환한다.
 
 **Request Body**
@@ -464,63 +465,43 @@
 
 예시:
 
-- 신규 예약 버튼(`1`) 클릭 → 환자 식별 API 호출
+- 신규 예약 버튼(`1`) 클릭 → 환자 식별 API 호출 → 진료과 메뉴 선택 → 추천 API 호출
 - 기존 예약 조회/취소 버튼(`2`) 클릭 → 환자 식별 후 기존 예약 조회 API 호출
 - 예약 확정 버튼(`1`) 클릭 → 예약 생성 API 호출
 - 다른 시간 버튼(`2`) 클릭 → 프론트에서 다음 후보 슬롯으로 진행
+- 다시 듣기 버튼(`0`) 클릭 → 현재 메뉴 또는 슬롯 안내 반복
 
 버튼 선택 자체는 별도 턴 엔티티로 저장하지 않고, 후속 API의 감사 로그와 세션 갱신으로 추적한다.
 
 ---
 
-### 3.5 턴(Turn) 기록 — 음성(STT) 입력
+### 3.5 인테이크 세션 종료
 
 | 항목 | 값 |
 |------|-----|
-| Method | `POST` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/turns/voice` |
+| Method | `PUT` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}/complete` |
 | Auth | 불필요 |
 
-> **현재 구현 기준**: 음성 턴 API는 `audioFile` 을 로컬 저장하고 Mock/Stub STT 응답을 반환한다.
-> **목표 아키텍처**: MVP 요구사항/아키텍처 문서 기준으로는 `Spring Boot -> STT AI` 연동을 목표로 하며, 실제 AI 연동 전까지는 현재 구현을 따른다.
-
-**Request Body** (`multipart/form-data`)
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `audioFile` | file | O | 녹음 파일 (webm, wav) |
-| `prompt` | string | X | 직전 TTS 안내문 |
-| `nextAction` | string | X | 프론트에서 전달하는 다음 행동 |
-| `ttsMessage` | string | X | 프론트에서 전달하는 TTS 응답 |
+**Request Body**
+```json
+{
+  "completionReason": "BOOKING_CREATED"
+}
+```
 
 **Response** `200 OK`
 ```json
 {
-  "turnId": "turn_W5vBx9",
-  "turnOrder": 2,
   "intakeSessionId": "ints_R8kxPw",
-  "turnType": "VOICE",
-  "sttText": "어제부터 머리가 너무 아프고 열이 많이 나요",
-  "sttConfidence": 0.92,
-  "exceptionCode": null,
-  "nextAction": "RECOMMEND",
-  "ttsMessage": "머리가 아프고 열이 나시는군요.",
-  "createdAt": "2026-03-10T10:02:00+09:00"
+  "status": "COMPLETED",
+  "endedAt": "2026-03-10T10:02:00+09:00"
 }
 ```
 
-**예외 코드** (`exceptionCode`)
-
-| 코드 | 설명 | ttsMessage |
-|------|------|------------|
-| `STT_FAIL` | 음성 인식 실패 | "다시 한번 짧게 말씀해주세요." |
-| `NO_INPUT` | 무응답 | "입력이 확인되지 않았습니다." |
-| `AMBIGUOUS_SYMPTOM` | 증상 불명확 | "가장 불편한 증상 하나만 다시 말씀해주세요." |
-| `EMERGENCY_SUSPECTED` | 응급 의심 | "응급 안내를 우선 제공합니다." |
-
 ---
 
-### 3.6 증상 분류 및 진료과/의사 추천
+### 3.6 진료과 선택 기반 진료과/의사 추천
 
 | 항목 | 값 |
 |------|-----|
@@ -531,20 +512,23 @@
 **Request Body**
 ```json
 {
-  "symptomText": "어제부터 머리가 너무 아프고 열이 많이 나요"
+  "departmentCode": "INTERNAL_MEDICINE"
 }
 ```
+
+> `departmentCode`는 전화 시뮬레이터의 DTMF 입력과 매핑된다. 기본 메뉴는 `INTERNAL_MEDICINE`, `DERMATOLOGY`, `ORTHOPEDICS`, `NEUROLOGY`, `OPHTHALMOLOGY`를 사용한다.
+> 구현 호환성을 위해 `symptomText`도 여전히 허용되지만, 현재 기본 예약 흐름은 `departmentCode` 기반이다.
 
 **Response** `200 OK`
 ```json
 {
   "recommendationId": "rec_H3jLk7",
-  "symptomCategory": "두통/발열",
+  "symptomCategory": null,
   "department": "INTERNAL_MEDICINE",
   "departmentName": "내과",
   "confidenceLevel": "HIGH",
   "isEmergency": false,
-  "reason": "두통 + 발열 증상으로 내과 진료 추천",
+  "reason": "환자가 내과를 직접 선택했습니다. 같은 진료과의 최근 담당 의사를 우선 매칭했습니다.",
   "availableSlots": [
     {
       "slotId": "slot_T9qRx2",
@@ -567,7 +551,7 @@
       "endTime": "11:30"
     }
   ],
-  "ttsMessage": "내과 김의사 선생님, 3월 11일 오전 10시 진료가 가능합니다. 예약하시겠습니까? 네이면 1번, 다른 시간은 2번을 눌러주세요."
+  "ttsMessage": "내과 김의사 선생님, 3월 11일 오전 10시 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다."
 }
 ```
 
