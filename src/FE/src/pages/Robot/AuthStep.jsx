@@ -11,6 +11,13 @@ const AuthStep = () => {
     const [countdown, setCountdown] = useState(null);
     const [authStatus, setAuthStatus] = useState('idle'); // idle, capturing, success, fail
     const [errorMsg, setErrorMsg] = useState('');
+    const [failCount, setFailCount] = useState(0);
+    const failCountRef = useRef(0);
+
+    const authStatusRef = useRef('idle'); // To access latest status in setInterval
+    useEffect(() => {
+        authStatusRef.current = authStatus;
+    }, [authStatus]);
 
     const detectionIntervalRef = useRef(null);
     const countdownRef = useRef(null);
@@ -64,7 +71,11 @@ const AuthStep = () => {
 
         // Start detecting face every 200ms
         detectionIntervalRef.current = setInterval(async () => {
-            if (authStatus === 'capturing' || authStatus === 'success') return;
+            const currentStatus = authStatusRef.current;
+            if (currentStatus === 'capturing' || currentStatus === 'success' || currentStatus === 'fail') {
+                resetCountdown();
+                return;
+            }
             if (!videoRef.current) return;
 
             const detections = await faceapi.detectSingleFace(
@@ -130,27 +141,82 @@ const AuthStep = () => {
         setCountdown(null);
     };
 
-    const captureFace = () => {
+    const captureFace = async () => {
         setAuthStatus('capturing');
 
-        // 여기에 실제로 canvas 에 video 이미지 복사 후 서버 서버 전송 로직 구현됨
-        // const canvas = document.createElement('canvas');
-        // canvas.width = videoRef.current.videoWidth;
-        // canvas.height = videoRef.current.videoHeight;
-        // canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
-        // const base64Image = canvas.toDataURL('image/jpeg');
+        try {
+            // 1. Canvas에 현재 비디오 프레임 그리기
+            const canvas = document.createElement('canvas');
+            canvas.width = videoRef.current.videoWidth;
+            canvas.height = videoRef.current.videoHeight;
+            const ctx = canvas.getContext('2d');
 
-        // 성공 모의 응답 타이머
-        setTimeout(() => {
-            setAuthStatus('success');
-            stopVideo();
-            setTimeout(() => {
-                // 본인인증 성공 시 회의실 화면으로 이동
-                navigate('/robot/conference');
-            }, 2000);
-        }, 1500);
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(videoRef.current, 0, 0);
+
+            // 2. Base64 이미지 추출
+            const base64Image = canvas.toDataURL('image/jpeg', 0.9);
+
+            // 3. 로컬 테스트를 위해 FE 폴더 경로에 캡처 이미지 직접 저장 요청 (vite plugin 이용)
+            const currentId = parseInt(localStorage.getItem('auth_image_id') || '0', 10) + 1;
+            localStorage.setItem('auth_image_id', currentId.toString());
+            const fileName = `image_${currentId}.jpg`;
+
+            try {
+                await fetch('/api/local-save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64Image, filename: fileName })
+                });
+            } catch (localErr) {
+                console.warn('Local save failed. Make sure vite plugin is running.', localErr);
+            }
+
+            // 4. 외부 AI 서버로 본인인증 요청 
+            const response = await fetch('http://localhost:5000/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ img: base64Image })
+            });
+            const result = await response.json();
+
+            // 5. 서버 검증 결과 판별
+            if (result.verified) {
+                setAuthStatus('success');
+                setFailCount(0); // 성공시 초기화
+                failCountRef.current = 0;
+                stopVideo();
+                setTimeout(() => {
+                    navigate('/robot/conference');
+                }, 2000);
+            } else {
+                handleAuthFail();
+            }
+
+        } catch (err) {
+            console.error("Auth Error:", err);
+            handleAuthFail();
+        }
     };
 
+    const handleAuthFail = () => {
+        setAuthStatus('fail');
+        failCountRef.current += 1;
+        setFailCount(failCountRef.current);
+
+        if (failCountRef.current >= 5) {
+            setErrorMsg("진료 예약했던 번호로 문의해주세요.");
+            // 5회 이상 실패 시 무한 루프를 막거나 완전히 종료하려면 여기서 리셋 타이머를 안 줄 수도 있습니다.
+            // 일단은 에러 유지 상태로 둠
+        } else {
+            setErrorMsg("인증에 실패하여 다시 시도해주세요");
+            setTimeout(() => {
+                setAuthStatus('idle');
+                setErrorMsg('');
+            }, 3000);
+        }
+    };
     return (
         <div className="min-h-screen bg-[#061A40] flex flex-col items-center justify-center relative overflow-hidden text-white font-sans">
             {/* Background Decorations */}
