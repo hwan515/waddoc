@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useTTS } from './useTTS';
-import { useAudioRecorder } from './useAudioRecorder';
 import * as intakeApi from '../api/intakeApi';
 import type { CompletionReason, IdentifyResult } from '../types/intake';
 
@@ -9,16 +8,24 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const DEFAULT_CALLER_PHONE =
   import.meta.env.VITE_CALLER_PHONE ?? '01012345678';
 
+const DEPARTMENT_MENU_MESSAGE =
+  '원하시는 진료과를 선택해주세요. 내과는 1번, 피부과는 2번, 정형외과는 3번, 신경과는 4번, 안과는 5번, 다시 듣기는 0번입니다.';
+
+const DEPARTMENT_OPTIONS = {
+  '1': { code: 'INTERNAL_MEDICINE', name: '내과' },
+  '2': { code: 'DERMATOLOGY', name: '피부과' },
+  '3': { code: 'ORTHOPEDICS', name: '정형외과' },
+  '4': { code: 'NEUROLOGY', name: '신경과' },
+  '5': { code: 'OPHTHALMOLOGY', name: '안과' },
+} as const;
+
 type LookupMode = 'new' | 'existing';
 
 export function useIntakeFlow() {
   const store = useIntakeStore();
   const { speak, stop: stopTTS } = useTTS();
-  const { isRecording, startRecording, stopRecording, cleanupRecorder } =
-    useAudioRecorder();
 
   const submitDialBufferRef = useRef<(() => void) | undefined>(undefined);
-  const micToggleRef = useRef<(() => void) | undefined>(undefined);
 
   const systemSay = useCallback(
     async (text: string) => {
@@ -31,7 +38,7 @@ export function useIntakeFlow() {
   );
 
   const userSay = useCallback(
-    (text: string, type: 'dtmf' | 'voice' = 'dtmf') => {
+    (text: string, type: 'dtmf' = 'dtmf') => {
       store.addMessage({ role: 'user', text, type });
     },
     [store],
@@ -48,17 +55,10 @@ export function useIntakeFlow() {
     [store, systemSay],
   );
 
-  const promptVoiceIdentify = useCallback(
-    async (mode: LookupMode) => {
-      store.setPhase(
-        mode === 'new' ? 'IDENTIFY_BY_VOICE' : 'EXISTING_IDENTIFY_BY_VOICE',
-      );
-      await systemSay(
-        '등록된 번호를 찾을 수 없습니다. 이름과 생년월일 6자리를 말씀해주세요. 우물정자를 누르고 말해주세요.',
-      );
-    },
-    [store, systemSay],
-  );
+  const promptDepartmentSelection = useCallback(async () => {
+    store.setPhase('DEPARTMENT_SELECT');
+    await systemSay(DEPARTMENT_MENU_MESSAGE);
+  }, [store, systemSay]);
 
   const loadExistingBookings = useCallback(
     async (sessionId: string) => {
@@ -89,20 +89,16 @@ export function useIntakeFlow() {
       }
 
       store.setPatient(patient.patientId, patient.name);
-      store.resetRetry();
       await intakeApi.bindPatient(sessionId, patient.patientId);
 
       if (mode === 'new') {
-        store.setPhase('SYMPTOM_COLLECT');
-        await systemSay(
-          `${patient.name} 어르신, 어디가 불편하신가요? 우물정자를 누르고 말해주세요.`,
-        );
+        await promptDepartmentSelection();
         return;
       }
 
       await loadExistingBookings(sessionId);
     },
-    [loadExistingBookings, store, systemSay],
+    [loadExistingBookings, promptDepartmentSelection, store],
   );
 
   const handleCallerLookup = useCallback(
@@ -176,7 +172,6 @@ export function useIntakeFlow() {
   const finishSession = useCallback(
     async (reason?: CompletionReason, finalMessage?: string) => {
       stopTTS();
-      cleanupRecorder();
 
       if (finalMessage) {
         await systemSay(finalMessage);
@@ -198,7 +193,7 @@ export function useIntakeFlow() {
         type: 'info',
       });
     },
-    [cleanupRecorder, stopTTS, store, systemSay],
+    [stopTTS, store, systemSay],
   );
 
   const endCall = useCallback(() => {
@@ -215,13 +210,119 @@ export function useIntakeFlow() {
     await handleCallerLookup('existing');
   }, [handleCallerLookup]);
 
+  const handleDepartmentSelection = useCallback(
+    async (digit: string) => {
+      if (digit === '0') {
+        await systemSay(DEPARTMENT_MENU_MESSAGE);
+        return;
+      }
+
+      const selectedDepartment = DEPARTMENT_OPTIONS[
+        digit as keyof typeof DEPARTMENT_OPTIONS
+      ];
+      if (!selectedDepartment) {
+        await systemSay(
+          '내과는 1번, 피부과는 2번, 정형외과는 3번, 신경과는 4번, 안과는 5번, 다시 듣기는 0번입니다.',
+        );
+        return;
+      }
+
+      const { sessionId } = useIntakeStore.getState();
+      if (!sessionId) {
+        await systemSay('세션 정보가 올바르지 않습니다. 다시 시도해주세요.');
+        return;
+      }
+
+      store.setPhase('RECOMMEND_DOCTOR');
+      store.setIsLoading(true);
+
+      if (USE_MOCK) {
+        await delay(800);
+        store.setIsLoading(false);
+
+        const rec = {
+          recommendationId: 'rec_mock01',
+          symptomCategory: null,
+          department: selectedDepartment.code,
+          departmentName: selectedDepartment.name,
+          confidenceLevel: 'HIGH',
+          isEmergency: false,
+          reason: `${selectedDepartment.name} 진료과를 직접 선택했습니다.`,
+          availableSlots: [
+            {
+              slotId: `slot_${digit}_01`,
+              doctorId: `doc_${digit}_01`,
+              doctorName: `${selectedDepartment.name} 김의사`,
+              department: selectedDepartment.code,
+              departmentName: selectedDepartment.name,
+              date: '2026-03-12',
+              startTime: '10:00',
+              endTime: '10:30',
+            },
+            {
+              slotId: `slot_${digit}_02`,
+              doctorId: `doc_${digit}_02`,
+              doctorName: `${selectedDepartment.name} 박의사`,
+              department: selectedDepartment.code,
+              departmentName: selectedDepartment.name,
+              date: '2026-03-12',
+              startTime: '14:00',
+              endTime: '14:30',
+            },
+          ],
+          ttsMessage: `${selectedDepartment.name} 김의사 선생님, 3월 12일 오전 10시 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.`,
+        };
+
+        store.setAvailableSlots(rec.availableSlots);
+        store.setCurrentSlotIndex(0);
+        store.setPhase('SLOT_SELECT');
+        await systemSay(rec.ttsMessage);
+        return;
+      }
+
+      try {
+        const rec = await intakeApi.recommendDoctor(
+          sessionId,
+          selectedDepartment.code,
+        );
+        store.setIsLoading(false);
+        store.setAvailableSlots(rec.availableSlots);
+        store.setCurrentSlotIndex(0);
+
+        if (rec.availableSlots.length > 0) {
+          store.setPhase('SLOT_SELECT');
+          await systemSay(rec.ttsMessage);
+          return;
+        }
+
+        await finishSession(undefined, rec.ttsMessage);
+      } catch {
+        store.setIsLoading(false);
+        await systemSay('진료과 매칭 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
+    },
+    [finishSession, store, systemSay],
+  );
+
   const handleSlotSelection = useCallback(
     async (digit: string) => {
       const { availableSlots, currentSlotIndex, sessionId } =
         useIntakeStore.getState();
+      const slot = availableSlots[currentSlotIndex];
+
+      if (digit === '0') {
+        if (!slot) {
+          await systemSay('현재 안내 가능한 예약 시간이 없습니다.');
+          return;
+        }
+
+        await systemSay(
+          `${slot.departmentName} ${slot.doctorName} 선생님, ${slot.date} ${slot.startTime} 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.`,
+        );
+        return;
+      }
 
       if (digit === '1') {
-        const slot = availableSlots[currentSlotIndex];
         store.setIsLoading(true);
 
         if (USE_MOCK) {
@@ -260,9 +361,9 @@ export function useIntakeFlow() {
         const nextIdx = currentSlotIndex + 1;
         if (nextIdx < availableSlots.length) {
           store.setCurrentSlotIndex(nextIdx);
-          const slot = availableSlots[nextIdx];
+          const nextSlot = availableSlots[nextIdx];
           await systemSay(
-            `${slot.departmentName} ${slot.doctorName} 선생님, ${slot.date} ${slot.startTime} 진료가 가능합니다. 예약하시겠습니까? 네이면 1번, 다른 시간은 2번을 눌러주세요.`,
+            `${nextSlot.departmentName} ${nextSlot.doctorName} 선생님, ${nextSlot.date} ${nextSlot.startTime} 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.`,
           );
         } else {
           // TODO: BE에 NO_AVAILABLE_SLOT 같은 종료 사유가 추가되면 전용 completionReason을 전달하도록 변경한다.
@@ -272,7 +373,7 @@ export function useIntakeFlow() {
           );
         }
       } else {
-        await systemSay('1번 또는 2번을 눌러주세요.');
+        await systemSay('예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.');
       }
     },
     [finishSession, store, systemSay],
@@ -352,17 +453,6 @@ export function useIntakeFlow() {
         return;
       }
 
-      if (
-        phase === 'IDENTIFY_BY_VOICE' ||
-        phase === 'EXISTING_IDENTIFY_BY_VOICE' ||
-        phase === 'SYMPTOM_COLLECT'
-      ) {
-        if (digit === '#') {
-          micToggleRef.current?.();
-          return;
-        }
-      }
-
       userSay(digit);
 
       switch (phase) {
@@ -388,12 +478,18 @@ export function useIntakeFlow() {
           break;
         }
 
+        case 'DEPARTMENT_SELECT': {
+          await handleDepartmentSelection(digit);
+          break;
+        }
+
         default:
           break;
       }
     },
     [
       handleBookingAction,
+      handleDepartmentSelection,
       handleExistingBookingFlow,
       handleNewBookingFlow,
       handleSlotSelection,
@@ -423,10 +519,7 @@ export function useIntakeFlow() {
       if (dialBuffer === DEFAULT_CALLER_PHONE) {
         if (mode === 'new') {
           store.setPatient('pat_mock01', '홍길동');
-          store.setPhase('SYMPTOM_COLLECT');
-          await systemSay(
-            '홍길동 어르신, 어디가 불편하신가요? 우물정자를 누르고 말해주세요.',
-          );
+          await promptDepartmentSelection();
           return;
         }
 
@@ -447,7 +540,7 @@ export function useIntakeFlow() {
         return;
       }
 
-      await promptVoiceIdentify(mode);
+      await promptPhoneInput(mode);
       return;
     }
 
@@ -466,235 +559,30 @@ export function useIntakeFlow() {
         return;
       }
 
-      await promptVoiceIdentify(mode);
+      await promptPhoneInput(mode);
     } catch {
       store.setIsLoading(false);
       await systemSay('환자 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
   }, [
     handleIdentifiedPatient,
-    promptVoiceIdentify,
+    promptDepartmentSelection,
+    promptPhoneInput,
     store,
     systemSay,
     userSay,
   ]);
 
-  const handleMicStart = useCallback(async () => {
-    store.setIsRecording(true);
-    await startRecording();
-  }, [startRecording, store]);
-
-  const handleMicStop = useCallback(async () => {
-    const blob = await stopRecording();
-    store.setIsRecording(false);
-    userSay('(음성 입력)', 'voice');
-
-    const { phase, sessionId } = useIntakeStore.getState();
-
-    if (USE_MOCK) {
-      store.setIsLoading(true);
-      await delay(1200);
-      store.setIsLoading(false);
-
-      if (phase === 'IDENTIFY_BY_VOICE') {
-        store.setPatient('pat_mock02', '김영희');
-        store.setPhase('SYMPTOM_COLLECT');
-        await systemSay(
-          '김영희 어르신, 어디가 불편하신가요? 우물정자를 누르고 말해주세요.',
-        );
-        return;
-      }
-
-      if (phase === 'EXISTING_IDENTIFY_BY_VOICE') {
-        store.setPatient('pat_mock02', '김영희');
-        store.setExistingBookings([
-          {
-            bookingId: 'bk_mock02',
-            status: 'CONFIRMED',
-            appointmentDate: '2026-03-16',
-            startTime: '14:00',
-            endTime: '14:30',
-            doctorName: '박의사',
-            departmentName: '가정의학과',
-          },
-        ]);
-        store.setPhase('BOOKING_LOOKUP');
-        await systemSay('예약 확인은 1번, 예약 취소는 2번을 눌러주세요.');
-        return;
-      }
-
-      if (phase === 'SYMPTOM_COLLECT') {
-        store.setSymptomText('머리가 아프고 어지러워요');
-        store.setPhase('RECOMMEND_DOCTOR');
-        await delay(600);
-        store.setAvailableSlots([
-          {
-            slotId: 'slot_01',
-            doctorId: 'doc_01',
-            doctorName: '김의사',
-            department: 'INTERNAL_MEDICINE',
-            departmentName: '내과',
-            date: '2026-03-12',
-            startTime: '10:00',
-            endTime: '10:30',
-          },
-          {
-            slotId: 'slot_02',
-            doctorId: 'doc_02',
-            doctorName: '박의사',
-            department: 'FAMILY_MEDICINE',
-            departmentName: '가정의학과',
-            date: '2026-03-12',
-            startTime: '14:00',
-            endTime: '14:30',
-          },
-        ]);
-        store.setCurrentSlotIndex(0);
-        store.setPhase('SLOT_SELECT');
-        await systemSay(
-          '내과 김의사 선생님, 3월 12일 오전 10시 진료가 가능합니다. 예약하시겠습니까? 네이면 1번, 다른 시간은 2번을 눌러주세요.',
-        );
-      }
-
-      return;
-    }
-
-    if (!sessionId) {
-      await systemSay('세션 정보가 올바르지 않습니다. 다시 시도해주세요.');
-      return;
-    }
-
-    store.setIsLoading(true);
-
-    try {
-      if (
-        phase === 'IDENTIFY_BY_VOICE' ||
-        phase === 'EXISTING_IDENTIFY_BY_VOICE'
-      ) {
-        const voiceResult = await intakeApi.submitVoiceTurn(
-          sessionId,
-          blob,
-          '이름과 생년월일을 말씀해주세요.',
-        );
-
-        store.setIsLoading(false);
-
-        if (voiceResult.exceptionCode) {
-          store.incrementRetry();
-          await systemSay(
-            voiceResult.ttsMessage || '다시 한번 천천히 말씀해주세요.',
-          );
-          return;
-        }
-
-        const parsed = parseIdentityInfo(voiceResult.sttText);
-        if (!parsed) {
-          store.incrementRetry();
-          await systemSay(
-            '이름과 생년월일 6자리를 확인하지 못했습니다. 다시 말씀해주세요.',
-          );
-          return;
-        }
-
-        const identified = await intakeApi.identifyByInfo(
-          sessionId,
-          parsed.name,
-          parsed.birthDate6,
-        );
-
-        if (!identified) {
-          store.incrementRetry();
-          await systemSay(
-            '환자 정보를 찾지 못했습니다. 이름과 생년월일 6자리를 다시 말씀해주세요.',
-          );
-          return;
-        }
-
-        await handleIdentifiedPatient(
-          identified,
-          phase === 'IDENTIFY_BY_VOICE' ? 'new' : 'existing',
-        );
-        return;
-      }
-
-      if (phase === 'SYMPTOM_COLLECT') {
-        const voiceResult = await intakeApi.submitVoiceTurn(
-          sessionId,
-          blob,
-          '어디가 불편하신가요?',
-        );
-
-        if (voiceResult.exceptionCode) {
-          store.setIsLoading(false);
-          store.incrementRetry();
-          await systemSay(
-            voiceResult.ttsMessage || '다시 한번 짧게 말씀해주세요.',
-          );
-          return;
-        }
-
-        store.setSymptomText(voiceResult.sttText);
-        store.setPhase('RECOMMEND_DOCTOR');
-
-        const rec = await intakeApi.recommendDoctor(
-          sessionId,
-          voiceResult.sttText,
-        );
-        store.setIsLoading(false);
-        store.setAvailableSlots(rec.availableSlots);
-        store.setCurrentSlotIndex(0);
-
-        if (rec.availableSlots.length > 0) {
-          store.setPhase('SLOT_SELECT');
-          await systemSay(rec.ttsMessage);
-        } else {
-          await systemSay(rec.ttsMessage);
-          store.setPhase('SESSION_END');
-        }
-      }
-    } catch {
-      store.setIsLoading(false);
-      await systemSay('처리 중 오류가 발생했습니다. 다시 시도해주세요.');
-    }
-  }, [handleIdentifiedPatient, stopRecording, store, systemSay, userSay]);
-
   useEffect(() => {
     submitDialBufferRef.current = submitDialBuffer;
-    micToggleRef.current = isRecording ? handleMicStop : handleMicStart;
-  }, [handleMicStart, handleMicStop, isRecording, submitDialBuffer]);
+  }, [submitDialBuffer]);
 
   return {
     startCall,
     endCall,
     handleDigit,
     submitDialBuffer,
-    handleMicStart,
-    handleMicStop,
-    isRecording,
   };
-}
-
-function parseIdentityInfo(text: string) {
-  const birthDate6 = text.match(/\d{6}/)?.[0];
-  if (!birthDate6) {
-    return null;
-  }
-
-  const compact = text.replace(/\s+/g, '');
-  const patterns = [
-    /이름(?:은|는)?([가-힣]{2,5})/,
-    /([가-힣]{2,5})(?:이고|입니다|예요|이에요)/,
-    /([가-힣]{2,5})/,
-  ];
-
-  for (const pattern of patterns) {
-    const matched = compact.match(pattern);
-    if (matched?.[1]) {
-      return { name: matched[1], birthDate6 };
-    }
-  }
-
-  return null;
 }
 
 function delay(ms: number) {

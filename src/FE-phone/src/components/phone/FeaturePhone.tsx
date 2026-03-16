@@ -10,7 +10,6 @@ import './FeaturePhone.css';
 export default function FeaturePhone() {
   const phase = useIntakeStore((s) => s.phase);
   const dialBuffer = useIntakeStore((s) => s.dialBuffer);
-  const storeIsRecording = useIntakeStore((s) => s.isRecording);
   const isLoading = useIntakeStore((s) => s.isLoading);
 
   const {
@@ -18,19 +17,10 @@ export default function FeaturePhone() {
     endCall,
     handleDigit,
     submitDialBuffer,
-    handleMicStart,
-    handleMicStop,
-    isRecording,
   } = useIntakeFlow();
 
   const isActive = phase !== 'IDLE' && phase !== 'SESSION_END';
   const dialDisabled = !isActive || isLoading;
-
-  // 마이크 버튼: 음성 입력이 필요한 단계에서만 표시
-  const showMic =
-    phase === 'IDENTIFY_BY_VOICE' ||
-    phase === 'EXISTING_IDENTIFY_BY_VOICE' ||
-    phase === 'SYMPTOM_COLLECT';
 
   // 전송 버튼: 번호 입력 모드에서 표시
   const showSend =
@@ -57,14 +47,10 @@ export default function FeaturePhone() {
         {/* 하단: 액션바 + 다이얼패드 */}
         <ActionBar
           phase={phase}
-          isRecording={storeIsRecording || isRecording}
           onCall={startCall}
           onHangUp={endCall}
-          onMicStart={handleMicStart}
-          onMicStop={handleMicStop}
           onSend={submitDialBuffer}
           dialBuffer={dialBuffer}
-          showMic={showMic}
           showSend={showSend}
         />
         <DialPad onDigit={handleDigit} disabled={dialDisabled} />
