@@ -1,5 +1,8 @@
 # 도서·산간 방문형 비대면 진료 서비스 — 시스템 아키텍처
 
+> 2026-03 기준 현재 MVP 신규 예약 흐름은 STT를 사용하지 않고 DTMF 진료과 선택을 사용한다.
+> 아래 STT/WebSocket 관련 설계는 향후 확장 검토용 legacy 초안으로 본다.
+
 ## 1. 아키텍처 원칙
 
 | 원칙 | 설명 |
@@ -111,7 +114,6 @@ services:
       - DB_HOST=postgres
       - REDIS_HOST=redis
       - AI_IDV_URL=https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_STT_WS_URL=wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
       - AI_TRIAGE_URL=https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
@@ -343,7 +345,6 @@ services:
       - DB_HOST=postgres
       - REDIS_HOST=redis
       - AI_IDV_URL=https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_STT_WS_URL=wss://<PROD_GPU_SERVER_HOST>/stt/ws/transcribe
       - AI_TRIAGE_URL=https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
@@ -508,13 +509,11 @@ interface RecommendationAiClient {
 # application-local.yml
 ai:
   idv-url: https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-  stt-ws-url: wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
   triage-url: https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
 
 # application-prod.yml
 ai:
   idv-url: https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
-  stt-ws-url: wss://<PROD_GPU_SERVER_HOST>/stt/ws/transcribe
   triage-url: https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
 ```
 

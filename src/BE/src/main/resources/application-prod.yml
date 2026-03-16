@@ -18,7 +18,7 @@ jwt:
 ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
   idv-url: ${AI_IDV_URL}
-  stt-ws-url: ${AI_STT_WS_URL}
+  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:5000}
   triage-url: ${AI_TRIAGE_URL}
 
 file:

@@ -12,14 +12,12 @@ export type IntakePhase =
   // 신규 예약 흐름
   | 'IDENTIFY_AUTO'
   | 'IDENTIFY_BY_INPUT'
-  | 'IDENTIFY_BY_VOICE'
-  | 'SYMPTOM_COLLECT'
+  | 'DEPARTMENT_SELECT'
   | 'RECOMMEND_DOCTOR'
   | 'SLOT_SELECT'
   | 'BOOKING_CONFIRMED'
   // 기존 예약 조회 흐름
   | 'EXISTING_IDENTIFY'
-  | 'EXISTING_IDENTIFY_BY_VOICE'
   | 'BOOKING_LOOKUP'
   | 'BOOKING_DETAIL'
   | 'BOOKING_CANCEL'
@@ -33,7 +31,7 @@ export interface ChatMessage {
   role: MessageRole;
   text: string;
   timestamp: Date;
-  type: 'tts' | 'dtmf' | 'voice' | 'info';
+  type: 'tts' | 'dtmf' | 'info';
 }
 
 export interface AvailableSlot {
@@ -76,15 +74,6 @@ export interface IdentifyResult {
   name: string;
   birthDate6: string;
   regionCode: string;
-}
-
-export interface VoiceTurnResult {
-  turnId: string;
-  sttText: string;
-  sttConfidence: number;
-  exceptionCode: string | null;
-  nextAction: string;
-  ttsMessage: string;
 }
 
 export interface CancelBookingResult {

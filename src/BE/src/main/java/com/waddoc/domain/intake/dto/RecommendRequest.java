@@ -1,6 +1,5 @@
 package com.waddoc.domain.intake.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +7,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class RecommendRequest {
 
-    @NotBlank
     private String symptomText;
+    private String departmentCode;
 }

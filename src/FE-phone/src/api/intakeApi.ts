@@ -2,7 +2,6 @@ import api from './axiosInstance';
 import type {
   CancelBookingResult,
   IdentifyResult,
-  VoiceTurnResult,
   RecommendationResult,
   BookingResult,
 } from '../types/intake';
@@ -97,18 +96,6 @@ export async function identifyByPhone(
   return mapIdentifyResponse(data);
 }
 
-export async function identifyByInfo(
-  sessionId: string,
-  name: string,
-  birthDate6: string,
-): Promise<IdentifyResult | null> {
-  const { data } = await api.post<IdentifyPatientApiResponse>(
-    `/intake/sessions/${sessionId}/identify/by-info`,
-    { name, birthDate6 },
-  );
-  return mapIdentifyResponse(data);
-}
-
 export async function bindPatient(
   sessionId: string,
   patientId: string,
@@ -123,29 +110,13 @@ export async function completeSession(
   await api.put(`/intake/sessions/${sessionId}/complete`, { completionReason });
 }
 
-export async function submitVoiceTurn(
-  sessionId: string,
-  audioBlob: Blob,
-  prompt: string,
-): Promise<VoiceTurnResult> {
-  const formData = new FormData();
-  formData.append('audioFile', audioBlob, 'recording.webm');
-  formData.append('prompt', prompt);
-  const { data } = await api.post(
-    `/intake/sessions/${sessionId}/turns/voice`,
-    formData,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
-  );
-  return data;
-}
-
 export async function recommendDoctor(
   sessionId: string,
-  symptomText: string,
+  departmentCode: string,
 ): Promise<RecommendationResult> {
   const { data } = await api.post(
     `/intake/sessions/${sessionId}/recommend`,
-    { symptomText },
+    { departmentCode },
   );
   return data;
 }

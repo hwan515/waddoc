@@ -1,5 +1,8 @@
 package com.waddoc.domain.intake.service;
 
+import com.waddoc.domain.booking.entity.Booking;
+import com.waddoc.domain.booking.entity.BookingStatus;
+import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.audit.service.AuditLogService;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
@@ -13,13 +16,18 @@ import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.intake.repository.RecommendationAvailableSlotRepository;
 import com.waddoc.domain.intake.repository.RecommendationRepository;
 import com.waddoc.domain.intake.repository.SymptomIntakeRepository;
+import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
@@ -33,45 +41,44 @@ public class RecommendationService {
     private final DoctorProfileRepository doctorProfileRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final RecommendationAvailableSlotRepository recSlotRepository;
+    private final BookingRepository bookingRepository;
     private final AuditLogService auditLogService;
 
     /**
-     * 증상 분류 → 진료과 추천 → 가용 슬롯 조회 (MVP: Mock 분류 로직)
+     * DTMF 진료과 선택 또는 증상 입력을 기반으로 추천 → 가용 슬롯 조회.
      */
     @Transactional
     public RecommendResponse recommend(String sessionId, RecommendRequest request) {
         IntakeSession session = findActiveSession(sessionId);
-
-        // 1. 증상 분류 (MVP Mock)
-        SymptomClassification classification = classifySymptom(request.getSymptomText());
-
-        // 2. SymptomIntake 저장
-        SymptomIntake symptomIntake = SymptomIntake.builder()
-                .intakeSession(session)
-                .symptomText(request.getSymptomText())
-                .symptomCategory(classification.category)
-                .emergency(classification.emergency)
-                .build();
-        symptomIntakeRepository.save(symptomIntake);
-
-        // 3. 진료과 매칭 의사 조회 + 가용 슬롯
-        List<DoctorProfile> doctors = doctorProfileRepository.findByDepartment(classification.department);
-        List<ScheduleSlot> slots = List.of();
-        if (!doctors.isEmpty()) {
-            slots = scheduleSlotRepository
-                    .findByDoctorInAndSlotDateGreaterThanEqualAndBookedFalseOrderBySlotDateAscStartTimeAsc(
-                            doctors, LocalDate.now());
+        Patient patient = session.getPatient();
+        if (patient == null) {
+            throw new BusinessException(ErrorCode.PATIENT_NOT_BOUND);
         }
 
-        // 4. Recommendation 저장
+        RecommendationSelection selection = resolveSelection(request);
+        SymptomIntake symptomIntake = saveSymptomIntakeIfNeeded(session, request, selection);
+
+        // 1. 진료과 매칭 의사 조회 + 가용 슬롯
+        List<DoctorProfile> doctors = doctorProfileRepository.findByDepartment(selection.department);
+        DoctorProfile preferredDoctor = findPreferredDoctor(patient, selection.department).orElse(null);
+        List<ScheduleSlot> slots = List.of();
+        if (!doctors.isEmpty()) {
+            slots = prioritizeSlotsByPreferredDoctor(scheduleSlotRepository
+                    .findByDoctorInAndSlotDateGreaterThanEqualAndBookedFalseOrderBySlotDateAscStartTimeAsc(
+                            doctors, LocalDate.now()), preferredDoctor);
+        }
+
+        String reason = buildRecommendationReason(selection.reason, preferredDoctor, slots);
+
+        // 2. Recommendation 저장
         Recommendation recommendation = Recommendation.builder()
                 .intakeSession(session)
                 .symptomIntake(symptomIntake)
-                .department(classification.department)
-                .departmentName(classification.departmentName)
-                .confidenceLevel(classification.confidenceLevel)
-                .emergency(classification.emergency)
-                .reason(classification.reason)
+                .department(selection.department)
+                .departmentName(selection.departmentName)
+                .confidenceLevel(selection.confidenceLevel)
+                .emergency(selection.emergency)
+                .reason(reason)
                 .build();
         recommendationRepository.save(recommendation);
 
@@ -85,26 +92,27 @@ public class RecommendationService {
 
         session.touch();
 
-        // 5. 감사 로그
+        // 3. 감사 로그
         String correlationId = "corr_ints_" + session.getPublicId();
-        auditLogService.log(
-                "SYMPTOM_CLASSIFIED",
-                "INTAKE_SESSION",
-                session.getPublicId(),
-                correlationId,
-                Map.of("recommendationId", recommendation.getPublicId(),
-                       "symptomCategory", classification.category,
-                       "department", classification.department,
-                       "confidenceLevel", classification.confidenceLevel.name(),
-                       "isEmergency", classification.emergency)
-        );
+        Map<String, Object> detailJson = new LinkedHashMap<>();
+        detailJson.put("recommendationId", recommendation.getPublicId());
+        if (selection.category != null) {
+            detailJson.put("symptomCategory", selection.category);
+        }
+        detailJson.put("department", selection.department);
+        detailJson.put("confidenceLevel", selection.confidenceLevel.name());
+        detailJson.put("isEmergency", selection.emergency);
+        if (preferredDoctor != null) {
+            detailJson.put("preferredDoctorId", preferredDoctor.getPublicId());
+        }
+        auditLogService.log("SYMPTOM_CLASSIFIED", "INTAKE_SESSION", session.getPublicId(), correlationId, detailJson);
 
-        // 6. 응답 조립
+        // 4. 응답 조립
         List<AvailableSlotResponse> slotResponses = slots.stream()
                 .map(AvailableSlotResponse::from)
                 .toList();
 
-        String ttsMessage = buildTtsMessage(classification, slots);
+        String ttsMessage = buildTtsMessage(selection, slots);
 
         return RecommendResponse.of(recommendation, slotResponses, ttsMessage);
     }
@@ -118,6 +126,132 @@ public class RecommendationService {
         }
 
         return session;
+    }
+
+    private RecommendationSelection resolveSelection(RecommendRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+
+        if (request.getDepartmentCode() != null && !request.getDepartmentCode().isBlank()) {
+            return selectDepartment(request.getDepartmentCode().trim().toUpperCase());
+        }
+
+        if (request.getSymptomText() != null && !request.getSymptomText().isBlank()) {
+            SymptomClassification classification = classifySymptom(request.getSymptomText());
+            return RecommendationSelection.fromClassification(classification);
+        }
+
+        throw new BusinessException(ErrorCode.INVALID_INPUT);
+    }
+
+    private SymptomIntake saveSymptomIntakeIfNeeded(IntakeSession session, RecommendRequest request, RecommendationSelection selection) {
+        if (request.getSymptomText() == null || request.getSymptomText().isBlank()) {
+            return null;
+        }
+
+        SymptomIntake symptomIntake = SymptomIntake.builder()
+                .intakeSession(session)
+                .symptomText(request.getSymptomText())
+                .symptomCategory(selection.category)
+                .emergency(selection.emergency)
+                .build();
+        symptomIntakeRepository.save(symptomIntake);
+        return symptomIntake;
+    }
+
+    private RecommendationSelection selectDepartment(String departmentCode) {
+        return switch (departmentCode) {
+            case "INTERNAL_MEDICINE" -> new RecommendationSelection(
+                    "DTMF_SELECTION",
+                    "INTERNAL_MEDICINE",
+                    "내과",
+                    ConfidenceLevel.HIGH,
+                    false,
+                    "환자가 내과를 직접 선택했습니다."
+            );
+            case "DERMATOLOGY" -> new RecommendationSelection(
+                    "DTMF_SELECTION",
+                    "DERMATOLOGY",
+                    "피부과",
+                    ConfidenceLevel.HIGH,
+                    false,
+                    "환자가 피부과를 직접 선택했습니다."
+            );
+            case "ORTHOPEDICS" -> new RecommendationSelection(
+                    "DTMF_SELECTION",
+                    "ORTHOPEDICS",
+                    "정형외과",
+                    ConfidenceLevel.HIGH,
+                    false,
+                    "환자가 정형외과를 직접 선택했습니다."
+            );
+            case "NEUROLOGY" -> new RecommendationSelection(
+                    "DTMF_SELECTION",
+                    "NEUROLOGY",
+                    "신경과",
+                    ConfidenceLevel.HIGH,
+                    false,
+                    "환자가 신경과를 직접 선택했습니다."
+            );
+            case "OPHTHALMOLOGY" -> new RecommendationSelection(
+                    "DTMF_SELECTION",
+                    "OPHTHALMOLOGY",
+                    "안과",
+                    ConfidenceLevel.HIGH,
+                    false,
+                    "환자가 안과를 직접 선택했습니다."
+            );
+            default -> throw new BusinessException(ErrorCode.INVALID_INPUT);
+        };
+    }
+
+    private java.util.Optional<DoctorProfile> findPreferredDoctor(Patient patient, String department) {
+        return bookingRepository
+                .findRecentPastDepartmentBookings(
+                        patient,
+                        department,
+                        BookingStatus.CANCELLED,
+                        LocalDate.now(),
+                        LocalTime.now(),
+                        PageRequest.of(0, 1))
+                .stream()
+                .findFirst()
+                .map(Booking::getDoctor);
+    }
+
+    private List<ScheduleSlot> prioritizeSlotsByPreferredDoctor(List<ScheduleSlot> slots, DoctorProfile preferredDoctor) {
+        if (preferredDoctor == null || slots.isEmpty()) {
+            return slots;
+        }
+
+        List<ScheduleSlot> preferredSlots = slots.stream()
+                .filter(slot -> slot.getDoctor().getPublicId().equals(preferredDoctor.getPublicId()))
+                .toList();
+        if (preferredSlots.isEmpty()) {
+            return slots;
+        }
+
+        List<ScheduleSlot> prioritized = new ArrayList<>(preferredSlots);
+        slots.stream()
+                .filter(slot -> !slot.getDoctor().getPublicId().equals(preferredDoctor.getPublicId()))
+                .forEach(prioritized::add);
+        return prioritized;
+    }
+
+    private String buildRecommendationReason(String baseReason, DoctorProfile preferredDoctor, List<ScheduleSlot> slots) {
+        if (preferredDoctor == null) {
+            return baseReason;
+        }
+
+        boolean preferredDoctorAvailable = slots.stream()
+                .anyMatch(slot -> slot.getDoctor().getPublicId().equals(preferredDoctor.getPublicId()));
+
+        if (preferredDoctorAvailable) {
+            return baseReason + " 같은 진료과의 최근 담당 의사를 우선 매칭했습니다.";
+        }
+
+        return baseReason + " 최근 담당 의사 가용 슬롯이 없어 같은 진료과의 다른 의사로 안내합니다.";
     }
 
     /**
@@ -165,13 +299,13 @@ public class RecommendationService {
                 ConfidenceLevel.LOW, false, "증상 분류가 명확하지 않아 내과 진료를 우선 추천합니다.");
     }
 
-    private String buildTtsMessage(SymptomClassification classification, List<ScheduleSlot> slots) {
-        if (classification.emergency) {
-            return "응급 증상이 의심됩니다. " + classification.departmentName + " 진료를 우선 안내해 드리겠습니다.";
+    private String buildTtsMessage(RecommendationSelection selection, List<ScheduleSlot> slots) {
+        if (selection.emergency) {
+            return "응급 증상이 의심됩니다. " + selection.departmentName + " 진료를 우선 안내해 드리겠습니다.";
         }
 
         if (slots.isEmpty()) {
-            return classification.departmentName + " 진료를 추천드리지만 현재 예약 가능한 시간이 없습니다. 다른 시간을 확인해 드릴까요?";
+            return selection.departmentName + " 진료과는 현재 예약 가능한 시간이 없습니다. 다시 시도해주세요.";
         }
 
         ScheduleSlot first = slots.get(0);
@@ -183,8 +317,8 @@ public class RecommendationService {
         int displayHour = hour <= 12 ? hour : hour - 12;
 
         return String.format(
-                "%s %s 선생님, %d월 %d일 %s %d시 진료가 가능합니다. 예약하시겠습니까? 네이면 1번, 다른 시간은 2번을 눌러주세요.",
-                classification.departmentName, doctorName, month, day, amPm, displayHour);
+                "%s %s 선생님, %d월 %d일 %s %d시 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.",
+                selection.departmentName, doctorName, month, day, amPm, displayHour);
     }
 
     /** MVP Mock 증상 분류 결과 내부 구조체 */
@@ -196,4 +330,24 @@ public class RecommendationService {
             boolean emergency,
             String reason
     ) {}
+
+    private record RecommendationSelection(
+            String category,
+            String department,
+            String departmentName,
+            ConfidenceLevel confidenceLevel,
+            boolean emergency,
+            String reason
+    ) {
+        private static RecommendationSelection fromClassification(SymptomClassification classification) {
+            return new RecommendationSelection(
+                    classification.category,
+                    classification.department,
+                    classification.departmentName,
+                    classification.confidenceLevel,
+                    classification.emergency,
+                    classification.reason
+            );
+        }
+    }
 }

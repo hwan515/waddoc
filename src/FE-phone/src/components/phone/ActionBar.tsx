@@ -2,27 +2,19 @@ import './ActionBar.css';
 
 interface ActionBarProps {
   phase: string;
-  isRecording: boolean;
   onCall: () => void;
   onHangUp: () => void;
-  onMicStart: () => void;
-  onMicStop: () => void;
   onSend: () => void;
   dialBuffer: string;
-  showMic: boolean;
   showSend: boolean;
 }
 
 export default function ActionBar({
   phase,
-  isRecording,
   onCall,
   onHangUp,
-  onMicStart,
-  onMicStop,
   onSend,
   dialBuffer,
-  showMic,
   showSend,
 }: ActionBarProps) {
   const isIdle = phase === 'IDLE';
@@ -44,15 +36,6 @@ export default function ActionBar({
       </div>
 
       <div className="action-btn-wrapper">
-        {showMic && (
-          <button
-            className={`action-btn action-btn--mic ${isRecording ? 'action-btn--recording' : ''}`}
-            onClick={isRecording ? onMicStop : onMicStart}
-            title={isRecording ? '녹음 중지' : '음성 입력'}
-          >
-            {isRecording ? '⏹' : '🎤'}
-          </button>
-        )}
         {showSend && dialBuffer && (
           <button className="action-btn action-btn--send" onClick={onSend} title="입력 전송">
             ✉

@@ -29,16 +29,9 @@ interface IntakeState {
   // 기존 예약
   existingBookings: BookingResult[];
 
-  // 증상
-  symptomText: string | null;
-
-  // 녹음 / 로딩 상태
-  isRecording: boolean;
+  // 로딩 상태
   isLoading: boolean;
   isSpeaking: boolean;
-
-  // 재시도 카운터
-  retryCount: number;
 
   // 액션
   setPhase: (phase: IntakePhase) => void;
@@ -51,12 +44,8 @@ interface IntakeState {
   setAvailableSlots: (slots: AvailableSlot[]) => void;
   setCurrentSlotIndex: (idx: number) => void;
   setExistingBookings: (bookings: BookingResult[]) => void;
-  setSymptomText: (text: string) => void;
-  setIsRecording: (v: boolean) => void;
   setIsLoading: (v: boolean) => void;
   setIsSpeaking: (v: boolean) => void;
-  incrementRetry: () => void;
-  resetRetry: () => void;
   reset: () => void;
 }
 
@@ -73,11 +62,8 @@ const initialState = {
   availableSlots: [] as AvailableSlot[],
   currentSlotIndex: 0,
   existingBookings: [] as BookingResult[],
-  symptomText: null,
-  isRecording: false,
   isLoading: false,
   isSpeaking: false,
-  retryCount: 0,
 };
 
 export const useIntakeStore = create<IntakeState>((set) => ({
@@ -103,11 +89,7 @@ export const useIntakeStore = create<IntakeState>((set) => ({
   setAvailableSlots: (slots) => set({ availableSlots: slots }),
   setCurrentSlotIndex: (idx) => set({ currentSlotIndex: idx }),
   setExistingBookings: (bookings) => set({ existingBookings: bookings }),
-  setSymptomText: (text) => set({ symptomText: text }),
-  setIsRecording: (v) => set({ isRecording: v }),
   setIsLoading: (v) => set({ isLoading: v }),
   setIsSpeaking: (v) => set({ isSpeaking: v }),
-  incrementRetry: () => set((state) => ({ retryCount: state.retryCount + 1 })),
-  resetRetry: () => set({ retryCount: 0 }),
   reset: () => set({ ...initialState, messages: [] }),
 }));
