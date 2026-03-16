@@ -1,3 +1,4 @@
+# ROS
 /build
 /install
 /log
@@ -8,8 +9,13 @@
 # JetBrains IDEs
 .idea/
 
-__pycache__
+# Python
+__pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Node
 **/node_modules
 **/dist
 
@@ -17,3 +23,35 @@ __pycache__
 infra/.env
 infra/certs/
 local-storage/
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Ll]ogs/
+[Bb]uild/
+[Bb]uilds/
+UserSettings/
+
+# Unity generated files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
