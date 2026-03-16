@@ -1,8 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import MainLayout from './components/layout/MainLayout';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
-import DoctorDashboard from './pages/Doctor/Dashboard';
 import VideoConference from './pages/Doctor/VideoConference';
 import ControlCenter from './pages/Operator/ControlCenter';
 import AdminLogin from './pages/Auth/AdminLogin';
@@ -13,7 +11,7 @@ import AuthStep from './pages/Robot/AuthStep';
 import Conference from './pages/Robot/Conference';
 
 // Mock EMR
-import EMRLogin from './pages/Doctor/EMRLogin';
+import EMRLogin from './pages/Doctor/EMR/Login';
 import EMRDashboard from './pages/Doctor/EMR/Dashboard';
 
 function App() {
@@ -46,10 +44,6 @@ function App() {
         <Route path="/robot/auth" element={<AuthStep />} />
         <Route path="/robot/conference" element={<Conference />} />
 
-        {/* 공통 레이아웃을 사용하는 라우터 영역 (예: 대시보드들) */}
-        <Route element={<MainLayout />}>
-          <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
-        </Route>
       </Routes>
     </Router>
   );
