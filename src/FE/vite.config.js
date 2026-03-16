@@ -1,8 +1,42 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import fs from 'fs'
+import path from 'path'
+
+function localSavePlugin() {
+  return {
+    name: 'local-save-plugin',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/api/local-save' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk.toString(); });
+          req.on('end', () => {
+            try {
+              const { image, filename } = JSON.parse(body);
+              const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+              // Save to the root of the FE folder
+              const filepath = path.resolve(__dirname, filename);
+              fs.writeFileSync(filepath, base64Data, 'base64');
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 200;
+              res.end(JSON.stringify({ success: true, filepath }));
+            } catch (err) {
+              res.setHeader('Content-Type', 'application/json');
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+        } else {
+          next();
+        }
+      })
+    }
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), localSavePlugin()],
 })
