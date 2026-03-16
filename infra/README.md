@@ -43,7 +43,7 @@ docker compose down                # 종료
 
 - `.env` 에 `DEV_GPU_SERVER_HOST` 를 반드시 설정해야 한다.
 - 개발 환경의 `spring-api` 는 GPU 서버의 `443` 포트만 사용한다.
-- 호출 경로는 `https://<DEV_GPU_SERVER_HOST>/idv/...`, `wss://<DEV_GPU_SERVER_HOST>/stt/...`, `https://<DEV_GPU_SERVER_HOST>/triage/...` 기준이다.
+- 호출 경로는 `https://<DEV_GPU_SERVER_HOST>/idv/...`, `https://<DEV_GPU_SERVER_HOST>/triage/...` 기준이다.
 
 ### 개발 환경 (DB/Redis만 Docker + Backend는 로컬 JVM)
 
@@ -55,7 +55,7 @@ docker compose up -d postgres redis
 - Backend는 `src/BE/src/main/resources/application.yml`에서 기본 프로파일이 `local`로 설정되어 있으므로 IntelliJ 실행 시 별도 `SPRING_PROFILES_ACTIVE` 지정이 없어도 된다.
 - `application-local.yml`의 기본값으로 Postgres/Redis는 `localhost`에 연결된다.
 - 이 방식은 Backend만 로컬 JVM으로 띄우는 용도다. `spring-api` 컨테이너와 동시에 실행하지 않는다.
-- AI 연동까지 확인하려면 `AI_IDV_URL`, `AI_STT_WS_URL`, `AI_TRIAGE_URL` 환경변수로 GPU 서버의 `443` 경로 기반 주소를 맞춰야 한다.
+- AI 연동까지 확인하려면 `AI_IDV_URL`, `AI_TRIAGE_URL` 환경변수로 GPU 서버의 `443` 경로 기반 주소를 맞춰야 한다.
 - LiveKit 연동까지 확인하려면 별도로 LiveKit 컨테이너를 올리거나 `LIVEKIT_HOST`, `LIVEKIT_URL` 환경변수를 지정해야 한다.
 
 ### 배포 환경 — 메인 서버
@@ -74,9 +74,9 @@ docker compose -f docker-compose.prod.yml up -d
 - 권장 배포 방식:
   - reverse proxy(`nginx` 등)가 `443`을 listen
   - `idv-ai` 프로세스는 내부 포트 `8000`
-  - `stt-triage-ai` 프로세스는 내부 포트 `8001`
+  - `triage-ai` 프로세스는 내부 포트 `8001`
   - `systemd`, `supervisor`, `pm2`, 또는 전용 ML serving runtime으로 서비스 관리
-- 메인 서버는 `https://<GPU_HOST>/idv/...`, `wss://<GPU_HOST>/stt/...`, `https://<GPU_HOST>/triage/...`만 호출한다.
+- 메인 서버는 `https://<GPU_HOST>/idv/...`, `https://<GPU_HOST>/triage/...`만 호출한다.
 
 ## SSL 인증서 배치
 

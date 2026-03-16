@@ -108,22 +108,6 @@ erDiagram
         timestamp last_activity_at "마지막 활동 시각"
     }
 
-    INTAKE_TURN {
-        bigint turn_id PK
-        varchar public_id UK "외부 노출 ID (turn_xxxx)"
-        bigint intake_session_id FK
-        int turn_order
-        enum turn_type "VOICE"
-        text prompt "TTS 안내문"
-        text stt_text "STT 변환 결과"
-        decimal stt_confidence
-        varchar exception_code "STT_FAIL | NO_INPUT | AMBIGUOUS_SYMPTOM | EMERGENCY_SUSPECTED"
-        varchar next_action "ASK_SYMPTOM | RECOMMEND 등"
-        text tts_message "응답 TTS"
-        varchar audio_file_path "오디오 파일 상대경로"
-        timestamp created_at
-    }
-
     SYMPTOM_INTAKE {
         bigint symptom_id PK
         bigint intake_session_id FK
@@ -347,7 +331,6 @@ erDiagram
     DOCTOR_PROFILE ||--o{ BOOKING : "assigned bookings"
     DOCTOR_PROFILE ||--o{ CARE_CASE : "assigned cases"
 
-    INTAKE_SESSION ||--o{ INTAKE_TURN : "has turns"
     INTAKE_SESSION ||--o| SYMPTOM_INTAKE : "collects symptom"
     INTAKE_SESSION ||--o{ RECOMMENDATION : "generates recs"
     INTAKE_SESSION ||--o| BOOKING : "leads to booking"
@@ -403,10 +386,9 @@ erDiagram
 
 | 테이블 | 설명 |
 |--------|------|
-| `INTAKE_SESSION` | 전화 시뮬레이터 인테이크 세션. **`patient_id`는 nullable** — 세션 시작 시 환자가 아직 식별되지 않을 수 있으므로, 식별 완료 후 바인딩한다 |
-| `INTAKE_TURN` | 턴별 VOICE 입력, STT 결과, 예외 코드 기록 |
-| `SYMPTOM_INTAKE` | 수집된 증상 원문 및 분류 결과 |
-| `RECOMMENDATION` | 진료과/의사 추천 결과 및 가용 슬롯 |
+| `INTAKE_SESSION` | 전화 시뮬레이터 인테이크 세션. **`patient_id`는 nullable** — 세션 시작 시 환자가 아직 식별되지 않을 수 있으므로, 식별 완료 후 바인딩한다. 메뉴 선택/식별/추천/예약 흐름은 감사 로그와 `last_activity_at` 갱신으로 추적한다 |
+| `SYMPTOM_INTAKE` | 호환용 증상 원문 및 분류 결과 저장. 현재 기본 전화 예약 흐름에서는 선택 진료과 기반 추천을 사용하므로 선택적으로만 생성된다 |
+| `RECOMMENDATION` | 진료과 선택 또는 증상 입력 기반 추천 결과 및 가용 슬롯 |
 
 ### 2.5 예약 / 케이스 / 미션 도메인
 
@@ -496,9 +478,8 @@ PATIENT ←1:N→ PATIENT_PHONE_BINDING    (전화번호 바인딩)
 PATIENT ←1:N→ PATIENT_GUARDIAN_LINK     (보호자 연결)
 USER    ←1:N→ PATIENT_GUARDIAN_LINK     (보호자 계정)
 
-PATIENT → INTAKE_SESSION → INTAKE_TURN       (인테이크 흐름)
-                         → SYMPTOM_INTAKE
-                         → RECOMMENDATION
+PATIENT → INTAKE_SESSION → RECOMMENDATION    (기본 전화 예약 흐름)
+                         → SYMPTOM_INTAKE    (선택 입력/호환 경로)
 
 PATIENT → BOOKING → CARE_CASE → MISSION → MISSION_EVENT     (진료 라이프사이클)
                                → VERIFICATION
@@ -521,5 +502,4 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `BOOKING` | `UNIQUE (slot_id)` WHERE `status != 'CANCELLED'` | 동일 슬롯 이중 예약 방지 (부분 unique) |
 | `CARE_CASE` | `UNIQUE (booking_id)` | 예약-케이스 1:1 보장 |
 | `CONSULTATION_SUMMARY` | `UNIQUE (session_id)` | 세션당 요약 1건 보장 |
-| `INTAKE_TURN` | `UNIQUE (intake_session_id, turn_order)` | 세션 내 턴 순서 중복 방지 |
 | 모든 테이블 `public_id` | `UNIQUE` | 외부 노출 ID 유일성 보장 |

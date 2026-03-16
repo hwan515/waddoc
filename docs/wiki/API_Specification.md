@@ -33,7 +33,7 @@
 > **이중 ID 전략**:
 > - DB 내부 PK는 `bigint` 자동 증가이며, 외부 API에는 **`public_id`** (접두사 + nanoid)를 노출한다.
 > - API 요청/응답의 모든 ID 필드는 `public_id` 값이다 (예: `userId` → `"usr_V1StGXR8"`, `patientId` → `"pat_Zk3mQ9"`).
-> - 접두사 규칙: `usr_` (USER), `pat_` (PATIENT), `doc_` (DOCTOR_PROFILE), `ints_` (INTAKE_SESSION), `turn_` (INTAKE_TURN), `rec_` (RECOMMENDATION), `slot_` (SCHEDULE_SLOT), `bk_` (BOOKING), `case_` (CARE_CASE), `ms_` (MISSION), `vrf_` (VERIFICATION), `ses_` (CONSULTATION_SESSION), `ntf_` (NOTIFICATION), `log_` (AUDIT_LOG), `vit_` (VITAL_RECORD), `evt_` (MISSION_EVENT), `link_` (PATIENT_GUARDIAN_LINK), `sms_` (SMS_LOG), `face_` (PATIENT_FACE_REFERENCE)
+> - 접두사 규칙: `usr_` (USER), `pat_` (PATIENT), `doc_` (DOCTOR_PROFILE), `ints_` (INTAKE_SESSION), `rec_` (RECOMMENDATION), `slot_` (SCHEDULE_SLOT), `bk_` (BOOKING), `case_` (CARE_CASE), `ms_` (MISSION), `vrf_` (VERIFICATION), `ses_` (CONSULTATION_SESSION), `ntf_` (NOTIFICATION), `log_` (AUDIT_LOG), `vit_` (VITAL_RECORD), `evt_` (MISSION_EVENT), `link_` (PATIENT_GUARDIAN_LINK), `sms_` (SMS_LOG), `face_` (PATIENT_FACE_REFERENCE)
 > - Path parameter의 ID도 `public_id` 값을 사용한다 (예: `/api/v1/bookings/bk_Abc123`).
 
 ---
@@ -347,7 +347,7 @@
 
 > 전화 시뮬레이터에서 증상 수집, 진료과 추천, 예약 슬롯 안내까지의 세션을 관리한다.
 >
-> 구조: `INTAKE_SESSION → INTAKE_TURN → SYMPTOM_INTAKE → RECOMMENDATION`
+> 구조: `INTAKE_SESSION → [optional SYMPTOM_INTAKE] → RECOMMENDATION → BOOKING`
 >
 > **공개 세션 접근 제어**: 공개 인테이크 플로우에서는 `intakeSessionId`(`public_id`)를 세션 접근 식별자(capability token)로 사용한다. 충분히 랜덤한 nanoid로 생성하며, 세션 완료(`COMPLETED`)/만료/폐기(`ABANDONED`, `FAILED`) 후에는 해당 ID로의 상태 변경 요청을 거부한다. 세션 TTL은 서버에서 관리하며, 무활동 상태가 일정 시간 지속되면 자동으로 `ABANDONED` 처리한다.
 >
@@ -1924,9 +1924,8 @@ data: {"notificationId":"ntf_Yz3Cr8","title":"진료 준비 완료","message":"�
 | `PATIENT_LOOKUP_BY_PHONE` | 전화번호 직접 입력 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
 | `PATIENT_LOOKUP_BY_INFO` | 이름+생년월일 기반 환자 식별 시도 (`actorRole=SYSTEM`) |
 | `INTAKE_PATIENT_BOUND` | 인테이크 세션 환자 바인딩 (`actorRole=SYSTEM`) |
-| `INTAKE_TURN_RECORDED` | 인테이크 음성 턴 기록 (`actorRole=SYSTEM`) |
 | `INTAKE_SESSION_COMPLETED` | 인테이크 세션 종료 (`actorRole=SYSTEM`) |
-| `SYMPTOM_CLASSIFIED` | 증상 분류 및 진료과 추천 (`actorRole=SYSTEM`) |
+| `SYMPTOM_CLASSIFIED` | 진료과 선택 또는 증상 기반 추천 (`actorRole=SYSTEM`) |
 | `BOOKING_VIEWED` | 예약 상세 조회 |
 | `INTAKE_SESSION_TIMEOUT` | 인테이크 세션 타임아웃 (후속 이슈) |
 

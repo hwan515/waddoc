@@ -385,10 +385,10 @@ MVP 핵심 흐름:
 ### 7.3 인테이크 세션
 
 - 인테이크는 예약 이전에 별도 세션으로 관리한다.
-- `INTAKE_SESSION → INTAKE_TURN → (환자 식별 / 메뉴 선택 / 진료과 선택) → BOOKING` 구조를 따른다.
+- `INTAKE_SESSION → [optional SYMPTOM_INTAKE] → RECOMMENDATION → BOOKING` 구조를 따른다.
 - **세션 생성 시 환자가 아직 식별되지 않을 수 있다.** `patient_id`는 nullable이며, 환자 식별 완료 후 바인딩한다.
 - 세션 시작/종료 시각, 상태를 저장한다.
-- 턴별 프롬프트, DTMF 입력 결과, 안내 메시지, 예외 코드를 저장한다.
+- 메뉴 선택, 식별, 추천, 예약 흐름은 감사 로그와 `last_activity_at` 갱신으로 추적한다.
 
 ### 7.4 진료과 선택 및 의사 매칭
 

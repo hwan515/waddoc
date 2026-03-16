@@ -31,7 +31,6 @@ services:
       - DB_HOST=postgres
       - REDIS_HOST=redis
       - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
-      - AI_STT_WS_URL=wss://${DEV_GPU_SERVER_HOST}/stt/ws/transcribe
       - AI_TRIAGE_URL=https://${DEV_GPU_SERVER_HOST}/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
