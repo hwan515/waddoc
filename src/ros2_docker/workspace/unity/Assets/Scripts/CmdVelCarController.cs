@@ -244,7 +244,56 @@ public class CmdVelCarController : MonoBehaviour
 
     float GetForwardSpeed()
     {
-        Vector3 vehicleForward = invertDrive ? -transform.forward : transform.forward;
-        return Vector3.Dot(rb.linearVelocity, vehicleForward);
+        return Vector3.Dot(rb.linearVelocity, GetVehicleForward());
+    }
+
+    Vector3 GetVehicleForward()
+    {
+        return invertDrive ? -transform.forward : transform.forward;
+    }
+
+    float GetUphillAngle(float linearCmd)
+    {
+        if (!enableHillAssist || Mathf.Abs(linearCmd) < 0.02f)
+            return 0f;
+
+        Vector3 driveForward = GetVehicleForward();
+
+        if (linearCmd < 0f)
+            driveForward = -driveForward;
+
+        float uphillComponent = Mathf.Clamp(driveForward.y, -1f, 1f);
+        return Mathf.Max(0f, Mathf.Asin(uphillComponent) * Mathf.Rad2Deg);
+    }
+
+    int CountGrounded(WheelCollider a, WheelCollider b)
+    {
+        int c = 0;
+        if (a != null && a.isGrounded) c++;
+        if (b != null && b.isGrounded) c++;
+        return c;
+    }
+
+
+    void PrintWheelDebug()
+    {
+        bool gFL = wcFL != null && wcFL.isGrounded;
+        bool gFR = wcFR != null && wcFR.isGrounded;
+        bool gRL = wcRL != null && wcRL.isGrounded;
+        bool gRR = wcRR != null && wcRR.isGrounded;
+
+        float rpmFL = wcFL != null ? wcFL.rpm : 0f;
+        float rpmFR = wcFR != null ? wcFR.rpm : 0f;
+        float rpmRL = wcRL != null ? wcRL.rpm : 0f;
+        float rpmRR = wcRR != null ? wcRR.rpm : 0f;
+
+        if (printGroundedDebug || printDebug)
+        {
+            Debug.Log(
+                $"Grounded FL:{gFL} FR:{gFR} RL:{gRL} RR:{gRR} | " +
+                $"RPM FL:{rpmFL:F1} FR:{rpmFR:F1} RL:{rpmRL:F1} RR:{rpmRR:F1} | " +
+                $"Vel:{rb.linearVelocity.magnitude:F2} | ForwardSpeed:{GetForwardSpeed():F2}"
+            );
+        }
     }
 }
