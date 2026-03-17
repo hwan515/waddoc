@@ -42,6 +42,7 @@ public class CameraPublisher : MonoBehaviour
             return;
         }
 
+        // 안전하게 카메라 출력 텍스처를 다시 지정
         targetCamera.targetTexture = renderTexture;
 
         publishInterval = 1.0f / Mathf.Max(1, publishHz);
@@ -76,6 +77,7 @@ public class CameraPublisher : MonoBehaviour
         RenderTexture previous = RenderTexture.active;
         RenderTexture.active = renderTexture;
 
+        // RenderTexture의 현재 내용을 읽음
         texture2D.ReadPixels(
             new Rect(0, 0, renderTexture.width, renderTexture.height),
             0,
@@ -84,6 +86,7 @@ public class CameraPublisher : MonoBehaviour
         );
         texture2D.Apply(false);
 
+        // 상하반전 보정
         Color32[] pixels = texture2D.GetPixels32();
         Color32[] flipped = FlipVertical(pixels, texture2D.width, texture2D.height);
         byte[] imageBytes = ConvertColor32ToRgbBytes(flipped);
