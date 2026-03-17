@@ -19,13 +19,14 @@ public enum ErrorCode {
     AUTH_ACCOUNT_LOCKED(HttpStatus.LOCKED, "AUTH_ACCOUNT_LOCKED", "비활성화된 계정입니다."),
     AUTH_UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "인증이 필요합니다."),
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "해당 작업에 접근할 권한이 없습니다."),
-    AUTH_REFRESH_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_EXPIRED", "리프레시 토큰이 만료되었거나 유효하지 않습니다."),
-    AUTH_TOKEN_REUSE(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_REUSE", "이미 사용되었거나 무효화된 리프레시 토큰입니다."),
+    AUTH_REFRESH_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_EXPIRED", "리프레시 토큰이 만료됐거나 유효하지 않습니다."),
+    AUTH_TOKEN_REUSE(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_REUSE", "이미 사용했거나 무효화된 리프레시 토큰입니다."),
     AUTH_DOCTOR_PROFILE_REQUIRED(HttpStatus.FORBIDDEN, "AUTH_DOCTOR_PROFILE_REQUIRED", "의사 프로필이 연결되지 않은 계정입니다."),
     AUTH_GUARDIAN_NOT_APPROVED(HttpStatus.FORBIDDEN, "AUTH_GUARDIAN_NOT_APPROVED", "승인되지 않았거나 연결된 환자가 없는 보호자 계정입니다."),
 
     // Patient
     PATIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PATIENT_NOT_FOUND", "해당 환자를 찾을 수 없습니다."),
+    GUARDIAN_NOT_LINKED(HttpStatus.FORBIDDEN, "GUARDIAN_NOT_LINKED", "해당 환자에 연결되지 않은 보호자 계정입니다."),
 
     // Intake Session
     INTAKE_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "INTAKE_SESSION_NOT_FOUND", "인테이크 세션을 찾을 수 없습니다."),
@@ -34,9 +35,10 @@ public enum ErrorCode {
     PATIENT_ALREADY_BOUND(HttpStatus.CONFLICT, "PATIENT_ALREADY_BOUND", "이미 환자가 바인딩된 세션입니다."),
     PATIENT_NOT_BOUND(HttpStatus.BAD_REQUEST, "PATIENT_NOT_BOUND", "세션에 환자가 아직 바인딩되지 않았습니다."),
 
-    // Booking
+    // Booking / Case
     PATIENT_MISMATCH(HttpStatus.FORBIDDEN, "PATIENT_MISMATCH", "세션의 환자와 예약의 환자가 일치하지 않습니다."),
     BOOKING_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다."),
+    CASE_NOT_FOUND(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "진료 케이스를 찾을 수 없습니다."),
     BOOKING_SLOT_CONFLICT(HttpStatus.CONFLICT, "BOOKING_SLOT_CONFLICT", "이미 예약된 슬롯입니다."),
     BOOKING_ALREADY_CANCELLED(HttpStatus.BAD_REQUEST, "BOOKING_ALREADY_CANCELLED", "이미 취소된 예약입니다."),
     BOOKING_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "BOOKING_NOT_CANCELLABLE", "취소할 수 없는 상태의 예약입니다."),
