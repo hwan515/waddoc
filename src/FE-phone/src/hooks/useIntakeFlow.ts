@@ -1,8 +1,9 @@
+import axios from 'axios';
 import { useCallback, useEffect, useRef } from 'react';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useTTS } from './useTTS';
 import * as intakeApi from '../api/intakeApi';
-import type { CompletionReason, IdentifyResult } from '../types/intake';
+import type { BookingResult, CompletionReason, IdentifyResult } from '../types/intake';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const DEFAULT_CALLER_PHONE =
@@ -20,6 +21,64 @@ const DEPARTMENT_OPTIONS = {
 } as const;
 
 type LookupMode = 'new' | 'existing';
+
+interface ApiErrorResponse {
+  message?: string;
+  details?: Array<{
+    reason?: string;
+  }>;
+}
+
+function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (axios.isAxiosError<ApiErrorResponse>(error)) {
+    const detailReason = error.response?.data?.details?.[0]?.reason?.trim();
+    if (detailReason) {
+      return detailReason;
+    }
+
+    const apiMessage = error.response?.data?.message?.trim();
+    if (apiMessage) {
+      return apiMessage;
+    }
+
+    if (error.code === 'ECONNABORTED') {
+      return '요청 시간이 초과되었습니다. 다시 시도해주세요.';
+    }
+
+    if (!error.response) {
+      return '서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.';
+    }
+  }
+
+  return fallbackMessage;
+}
+
+function getBookingSummary(
+  booking: BookingResult,
+  currentIndex: number,
+  totalCount: number,
+): string {
+  const bookingOrder =
+    totalCount > 1 ? `${currentIndex + 1}번째 예약입니다. ` : '';
+
+  return (
+    `${bookingOrder}${booking.appointmentDate} ${booking.startTime} ` +
+    `${booking.doctorName} 선생님 ${booking.departmentName} 예약이 있습니다.`
+  );
+}
+
+function getBookingLookupPrompt(
+  booking: BookingResult,
+  currentIndex: number,
+  totalCount: number,
+): string {
+  const options =
+    totalCount > 1
+      ? '예약 확인은 1번, 예약 취소는 2번, 다음 예약은 3번, 다시 듣기는 0번을 눌러주세요.'
+      : '예약 확인은 1번, 예약 취소는 2번, 다시 듣기는 0번을 눌러주세요.';
+
+  return `${getBookingSummary(booking, currentIndex, totalCount)} ${options}`;
+}
 
 export function useIntakeFlow() {
   const store = useIntakeStore();
@@ -64,11 +123,12 @@ export function useIntakeFlow() {
     async (sessionId: string) => {
       const bookings = await intakeApi.getExistingBookings(sessionId);
       store.setExistingBookings(bookings);
+      store.setCurrentBookingIndex(0);
 
       if (bookings.length > 0) {
         store.setPhase('BOOKING_LOOKUP');
         await systemSay(
-          '예약 확인은 1번, 예약 취소는 2번을 눌러주세요.',
+          getBookingLookupPrompt(bookings[0], 0, bookings.length),
         );
         return;
       }
@@ -295,9 +355,14 @@ export function useIntakeFlow() {
         }
 
         await finishSession(undefined, rec.ttsMessage);
-      } catch {
+      } catch (error) {
         store.setIsLoading(false);
-        await systemSay('진료과 매칭 중 오류가 발생했습니다. 다시 시도해주세요.');
+        await systemSay(
+          getApiErrorMessage(
+            error,
+            '진료과 매칭 중 오류가 발생했습니다. 다시 시도해주세요.',
+          ),
+        );
       }
     },
     [finishSession, store, systemSay],
@@ -352,9 +417,11 @@ export function useIntakeFlow() {
             booking.ttsMessage ||
               `${booking.appointmentDate} ${booking.startTime} ${booking.doctorName} 선생님 예약이 확정되었습니다. 감사합니다.`,
           );
-        } catch {
+        } catch (error) {
           store.setIsLoading(false);
-          await systemSay('예약 처리 중 오류가 발생했습니다.');
+          await systemSay(
+            getApiErrorMessage(error, '예약 처리 중 오류가 발생했습니다.'),
+          );
         }
       } else if (digit === '2') {
         const nextIdx = currentSlotIndex + 1;
@@ -380,19 +447,39 @@ export function useIntakeFlow() {
 
   const handleBookingAction = useCallback(
     async (digit: string) => {
-      const { existingBookings, sessionId } = useIntakeStore.getState();
+      const { existingBookings, currentBookingIndex, sessionId } =
+        useIntakeStore.getState();
 
       if (existingBookings.length === 0) {
         await finishSession('EXISTING_BOOKING_CHECKED', '조회된 예약이 없습니다.');
         return;
       }
 
-      const booking = existingBookings[0];
+      const booking = existingBookings[currentBookingIndex];
+      if (!booking) {
+        await systemSay('예약 정보가 올바르지 않습니다. 다시 시도해주세요.');
+        return;
+      }
+
+      if (digit === '0') {
+        await systemSay(
+          getBookingLookupPrompt(
+            booking,
+            currentBookingIndex,
+            existingBookings.length,
+          ),
+        );
+        return;
+      }
 
       if (digit === '1') {
         await finishSession(
           'EXISTING_BOOKING_CHECKED',
-          `${booking.appointmentDate} ${booking.startTime} ${booking.doctorName} 선생님 ${booking.departmentName} 예약이 있습니다.`,
+          getBookingSummary(
+            booking,
+            currentBookingIndex,
+            existingBookings.length,
+          ),
         );
         return;
       }
@@ -434,7 +521,32 @@ export function useIntakeFlow() {
         return;
       }
 
-      await systemSay('1번 또는 2번을 눌러주세요.');
+      if (digit === '3' && existingBookings.length > 1) {
+        const nextIndex = (currentBookingIndex + 1) % existingBookings.length;
+        const nextBooking = existingBookings[nextIndex];
+        store.setCurrentBookingIndex(nextIndex);
+
+        const wrappedToFirst = nextIndex === 0;
+        const prefix = wrappedToFirst
+          ? '마지막 예약입니다. 첫 번째 예약을 다시 안내합니다. '
+          : '';
+
+        await systemSay(
+          prefix +
+            getBookingLookupPrompt(
+              nextBooking,
+              nextIndex,
+              existingBookings.length,
+            ),
+        );
+        return;
+      }
+
+      await systemSay(
+        existingBookings.length > 1
+          ? '예약 확인은 1번, 예약 취소는 2번, 다음 예약은 3번, 다시 듣기는 0번입니다.'
+          : '예약 확인은 1번, 예약 취소는 2번, 다시 듣기는 0번입니다.',
+      );
     },
     [finishSession, store, systemSay],
   );
@@ -533,9 +645,33 @@ export function useIntakeFlow() {
             doctorName: '김의사',
             departmentName: '내과',
           },
+          {
+            bookingId: 'bk_mock02',
+            status: 'CONFIRMED',
+            appointmentDate: '2026-03-20',
+            startTime: '14:00',
+            endTime: '14:30',
+            doctorName: '박의사',
+            departmentName: '피부과',
+          },
         ]);
+        store.setCurrentBookingIndex(0);
         store.setPhase('BOOKING_LOOKUP');
-        await systemSay('예약 확인은 1번, 예약 취소는 2번을 눌러주세요.');
+        await systemSay(
+          getBookingLookupPrompt(
+            {
+              bookingId: 'bk_mock01',
+              status: 'CONFIRMED',
+              appointmentDate: '2026-03-15',
+              startTime: '10:00',
+              endTime: '10:30',
+              doctorName: '김의사',
+              departmentName: '내과',
+            },
+            0,
+            2,
+          ),
+        );
         return;
       }
 
@@ -559,9 +695,14 @@ export function useIntakeFlow() {
       }
 
       await promptPhoneInput(mode);
-    } catch {
+    } catch (error) {
       store.setIsLoading(false);
-      await systemSay('환자 확인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      await systemSay(
+        getApiErrorMessage(
+          error,
+          '환자 확인 중 오류가 발생했습니다. 다시 시도해주세요.',
+        ),
+      );
     }
   }, [
     handleIdentifiedPatient,

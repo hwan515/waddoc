@@ -28,6 +28,7 @@ interface IntakeState {
 
   // 기존 예약
   existingBookings: BookingResult[];
+  currentBookingIndex: number;
 
   // 로딩 상태
   isLoading: boolean;
@@ -44,6 +45,7 @@ interface IntakeState {
   setAvailableSlots: (slots: AvailableSlot[]) => void;
   setCurrentSlotIndex: (idx: number) => void;
   setExistingBookings: (bookings: BookingResult[]) => void;
+  setCurrentBookingIndex: (idx: number) => void;
   setIsLoading: (v: boolean) => void;
   setIsSpeaking: (v: boolean) => void;
   reset: () => void;
@@ -62,6 +64,7 @@ const initialState = {
   availableSlots: [] as AvailableSlot[],
   currentSlotIndex: 0,
   existingBookings: [] as BookingResult[],
+  currentBookingIndex: 0,
   isLoading: false,
   isSpeaking: false,
 };
@@ -89,6 +92,7 @@ export const useIntakeStore = create<IntakeState>((set) => ({
   setAvailableSlots: (slots) => set({ availableSlots: slots }),
   setCurrentSlotIndex: (idx) => set({ currentSlotIndex: idx }),
   setExistingBookings: (bookings) => set({ existingBookings: bookings }),
+  setCurrentBookingIndex: (idx) => set({ currentBookingIndex: idx }),
   setIsLoading: (v) => set({ isLoading: v }),
   setIsSpeaking: (v) => set({ isSpeaking: v }),
   reset: () => set({ ...initialState, messages: [] }),
