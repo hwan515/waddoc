@@ -1,7 +1,6 @@
 package com.waddoc.domain.intake.dto;
 
 import com.waddoc.domain.intake.entity.ConfidenceLevel;
-import com.waddoc.domain.intake.entity.Recommendation;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -11,7 +10,6 @@ import java.util.List;
 @Builder
 public class RecommendResponse {
 
-    private String recommendationId;
     private String symptomCategory;
     private String department;
     private String departmentName;
@@ -21,16 +19,16 @@ public class RecommendResponse {
     private List<AvailableSlotResponse> availableSlots;
     private String ttsMessage;
 
-    public static RecommendResponse of(Recommendation rec, List<AvailableSlotResponse> slots, String ttsMessage) {
+    public static RecommendResponse of(String symptomCategory, String department, String departmentName,
+                                       ConfidenceLevel confidenceLevel, boolean isEmergency, String reason,
+                                       List<AvailableSlotResponse> slots, String ttsMessage) {
         return RecommendResponse.builder()
-                .recommendationId(rec.getPublicId())
-                .symptomCategory(rec.getSymptomIntake() != null
-                        ? rec.getSymptomIntake().getSymptomCategory() : null)
-                .department(rec.getDepartment())
-                .departmentName(rec.getDepartmentName())
-                .confidenceLevel(rec.getConfidenceLevel())
-                .isEmergency(rec.isEmergency())
-                .reason(rec.getReason())
+                .symptomCategory(symptomCategory)
+                .department(department)
+                .departmentName(departmentName)
+                .confidenceLevel(confidenceLevel)
+                .isEmergency(isEmergency)
+                .reason(reason)
                 .availableSlots(slots)
                 .ttsMessage(ttsMessage)
                 .build();

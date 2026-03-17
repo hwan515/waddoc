@@ -8,7 +8,6 @@ import com.waddoc.domain.intake.dto.IdentifyPatientResponse;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.patient.entity.Patient;
-import com.waddoc.domain.patient.repository.PatientPhoneBindingRepository;
 import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -25,7 +24,6 @@ import java.util.Map;
 public class PatientIdentifyService {
 
     private final IntakeSessionRepository intakeSessionRepository;
-    private final PatientPhoneBindingRepository patientPhoneBindingRepository;
     private final PatientRepository patientRepository;
     private final AuditLogService auditLogService;
 
@@ -86,9 +84,7 @@ public class PatientIdentifyService {
                                                           String phoneFieldName) {
         IntakeSession session = findActiveSession(intakeSessionId);
 
-        Patient patient = patientPhoneBindingRepository.findByPhone(phoneNumber)
-                .map(binding -> binding.getPatient())
-                .orElse(null);
+        Patient patient = patientRepository.findByPhone(phoneNumber).orElse(null);
 
         session.touch();
 

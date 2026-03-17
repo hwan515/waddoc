@@ -2,6 +2,7 @@ package com.waddoc.domain.auth.service;
 
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
+import com.waddoc.domain.user.entity.ApprovalStatus;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.domain.user.repository.UserRepository;
@@ -62,7 +63,27 @@ class AuthServiceTest {
     }
 
     @Test
-    void loginThrowsAccountLockedWhenUserIsInactive() {
+    void loginThrowsPendingApprovalWhenUserIsPending() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        LoginRequest request = buildLoginRequest("doctor_kim", "Passw0rd!");
+        User pendingUser = User.builder()
+                .username("doctor_kim")
+                .passwordHash("encoded-password")
+                .name("김의사")
+                .role(Role.DOCTOR)
+                .build();
+
+        when(userRepository.findByUsername("doctor_kim")).thenReturn(Optional.of(pendingUser));
+        when(passwordEncoder.matches("Passw0rd!", "encoded-password")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.login(request, response))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.AUTH_ACCOUNT_PENDING_APPROVAL);
+    }
+
+    @Test
+    void loginThrowsAccountLockedWhenApprovedUserIsInactive() {
         MockHttpServletResponse response = new MockHttpServletResponse();
         LoginRequest request = buildLoginRequest("doctor_kim", "Passw0rd!");
         User inactiveUser = User.builder()
@@ -71,6 +92,7 @@ class AuthServiceTest {
                 .name("김의사")
                 .role(Role.DOCTOR)
                 .build();
+        setField(inactiveUser, "approvalStatus", ApprovalStatus.APPROVED);
         setField(inactiveUser, "active", false);
 
         when(userRepository.findByUsername("doctor_kim")).thenReturn(Optional.of(inactiveUser));
@@ -96,6 +118,8 @@ class AuthServiceTest {
                 .role(Role.DOCTOR)
                 .build();
         setField(user, "publicId", userId);
+        setField(user, "approvalStatus", ApprovalStatus.APPROVED);
+        setField(user, "active", true);
 
         when(refreshTokenService.findUserIdByRefreshToken(refreshToken)).thenReturn(Optional.of(userId));
         when(jwtTokenProvider.validateToken(refreshToken)).thenReturn(true);

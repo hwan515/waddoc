@@ -10,13 +10,8 @@ import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
 import com.waddoc.domain.intake.entity.IntakeSession;
-import com.waddoc.domain.intake.entity.Recommendation;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
-import com.waddoc.domain.intake.repository.RecommendationAvailableSlotRepository;
-import com.waddoc.domain.intake.repository.RecommendationRepository;
 import com.waddoc.domain.patient.entity.Patient;
-import com.waddoc.domain.patient.entity.PatientPhoneBinding;
-import com.waddoc.domain.patient.repository.PatientPhoneBindingRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
@@ -33,12 +28,9 @@ import java.util.Map;
 public class BookingService {
 
     private final IntakeSessionRepository intakeSessionRepository;
-    private final RecommendationRepository recommendationRepository;
-    private final RecommendationAvailableSlotRepository recSlotRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final BookingRepository bookingRepository;
     private final CareCaseRepository careCaseRepository;
-    private final PatientPhoneBindingRepository phoneBindingRepository;
     private final AuditLogService auditLogService;
     private final SmsService smsService;
 
@@ -52,13 +44,14 @@ public class BookingService {
             throw new BusinessException(ErrorCode.PATIENT_NOT_BOUND);
         }
 
-        Recommendation recommendation = recommendationRepository.findByIntakeSession(session)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RECOMMENDATION_NOT_FOUND));
+        if (!session.hasRecommendation()) {
+            throw new BusinessException(ErrorCode.RECOMMENDATION_NOT_FOUND);
+        }
 
         ScheduleSlot slot = scheduleSlotRepository.findByPublicId(request.getSlotId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
 
-        if (!recSlotRepository.existsByRecommendationAndSlot_PublicId(recommendation, request.getSlotId())) {
+        if (!session.isSlotOffered(request.getSlotId())) {
             throw new BusinessException(ErrorCode.SLOT_NOT_IN_RECOMMENDATION);
         }
 
@@ -71,7 +64,6 @@ public class BookingService {
         Booking booking = Booking.builder()
                 .patient(patient)
                 .intakeSession(session)
-                .recommendation(recommendation)
                 .slot(slot)
                 .doctor(slot.getDoctor())
                 .channel(session.getChannel().name())
@@ -172,9 +164,7 @@ public class BookingService {
                 .map(CareCase::getPublicId)
                 .orElse(null);
 
-        String phone = phoneBindingRepository.findFirstByPatientAndPrimaryTrue(booking.getPatient())
-                .map(PatientPhoneBinding::getPhone)
-                .orElse(null);
+        String phone = booking.getPatient().getPhone();
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -218,9 +208,7 @@ public class BookingService {
         Booking booking = bookingRepository.findByPublicId(bookingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BOOKING_NOT_FOUND));
 
-        String callerNumber = phoneBindingRepository.findFirstByPatientAndPrimaryTrue(booking.getPatient())
-                .map(PatientPhoneBinding::getPhone)
-                .orElse(null);
+        String callerNumber = booking.getPatient().getPhone();
 
         return cancelBookingInternal(booking, request,
                 actorId != null ? actorId : "SYSTEM",
