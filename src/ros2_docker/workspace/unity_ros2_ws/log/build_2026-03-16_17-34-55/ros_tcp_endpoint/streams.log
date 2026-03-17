@@ -1,0 +1,36 @@
+[0.479s] Invoking command in '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/ROS-TCP-Endpoint': PYTHONPATH=/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/ros_tcp_endpoint build --build-base /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/build install --record /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/install.log --install-scripts $base/lib/ros_tcp_endpoint --single-version-externally-managed install_data
+[0.603s] /usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+[0.604s]   warnings.warn(
+[0.608s] running egg_info
+[0.608s] writing ../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/PKG-INFO
+[0.608s] writing dependency_links to ../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/dependency_links.txt
+[0.609s] writing entry points to ../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/entry_points.txt
+[0.609s] writing requirements to ../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/requires.txt
+[0.609s] writing top-level names to ../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/top_level.txt
+[0.609s] reading manifest file '../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/SOURCES.txt'
+[0.610s] adding license file 'LICENSE'
+[0.610s] writing manifest file '../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info/SOURCES.txt'
+[0.610s] running build
+[0.610s] running build_py
+[0.610s] running install
+[0.610s] running install_lib
+[0.611s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/unity_service.py to unity_service.cpython-310.pyc
+[0.611s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/client.py to client.cpython-310.pyc
+[0.612s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/exceptions.py to exceptions.cpython-310.pyc
+[0.612s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/thread_pauser.py to thread_pauser.cpython-310.pyc
+[0.613s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/communication.py to communication.cpython-310.pyc
+[0.613s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/default_server_endpoint.py to default_server_endpoint.cpython-310.pyc
+[0.613s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/__init__.py to __init__.cpython-310.pyc
+[0.613s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/publisher.py to publisher.cpython-310.pyc
+[0.613s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/server.py to server.cpython-310.pyc
+[0.614s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/service.py to service.cpython-310.pyc
+[0.614s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/tcp_sender.py to tcp_sender.cpython-310.pyc
+[0.615s] byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint/subscriber.py to subscriber.cpython-310.pyc
+[0.615s] running install_data
+[0.615s] running install_egg_info
+[0.616s] removing '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint-0.0.1-py3.10.egg-info' (and everything under it)
+[0.616s] Copying ../../build/ros_tcp_endpoint/ros_tcp_endpoint.egg-info to /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages/ros_tcp_endpoint-0.0.1-py3.10.egg-info
+[0.617s] running install_scripts
+[0.628s] Installing default_server_endpoint script to /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/ros_tcp_endpoint
+[0.628s] writing list of installed files to '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/install.log'
+[0.643s] Invoked command in '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/ROS-TCP-Endpoint' returned '0': PYTHONPATH=/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/ros_tcp_endpoint/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/ros_tcp_endpoint build --build-base /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/build install --record /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/ros_tcp_endpoint/install.log --install-scripts $base/lib/ros_tcp_endpoint --single-version-externally-managed install_data
