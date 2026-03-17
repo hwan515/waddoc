@@ -26,6 +26,7 @@ public enum ErrorCode {
 
     // Intake Session
     INTAKE_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "INTAKE_SESSION_NOT_FOUND", "인테이크 세션을 찾을 수 없습니다."),
+    INVALID_PATCH_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_PATCH_REQUEST", "허용되지 않는 세션 변경 요청입니다."),
     SESSION_STATE_INVALID(HttpStatus.BAD_REQUEST, "SESSION_STATE_INVALID", "현재 세션 상태에서는 해당 작업을 수행할 수 없습니다."),
     PATIENT_ALREADY_BOUND(HttpStatus.CONFLICT, "PATIENT_ALREADY_BOUND", "이미 환자가 바인딩된 세션입니다."),
     PATIENT_NOT_BOUND(HttpStatus.BAD_REQUEST, "PATIENT_NOT_BOUND", "세션에 환자가 아직 바인딩되지 않았습니다."),

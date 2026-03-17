@@ -25,7 +25,7 @@ public class BookingController {
     }
 
     /** 4.2 — 기존 예약 조회 (무인증, 세션 기반) */
-    @GetMapping("/intake/sessions/{sessionId}/existing-bookings")
+    @GetMapping("/intake/sessions/{sessionId}/bookings")
     public ResponseEntity<BookingListResponse> getExistingBookings(
             @PathVariable String sessionId,
             @RequestParam(required = false) String status) {
@@ -45,7 +45,7 @@ public class BookingController {
     }
 
     /** 4.4 — 세션 기반 예약 취소 (무인증, 시뮬레이터) */
-    @PostMapping("/intake/sessions/{sessionId}/existing-bookings/{bookingId}/cancel")
+    @PostMapping("/intake/sessions/{sessionId}/bookings/{bookingId}/cancel")
     public ResponseEntity<CancelBookingResponse> cancelBookingBySession(
             @PathVariable String sessionId,
             @PathVariable String bookingId,

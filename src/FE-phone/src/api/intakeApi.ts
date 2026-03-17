@@ -100,14 +100,17 @@ export async function bindPatient(
   sessionId: string,
   patientId: string,
 ): Promise<void> {
-  await api.patch(`/intake/sessions/${sessionId}/bind-patient`, { patientId });
+  await api.patch(`/intake/sessions/${sessionId}`, { patientId });
 }
 
 export async function completeSession(
   sessionId: string,
   completionReason: string,
 ): Promise<void> {
-  await api.put(`/intake/sessions/${sessionId}/complete`, { completionReason });
+  await api.patch(`/intake/sessions/${sessionId}`, {
+    status: 'COMPLETED',
+    completionReason,
+  });
 }
 
 export async function recommendDoctor(
@@ -136,7 +139,7 @@ export async function getExistingBookings(
   sessionId: string,
 ): Promise<BookingResult[]> {
   const { data } = await api.get<ExistingBookingsApiResponse>(
-    `/intake/sessions/${sessionId}/existing-bookings`,
+    `/intake/sessions/${sessionId}/bookings`,
   );
   return data.bookings;
 }
@@ -146,7 +149,7 @@ export async function cancelBooking(
   bookingId: string,
 ): Promise<CancelBookingResult> {
   const { data } = await api.post<CancelBookingResult>(
-    `/intake/sessions/${sessionId}/existing-bookings/${bookingId}/cancel`,
+    `/intake/sessions/${sessionId}/bookings/${bookingId}/cancel`,
   );
   return data;
 }
