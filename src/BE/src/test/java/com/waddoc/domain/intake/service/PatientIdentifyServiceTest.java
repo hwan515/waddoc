@@ -9,8 +9,6 @@ import com.waddoc.domain.intake.entity.CompletionReason;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.patient.entity.Patient;
-import com.waddoc.domain.patient.entity.PatientPhoneBinding;
-import com.waddoc.domain.patient.repository.PatientPhoneBindingRepository;
 import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -39,9 +37,6 @@ class PatientIdentifyServiceTest {
     private IntakeSessionRepository intakeSessionRepository;
 
     @Mock
-    private PatientPhoneBindingRepository patientPhoneBindingRepository;
-
-    @Mock
     private PatientRepository patientRepository;
 
     @Mock
@@ -51,7 +46,7 @@ class PatientIdentifyServiceTest {
     private PatientIdentifyService patientIdentifyService;
 
     @Test
-    void identifyByCallerNumber_returnsPatient_whenPhoneBindingExists() {
+    void identifyByCallerNumber_returnsPatient_whenPatientPhoneExists() {
         IntakeSession session = IntakeSession.builder()
                 .callerNumber("01012345678")
                 .build();
@@ -60,17 +55,13 @@ class PatientIdentifyServiceTest {
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
                 .address("울릉군")
-                .build();
-        PatientPhoneBinding binding = PatientPhoneBinding.builder()
-                .patient(patient)
                 .phone("01012345678")
-                .primary(true)
                 .build();
 
         when(intakeSessionRepository.findByPublicId(session.getPublicId()))
                 .thenReturn(Optional.of(session));
-        when(patientPhoneBindingRepository.findByPhone("01012345678"))
-                .thenReturn(Optional.of(binding));
+        when(patientRepository.findByPhone("01012345678"))
+                .thenReturn(Optional.of(patient));
 
         IdentifyPatientResponse response = patientIdentifyService.identifyByCallerNumber(
                 session.getPublicId(),
@@ -94,14 +85,14 @@ class PatientIdentifyServiceTest {
     }
 
     @Test
-    void identifyByPhone_returnsNotIdentified_whenPhoneBindingDoesNotExist() {
+    void identifyByPhone_returnsNotIdentified_whenPatientPhoneDoesNotExist() {
         IntakeSession session = IntakeSession.builder()
                 .callerNumber("01012345678")
                 .build();
 
         when(intakeSessionRepository.findByPublicId(session.getPublicId()))
                 .thenReturn(Optional.of(session));
-        when(patientPhoneBindingRepository.findByPhone("01099998888"))
+        when(patientRepository.findByPhone("01099998888"))
                 .thenReturn(Optional.empty());
 
         IdentifyPatientResponse response = patientIdentifyService.identifyByPhone(
@@ -160,12 +151,14 @@ class PatientIdentifyServiceTest {
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
                 .address("울릉군")
+                .phone("01012345678")
                 .build();
         Patient second = Patient.builder()
                 .name("홍길동")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("JEJU")
                 .address("제주시")
+                .phone("01099998888")
                 .build();
 
         when(intakeSessionRepository.findByPublicId(session.getPublicId()))

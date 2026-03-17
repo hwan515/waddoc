@@ -13,9 +13,6 @@ import com.waddoc.domain.intake.dto.RecommendRequest;
 import com.waddoc.domain.intake.dto.RecommendResponse;
 import com.waddoc.domain.intake.entity.*;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
-import com.waddoc.domain.intake.repository.RecommendationAvailableSlotRepository;
-import com.waddoc.domain.intake.repository.RecommendationRepository;
-import com.waddoc.domain.intake.repository.SymptomIntakeRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -36,11 +33,8 @@ import java.util.Map;
 public class RecommendationService {
 
     private final IntakeSessionRepository intakeSessionRepository;
-    private final SymptomIntakeRepository symptomIntakeRepository;
-    private final RecommendationRepository recommendationRepository;
     private final DoctorProfileRepository doctorProfileRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
-    private final RecommendationAvailableSlotRepository recSlotRepository;
     private final BookingRepository bookingRepository;
     private final AuditLogService auditLogService;
 
@@ -56,7 +50,6 @@ public class RecommendationService {
         }
 
         RecommendationSelection selection = resolveSelection(request);
-        SymptomIntake symptomIntake = saveSymptomIntakeIfNeeded(session, request, selection);
 
         // 1. 진료과 매칭 의사 조회 + 가용 슬롯
         List<DoctorProfile> doctors = doctorProfileRepository.findByDepartment(selection.department);
@@ -70,32 +63,26 @@ public class RecommendationService {
 
         String reason = buildRecommendationReason(selection.reason, preferredDoctor, slots);
 
-        // 2. Recommendation 저장
-        Recommendation recommendation = Recommendation.builder()
-                .intakeSession(session)
-                .symptomIntake(symptomIntake)
-                .department(selection.department)
-                .departmentName(selection.departmentName)
-                .confidenceLevel(selection.confidenceLevel)
-                .emergency(selection.emergency)
-                .reason(reason)
-                .build();
-        recommendationRepository.save(recommendation);
+        // 2. 세션에 과 선택 결과 + 슬롯 스냅샷 저장
+        List<String> slotPublicIds = slots.stream()
+                .map(ScheduleSlot::getPublicId)
+                .toList();
 
-        // 추천 결과에 포함된 가용 슬롯을 중간 테이블에 저장
-        slots.forEach(slot -> recSlotRepository.save(
-                RecommendationAvailableSlot.builder()
-                        .recommendation(recommendation)
-                        .slot(slot)
-                        .build()
-        ));
+        session.recordSelection(
+                selection.department,
+                selection.departmentName,
+                selection.confidenceLevel,
+                selection.emergency,
+                reason,
+                slotPublicIds
+        );
 
         session.touch();
 
         // 3. 감사 로그
         String correlationId = "corr_ints_" + session.getPublicId();
         Map<String, Object> detailJson = new LinkedHashMap<>();
-        detailJson.put("recommendationId", recommendation.getPublicId());
+        detailJson.put("sessionId", session.getPublicId());
         if (selection.category != null) {
             detailJson.put("symptomCategory", selection.category);
         }
@@ -114,7 +101,16 @@ public class RecommendationService {
 
         String ttsMessage = buildTtsMessage(selection, slots);
 
-        return RecommendResponse.of(recommendation, slotResponses, ttsMessage);
+        return RecommendResponse.of(
+                selection.category,
+                selection.department,
+                selection.departmentName,
+                selection.confidenceLevel,
+                selection.emergency,
+                reason,
+                slotResponses,
+                ttsMessage
+        );
     }
 
     private IntakeSession findActiveSession(String sessionId) {
@@ -143,21 +139,6 @@ public class RecommendationService {
         }
 
         throw new BusinessException(ErrorCode.INVALID_INPUT);
-    }
-
-    private SymptomIntake saveSymptomIntakeIfNeeded(IntakeSession session, RecommendRequest request, RecommendationSelection selection) {
-        if (request.getSymptomText() == null || request.getSymptomText().isBlank()) {
-            return null;
-        }
-
-        SymptomIntake symptomIntake = SymptomIntake.builder()
-                .intakeSession(session)
-                .symptomText(request.getSymptomText())
-                .symptomCategory(selection.category)
-                .emergency(selection.emergency)
-                .build();
-        symptomIntakeRepository.save(symptomIntake);
-        return symptomIntake;
     }
 
     private RecommendationSelection selectDepartment(String departmentCode) {

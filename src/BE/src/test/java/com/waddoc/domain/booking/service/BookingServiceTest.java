@@ -11,11 +11,7 @@ import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
-import com.waddoc.domain.intake.repository.RecommendationAvailableSlotRepository;
-import com.waddoc.domain.intake.repository.RecommendationRepository;
 import com.waddoc.domain.patient.entity.Patient;
-import com.waddoc.domain.patient.entity.PatientPhoneBinding;
-import com.waddoc.domain.patient.repository.PatientPhoneBindingRepository;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.sms.SmsService;
@@ -39,12 +35,6 @@ class BookingServiceTest {
     private IntakeSessionRepository intakeSessionRepository;
 
     @Mock
-    private RecommendationRepository recommendationRepository;
-
-    @Mock
-    private RecommendationAvailableSlotRepository recSlotRepository;
-
-    @Mock
     private ScheduleSlotRepository scheduleSlotRepository;
 
     @Mock
@@ -52,9 +42,6 @@ class BookingServiceTest {
 
     @Mock
     private CareCaseRepository careCaseRepository;
-
-    @Mock
-    private PatientPhoneBindingRepository phoneBindingRepository;
 
     @Mock
     private AuditLogService auditLogService;
@@ -78,7 +65,6 @@ class BookingServiceTest {
                 .user(doctorUser)
                 .department("INTERNAL_MEDICINE")
                 .departmentName("내과")
-                .specialty("가정의학")
                 .build();
 
         ScheduleSlot slot = ScheduleSlot.builder()
@@ -93,6 +79,7 @@ class BookingServiceTest {
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
                 .address("울릉군")
+                .phone("01012345678")
                 .build();
 
         IntakeSession session = IntakeSession.builder()
@@ -118,15 +105,8 @@ class BookingServiceTest {
                 .intakeSession(session)
                 .build();
 
-        PatientPhoneBinding binding = PatientPhoneBinding.builder()
-                .patient(patient)
-                .phone("01012345678")
-                .primary(true)
-                .build();
-
         when(bookingRepository.findByPublicId(booking.getPublicId())).thenReturn(Optional.of(booking));
         when(careCaseRepository.findByBooking(booking)).thenReturn(Optional.of(careCase));
-        when(phoneBindingRepository.findFirstByPatientAndPrimaryTrue(patient)).thenReturn(Optional.of(binding));
 
         BookingDetailResponse response = bookingService.getBookingDetail(booking.getPublicId(), "usr_admin", "ADMIN");
 

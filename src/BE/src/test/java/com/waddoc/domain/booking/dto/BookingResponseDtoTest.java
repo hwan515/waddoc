@@ -81,7 +81,6 @@ class BookingResponseDtoTest {
                 .user(doctorUser)
                 .department("INTERNAL_MEDICINE")
                 .departmentName("내과")
-                .specialty("가정의학")
                 .build();
 
         ScheduleSlot slot = ScheduleSlot.builder()

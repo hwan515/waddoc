@@ -12,9 +12,6 @@ import com.waddoc.domain.intake.dto.RecommendRequest;
 import com.waddoc.domain.intake.dto.RecommendResponse;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
-import com.waddoc.domain.intake.repository.RecommendationAvailableSlotRepository;
-import com.waddoc.domain.intake.repository.RecommendationRepository;
-import com.waddoc.domain.intake.repository.SymptomIntakeRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
@@ -43,19 +40,10 @@ class RecommendationServiceTest {
     private IntakeSessionRepository intakeSessionRepository;
 
     @Mock
-    private SymptomIntakeRepository symptomIntakeRepository;
-
-    @Mock
-    private RecommendationRepository recommendationRepository;
-
-    @Mock
     private DoctorProfileRepository doctorProfileRepository;
 
     @Mock
     private ScheduleSlotRepository scheduleSlotRepository;
-
-    @Mock
-    private RecommendationAvailableSlotRepository recSlotRepository;
 
     @Mock
     private BookingRepository bookingRepository;
@@ -98,14 +86,14 @@ class RecommendationServiceTest {
                 .user(preferredUser)
                 .department("INTERNAL_MEDICINE")
                 .departmentName("내과")
-                .specialty("가정의학")
+
                 .build();
 
         DoctorProfile fallbackDoctor = DoctorProfile.builder()
                 .user(fallbackUser)
                 .department("INTERNAL_MEDICINE")
                 .departmentName("내과")
-                .specialty("호흡기")
+
                 .build();
 
         ScheduleSlot fallbackSlot = ScheduleSlot.builder()
@@ -150,15 +138,19 @@ class RecommendationServiceTest {
                 any(LocalTime.class),
                 any(Pageable.class)))
                 .thenReturn(List.of(lastBooking));
-        when(recommendationRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         RecommendResponse response = recommendationService.recommend(session.getPublicId(), request);
 
         assertThat(response.getDepartment()).isEqualTo("INTERNAL_MEDICINE");
         assertThat(response.getDepartmentName()).isEqualTo("내과");
-        assertThat(response.getSymptomCategory()).isNull();
+        assertThat(response.getSymptomCategory()).isEqualTo("DTMF_SELECTION");
         assertThat(response.getAvailableSlots()).hasSize(2);
         assertThat(response.getAvailableSlots().get(0).getDoctorName()).isEqualTo("김의사");
         assertThat(response.getTtsMessage()).contains("예약은 1번");
+
+        // 세션에 선택 결과가 저장되었는지 확인
+        assertThat(session.hasRecommendation()).isTrue();
+        assertThat(session.getSelectedDepartment()).isEqualTo("INTERNAL_MEDICINE");
+        assertThat(session.getOfferedSlotIds()).hasSize(2);
     }
 }

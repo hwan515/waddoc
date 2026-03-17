@@ -10,7 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 의사 프로필. User와 1:1. 진료과 코드/한글명, 전문 분야 보유.
+ * 의사 프로필. User와 1:1. 진료과 코드/한글명 보유.
  */
 @Entity
 @Table(name = "doctor_profile")
@@ -36,15 +36,11 @@ public class DoctorProfile extends BaseCreatedEntity {
     @Column(name = "department_name", nullable = false, length = 50)
     private String departmentName;
 
-    @Column(length = 100)
-    private String specialty;
-
     @Builder
-    public DoctorProfile(User user, String department, String departmentName, String specialty) {
+    public DoctorProfile(User user, String department, String departmentName) {
         this.publicId = PublicIdGenerator.generate("doc_");
         this.user = user;
         this.department = department;
         this.departmentName = departmentName;
-        this.specialty = specialty;
     }
 }

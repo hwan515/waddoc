@@ -1,5 +1,6 @@
 package com.waddoc.domain.patient.entity;
 
+import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.audit.BaseTimeEntity;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
@@ -9,6 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
@@ -43,13 +45,37 @@ public class Patient extends BaseTimeEntity {
     @Column(length = 255)
     private String address;
 
+    @Column(nullable = false, unique = true, length = 20)
+    private String phone;
+
+    @Column(name = "reference_image_path", length = 500)
+    private String referenceImagePath;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reference_image_uploaded_by_user_id")
+    private User referenceImageUploadedBy;
+
+    @Column(name = "reference_image_updated_at")
+    private LocalDateTime referenceImageUpdatedAt;
+
     @Builder
-    public Patient(String name, LocalDate birthDate, String regionCode, String address) {
+    public Patient(String name, LocalDate birthDate, String regionCode, String address, String phone) {
         this.publicId = PublicIdGenerator.generate("pat_");
         this.name = name;
         this.birthDate = birthDate;
         this.birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
         this.regionCode = regionCode;
         this.address = address;
+        this.phone = phone;
+    }
+
+    public void updateReferenceImage(String referenceImagePath, User uploadedBy) {
+        this.referenceImagePath = referenceImagePath;
+        this.referenceImageUploadedBy = uploadedBy;
+        this.referenceImageUpdatedAt = LocalDateTime.now();
+    }
+
+    public boolean hasReferenceImage() {
+        return this.referenceImagePath != null && !this.referenceImagePath.isBlank();
     }
 }

@@ -3,6 +3,7 @@ package com.waddoc.domain.auth.service;
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.LoginResponse;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
+import com.waddoc.domain.user.entity.ApprovalStatus;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.domain.user.repository.UserRepository;
@@ -35,6 +36,10 @@ public class AuthService {
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
+        }
+
+        if (user.isPendingApproval()) {
+            throw new BusinessException(ErrorCode.AUTH_ACCOUNT_PENDING_APPROVAL);
         }
 
         if (!user.isActive()) {
@@ -76,7 +81,7 @@ public class AuthService {
 
         User user = userRepository.findByPublicId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED));
-        if (user.getRole() != role || !user.isActive()) {
+        if (user.getRole() != role || !user.isActive() || user.getApprovalStatus() != ApprovalStatus.APPROVED) {
             refreshTokenService.delete(refreshToken);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED);
         }

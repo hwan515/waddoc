@@ -1,0 +1,72 @@
+package com.waddoc.domain.mission.entity;
+
+import com.waddoc.domain.carecase.entity.CareCase;
+import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.util.PublicIdGenerator;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "mission")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class Mission extends BaseTimeEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "mission_id")
+    private Long id;
+
+    @Column(name = "public_id", nullable = false, unique = true, length = 20)
+    private String publicId;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "case_id", nullable = false, unique = true)
+    private CareCase careCase;
+
+    @Column(name = "vehicle_id", length = 50)
+    private String vehicleId;
+
+    @Column(columnDefinition = "TEXT")
+    private String destination;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private MissionPhase phase;
+
+    @Column(precision = 10, scale = 7)
+    private BigDecimal latitude;
+
+    @Column(precision = 10, scale = 7)
+    private BigDecimal longitude;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @Builder
+    public Mission(CareCase careCase, String vehicleId, String destination) {
+        this.publicId = PublicIdGenerator.generate("ms_");
+        this.careCase = careCase;
+        this.vehicleId = vehicleId;
+        this.destination = destination;
+        this.phase = MissionPhase.CREATED;
+    }
+
+    public void updatePhase(MissionPhase phase) {
+        this.phase = phase;
+        if (phase == MissionPhase.COMPLETED) {
+            this.completedAt = LocalDateTime.now();
+        }
+    }
+
+    public void updateLocation(BigDecimal latitude, BigDecimal longitude) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+    }
+}
