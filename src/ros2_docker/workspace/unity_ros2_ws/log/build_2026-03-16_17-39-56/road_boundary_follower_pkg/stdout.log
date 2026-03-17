@@ -1,0 +1,22 @@
+running egg_info
+writing ../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/PKG-INFO
+writing dependency_links to ../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/dependency_links.txt
+writing entry points to ../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/entry_points.txt
+writing requirements to ../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/requires.txt
+writing top-level names to ../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/top_level.txt
+reading manifest file '../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/SOURCES.txt'
+writing manifest file '../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info/SOURCES.txt'
+running build
+running build_py
+copying road_boundary_follower_pkg/road_boundary_follower.py -> /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/road_boundary_follower_pkg/build/lib/road_boundary_follower_pkg
+running install
+running install_lib
+copying /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/road_boundary_follower_pkg/build/lib/road_boundary_follower_pkg/road_boundary_follower.py -> /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/road_boundary_follower_pkg/lib/python3.10/site-packages/road_boundary_follower_pkg
+byte-compiling /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/road_boundary_follower_pkg/lib/python3.10/site-packages/road_boundary_follower_pkg/road_boundary_follower.py to road_boundary_follower.cpython-310.pyc
+running install_data
+running install_egg_info
+removing '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/road_boundary_follower_pkg/lib/python3.10/site-packages/road_boundary_follower_pkg-0.0.0-py3.10.egg-info' (and everything under it)
+Copying ../../build/road_boundary_follower_pkg/road_boundary_follower_pkg.egg-info to /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/road_boundary_follower_pkg/lib/python3.10/site-packages/road_boundary_follower_pkg-0.0.0-py3.10.egg-info
+running install_scripts
+Installing road_boundary_follower script to /home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/install/road_boundary_follower_pkg/lib/road_boundary_follower_pkg
+writing list of installed files to '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/build/road_boundary_follower_pkg/install.log'
