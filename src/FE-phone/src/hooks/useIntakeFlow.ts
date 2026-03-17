@@ -241,7 +241,6 @@ export function useIntakeFlow() {
         store.setIsLoading(false);
 
         const rec = {
-          recommendationId: 'rec_mock01',
           symptomCategory: null,
           department: selectedDepartment.code,
           departmentName: selectedDepartment.name,

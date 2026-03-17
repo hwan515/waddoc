@@ -46,7 +46,6 @@ export interface AvailableSlot {
 }
 
 export interface RecommendationResult {
-  recommendationId: string;
   symptomCategory: string | null;
   department: string;
   departmentName: string;
