@@ -7,8 +7,10 @@ import AdminLogin from './pages/Auth/AdminLogin';
 import AdminSignup from './pages/Auth/AdminSignup';
 import PatientPortal from './pages/Patient/Portal';
 import PatientMyPage from './pages/Patient/MyPage';
+import RobotHome from './pages/Robot/Home';
 import AuthStep from './pages/Robot/AuthStep';
 import Conference from './pages/Robot/Conference';
+import Finish from './pages/Robot/Finish';
 
 // Mock EMR
 import EMRLogin from './pages/Doctor/EMR/Login';
@@ -41,8 +43,10 @@ function App() {
         <Route path="/patient/mypage" element={<PatientMyPage />} />
 
         {/* 로봇 (환자) 전용 화면 */}
+        <Route path="/robot" element={<RobotHome />} />
         <Route path="/robot/auth" element={<AuthStep />} />
         <Route path="/robot/conference" element={<Conference />} />
+        <Route path="/robot/finish" element={<Finish />} />
 
       </Routes>
     </Router>
