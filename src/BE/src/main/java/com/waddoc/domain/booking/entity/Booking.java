@@ -3,7 +3,6 @@ package com.waddoc.domain.booking.entity;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.intake.entity.IntakeSession;
-import com.waddoc.domain.intake.entity.Recommendation;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.audit.BaseTimeEntity;
 import com.waddoc.global.util.PublicIdGenerator;
@@ -43,10 +42,6 @@ public class Booking extends BaseTimeEntity {
     private IntakeSession intakeSession;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "recommendation_id")
-    private Recommendation recommendation;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "slot_id", nullable = false)
     private ScheduleSlot slot;
 
@@ -77,13 +72,12 @@ public class Booking extends BaseTimeEntity {
     private LocalDateTime cancelledAt;
 
     @Builder
-    public Booking(Patient patient, IntakeSession intakeSession, Recommendation recommendation,
+    public Booking(Patient patient, IntakeSession intakeSession,
                    ScheduleSlot slot, DoctorProfile doctor, String channel,
                    LocalDate appointmentDate, LocalTime startTime, LocalTime endTime) {
         this.publicId = PublicIdGenerator.generate("bk_");
         this.patient = patient;
         this.intakeSession = intakeSession;
-        this.recommendation = recommendation;
         this.slot = slot;
         this.doctor = doctor;
         this.channel = channel != null ? channel : "WEB_SIMULATOR";
