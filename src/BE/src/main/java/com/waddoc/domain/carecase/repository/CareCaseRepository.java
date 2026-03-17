@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -38,5 +40,34 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
             @Param("doctorUserPublicId") String doctorUserPublicId,
             @Param("status") CaseStatus status,
             @Param("appointmentDate") LocalDate appointmentDate
+    );
+
+    List<CareCase> findAllByBookingIn(List<Booking> bookings);
+
+    @Query(
+            value = """
+                    select c
+                    from CareCase c
+                    join fetch c.booking b
+                    join fetch c.patient p
+                    join fetch c.doctor d
+                    join fetch d.user du
+                    left join fetch c.intakeSession i
+                    where (:appointmentDate is null or b.appointmentDate = :appointmentDate)
+                      and (:status is null or c.status = :status)
+                    order by b.appointmentDate desc, b.startTime desc
+                    """,
+            countQuery = """
+                    select count(c)
+                    from CareCase c
+                    join c.booking b
+                    where (:appointmentDate is null or b.appointmentDate = :appointmentDate)
+                      and (:status is null or c.status = :status)
+                    """
+    )
+    Page<CareCase> searchAdminCases(
+            @Param("appointmentDate") LocalDate appointmentDate,
+            @Param("status") CaseStatus status,
+            Pageable pageable
     );
 }

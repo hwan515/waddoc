@@ -1,8 +1,14 @@
 package com.waddoc.domain.auth.service;
 
+import com.waddoc.domain.auth.dto.GuardianSignupRequest;
+import com.waddoc.domain.auth.dto.GuardianSignupResponse;
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.LoginResponse;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
+import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGuardianLink;
+import com.waddoc.domain.patient.repository.PatientGuardianLinkRepository;
+import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.domain.user.repository.UserRepository;
@@ -17,6 +23,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -26,10 +33,44 @@ public class AuthService {
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
 
     private final UserRepository userRepository;
+    private final PatientRepository patientRepository;
+    private final PatientGuardianLinkRepository patientGuardianLinkRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final LoginEligibilityService loginEligibilityService;
+
+    @Transactional
+    public GuardianSignupResponse signupGuardian(GuardianSignupRequest request) {
+        Patient patient = patientRepository.findByPhone(request.getPatientPhone())
+                .orElseThrow(() -> new BusinessException(ErrorCode.PATIENT_PHONE_NOT_FOUND));
+
+        User existingUser = userRepository.findByUsername(request.getUsername()).orElse(null);
+        if (existingUser != null) {
+            if (existingUser.getRole() == Role.GUARDIAN
+                    && patientGuardianLinkRepository.existsByPatientAndGuardianUser(patient, existingUser)) {
+                throw new BusinessException(ErrorCode.GUARDIAN_LINK_ALREADY_EXISTS);
+            }
+            throw new BusinessException(ErrorCode.AUTH_USERNAME_CONFLICT);
+        }
+
+        User guardian = User.builder()
+                .username(request.getUsername().trim())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .name(request.getName().trim())
+                .role(Role.GUARDIAN)
+                .build();
+        userRepository.save(guardian);
+
+        PatientGuardianLink link = PatientGuardianLink.builder()
+                .patient(patient)
+                .guardianUser(guardian)
+                .relation(request.getRelation().trim())
+                .build();
+        patientGuardianLinkRepository.save(link);
+
+        return GuardianSignupResponse.of(link);
+    }
 
     public LoginResponse login(LoginRequest request, HttpServletResponse response) {
         User user = userRepository.findByUsername(request.getUsername())
