@@ -1,6 +1,8 @@
 package com.waddoc.domain.intake.controller;
 
 import com.waddoc.domain.intake.dto.*;
+import com.waddoc.global.error.BusinessException;
+import com.waddoc.global.error.ErrorCode;
 import com.waddoc.domain.intake.service.IntakeSessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,26 +24,37 @@ public class IntakeSessionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PatchMapping("/{intakeSessionId}/bind-patient")
-    public ResponseEntity<BindPatientResponse> bindPatient(
+    @PatchMapping("/{intakeSessionId}")
+    public ResponseEntity<?> updateSession(
             @PathVariable String intakeSessionId,
-            @Valid @RequestBody BindPatientRequest request) {
-        BindPatientResponse response = intakeSessionService.bindPatient(intakeSessionId, request);
-        return ResponseEntity.ok(response);
+            @RequestBody UpdateIntakeSessionRequest request) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.INVALID_PATCH_REQUEST);
+        }
+
+        if (request.isBindPatientRequest()) {
+            BindPatientResponse response = intakeSessionService.bindPatient(
+                    intakeSessionId,
+                    new BindPatientRequest(request.getPatientId())
+            );
+            return ResponseEntity.ok(response);
+        }
+
+        if (request.isCompleteSessionRequest()) {
+            CompleteSessionResponse response = intakeSessionService.completeSession(
+                    intakeSessionId,
+                    new CompleteSessionRequest(request.getCompletionReason())
+            );
+            return ResponseEntity.ok(response);
+        }
+
+        throw new BusinessException(ErrorCode.INVALID_PATCH_REQUEST);
     }
 
     @GetMapping("/{intakeSessionId}")
     public ResponseEntity<IntakeSessionDetailResponse> getSession(
             @PathVariable String intakeSessionId) {
         IntakeSessionDetailResponse response = intakeSessionService.getSession(intakeSessionId);
-        return ResponseEntity.ok(response);
-    }
-
-    @PutMapping("/{intakeSessionId}/complete")
-    public ResponseEntity<CompleteSessionResponse> completeSession(
-            @PathVariable String intakeSessionId,
-            @Valid @RequestBody CompleteSessionRequest request) {
-        CompleteSessionResponse response = intakeSessionService.completeSession(intakeSessionId, request);
         return ResponseEntity.ok(response);
     }
 }

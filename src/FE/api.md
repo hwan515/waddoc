@@ -423,7 +423,7 @@
 | 항목 | 값 |
 |------|-----|
 | Method | `PATCH` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/bind-patient` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}` |
 | Auth | 불필요 |
 
 > 환자 식별 완료 후, 기존 세션에 환자를 바인딩한다.
@@ -479,13 +479,14 @@
 
 | 항목 | 값 |
 |------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/complete` |
+| Method | `PATCH` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}` |
 | Auth | 불필요 |
 
 **Request Body**
 ```json
 {
+  "status": "COMPLETED",
   "completionReason": "BOOKING_CREATED"
 }
 ```
@@ -561,13 +562,14 @@
 
 | 항목 | 값 |
 |------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/complete` |
+| Method | `PATCH` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}` |
 | Auth | 불필요 |
 
 **Request Body**
 ```json
 {
+  "status": "COMPLETED",
   "completionReason": "BOOKING_CREATED"
 }
 ```
@@ -657,7 +659,7 @@
 | 항목 | 값 |
 |------|-----|
 | Method | `GET` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/existing-bookings` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}/bookings` |
 | Auth | 불필요 (시뮬레이터) |
 
 > 공개 키오스크/시뮬레이터에서 예약을 조회할 때는 반드시 인테이크 세션 문맥 내에서 수행한다.
@@ -738,7 +740,7 @@
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/existing-bookings/{bookingId}/cancel` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}/bookings/{bookingId}/cancel` |
 | Auth | 불필요 (시뮬레이터) |
 
 > 서버는 반드시 `booking.patient_id == intakeSession.patient_id`를 검증하고, 세션 상태가 취소 가능한 단계인지 확인한다.
