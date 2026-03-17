@@ -188,7 +188,7 @@ const AuthStep = () => {
                 failCountRef.current = 0;
                 stopVideo();
                 setTimeout(() => {
-                    navigate('/robot/conference');
+                    navigate('/robot/measure-intro');
                 }, 2000);
             } else {
                 handleAuthFail();

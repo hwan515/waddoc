@@ -9,6 +9,11 @@ import PatientPortal from './pages/Patient/Portal';
 import PatientMyPage from './pages/Patient/MyPage';
 import RobotHome from './pages/Robot/Home';
 import AuthStep from './pages/Robot/AuthStep';
+import MeasureIntro from './pages/Robot/Measurement/MeasureIntro';
+import Temperature from './pages/Robot/Measurement/Temperature';
+import Blood from './pages/Robot/Measurement/Blood';
+import SpO2 from './pages/Robot/Measurement/SpO2';
+import Ecg from './pages/Robot/Measurement/Ecg';
 import Conference from './pages/Robot/Conference';
 import Finish from './pages/Robot/Finish';
 
@@ -45,6 +50,11 @@ function App() {
         {/* 로봇 (환자) 전용 화면 */}
         <Route path="/robot" element={<RobotHome />} />
         <Route path="/robot/auth" element={<AuthStep />} />
+        <Route path="/robot/measure-intro" element={<MeasureIntro />} />
+        <Route path="/robot/measure/temperature" element={<Temperature />} />
+        <Route path="/robot/measure/blood" element={<Blood />} />
+        <Route path="/robot/measure/spo2" element={<SpO2 />} />
+        <Route path="/robot/measure/ecg" element={<Ecg />} />
         <Route path="/robot/conference" element={<Conference />} />
         <Route path="/robot/finish" element={<Finish />} />
 
