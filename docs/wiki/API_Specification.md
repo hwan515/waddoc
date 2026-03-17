@@ -30,6 +30,11 @@
 > }
 > ```
 >
+> **HTTP 메서드 사용 규칙**:
+> - **리소스 CRUD**: `GET`(조회), `POST`(생성), `PUT`(전체 교체), `PATCH`(부분 수정), `DELETE`(삭제)를 기본으로 한다.
+> - **핵심 도메인 상태 변경**(세션 상태 전이, 미션 단계 전환, 환자 바인딩 등)은 **리소스 기반 `PATCH`**를 우선 사용하고, URL에 동사를 포함하지 않는다.
+> - **액션형 `POST` 허용 범위**: 인증/토큰 발급, 환자 식별·검증, 추천·매칭, 예약 취소(`/cancel`), 승인·반려(`/approve`, `/reject`), Webhook, Telemetry 등 부수 효과가 크거나 리소스 수정으로 표현하기 어려운 경우에 한해 `POST` + 행위 경로를 허용한다.
+>
 > **이중 ID 전략**:
 > - DB 내부 PK는 `bigint` 자동 증가이며, 외부 API에는 **`public_id`** (접두사 + nanoid)를 노출한다.
 > - API 요청/응답의 모든 ID 필드는 `public_id` 값이다 (예: `userId` → `"usr_V1StGXR8"`, `patientId` → `"pat_Zk3mQ9"`).
@@ -91,19 +96,20 @@
   "linkId": "link_H9kLm3",
   "status": "PENDING",
   "patient": {
-    "patientId": "pat_Zk3mQ9",
-    "name": "홍길동",
-    "birthDate6": "580315"
+    "nameMasked": "홍*동",
+    "birthDate6Masked": "5803**"
   },
-  "message": "관리자 승인 후 로그인할 수 있습니다."
+  "message": "가입 요청이 접수되었습니다. 관리자 승인 후 로그인할 수 있습니다."
 }
 ```
+
+> 비인증 API이므로 환자 개인정보를 최소화하여 마스킹된 값만 반환한다. `patientId`는 응답에 포함하지 않는다.
 
 **Errors**
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
-| 404 | `PATIENT_PHONE_NOT_FOUND` | 환자 휴대전화 번호로 대상을 찾을 수 없음 |
+| 404 | `GUARDIAN_SIGNUP_FAILED` | 가입 요청 처리 실패 (환자 미존재 여부를 외부에 노출하지 않음) |
 | 409 | `AUTH_USERNAME_CONFLICT` | 이미 사용 중인 로그인 ID |
 | 409 | `GUARDIAN_LINK_ALREADY_EXISTS` | 동일 환자에 대한 보호자 가입 이력이 이미 존재 |
 
@@ -407,10 +413,15 @@
 | 항목 | 값 |
 |------|-----|
 | Method | `PATCH` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/bind-patient` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}` |
 | Auth | 불필요 |
 
-> 환자 식별 완료 후, 기존 세션에 환자를 바인딩한다.
+> 환자 식별 완료 후, 세션 리소스의 `patientId`를 부분 수정하여 환자를 바인딩한다.
+>
+> **`PATCH /intake/sessions/{id}` 허용 케이스 규칙**:
+> - **환자 바인딩** (3.3): `patientId`만 포함
+> - **세션 종료** (3.6): `status`, `completionReason`만 포함
+> - 서로 다른 목적의 필드를 혼합한 요청은 `400 INVALID_PATCH_REQUEST`로 거부한다.
 >
 > **멱등성**: 같은 환자를 재바인딩하면 `200 OK` (멱등). 다른 환자를 바인딩 시도하면 `409 PATIENT_ALREADY_BOUND`.
 
@@ -437,7 +448,8 @@
 |--------|-----------|------|
 | 404 | `INTAKE_SESSION_NOT_FOUND` | 해당 세션 ID 없음 |
 | 404 | `PATIENT_NOT_FOUND` | 해당 환자 ID 없음 |
-| 400 | `SESSION_STATE_INVALID` | 비활성 세션 (COMPLETED/ABANDONED/FAILED) |
+| 400 | `INVALID_PATCH_REQUEST` | 허용되지 않는 필드 조합 |
+| 409 | `SESSION_STATE_INVALID` | 비활성 세션 (COMPLETED/ABANDONED/FAILED) |
 | 409 | `PATIENT_ALREADY_BOUND` | 이미 다른 환자가 바인딩된 세션 |
 
 ---
@@ -459,33 +471,7 @@
 
 ---
 
-### 3.5 인테이크 세션 종료
-
-| 항목 | 값 |
-|------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/complete` |
-| Auth | 불필요 |
-
-**Request Body**
-```json
-{
-  "completionReason": "BOOKING_CREATED"
-}
-```
-
-**Response** `200 OK`
-```json
-{
-  "intakeSessionId": "ints_R8kxPw",
-  "status": "COMPLETED",
-  "endedAt": "2026-03-10T10:02:00+09:00"
-}
-```
-
----
-
-### 3.6 진료과 선택 결과 저장 및 슬롯 안내
+### 3.5 진료과 선택 결과 저장 및 슬롯 안내
 
 | 항목 | 값 |
 |------|-----|
@@ -541,17 +527,18 @@
 
 ---
 
-### 3.7 인테이크 세션 종료
+### 3.6 인테이크 세션 종료
 
 | 항목 | 값 |
 |------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/complete` |
+| Method | `PATCH` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}` |
 | Auth | 불필요 |
 
 **Request Body**
 ```json
 {
+  "status": "COMPLETED",
   "completionReason": "BOOKING_CREATED"
 }
 ```
@@ -632,9 +619,9 @@
 |--------|-----------|------|
 | 409 | `BOOKING_SLOT_CONFLICT` | 이미 예약된 슬롯 |
 | 404 | `SLOT_NOT_FOUND` | 유효하지 않은 슬롯 ID |
-| 400 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 |
+| 409 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
 | 400 | `SLOT_NOT_OFFERED` | 해당 세션에서 안내되지 않은 슬롯 |
-| 400 | `SESSION_STATE_INVALID` | 예약 생성 불가한 세션 상태 |
+| 409 | `SESSION_STATE_INVALID` | 예약 생성 불가한 세션 상태 |
 
 ---
 
@@ -643,7 +630,7 @@
 | 항목 | 값 |
 |------|-----|
 | Method | `GET` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/existing-bookings` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}/bookings` |
 | Auth | 불필요 (시뮬레이터) |
 
 > 공개 키오스크/시뮬레이터에서 예약을 조회할 때는 반드시 인테이크 세션 문맥 내에서 수행한다.
@@ -678,7 +665,7 @@
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
-| 400 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 |
+| 409 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
 
 ---
 
@@ -724,7 +711,7 @@
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/intake/sessions/{intakeSessionId}/existing-bookings/{bookingId}/cancel` |
+| Path | `/api/v1/intake/sessions/{intakeSessionId}/bookings/{bookingId}/cancel` |
 | Auth | 불필요 (시뮬레이터) |
 
 > 서버는 반드시 `booking.patient_id == intakeSession.patient_id`를 검증하고, 세션 상태가 취소 가능한 단계인지 확인한다.
@@ -752,10 +739,10 @@
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
-| 400 | `BOOKING_ALREADY_CANCELLED` | 이미 취소된 예약 |
-| 400 | `BOOKING_NOT_CANCELLABLE` | 취소 불가 상태 (진료 중 등) |
+| 409 | `BOOKING_ALREADY_CANCELLED` | 이미 취소된 예약 |
+| 409 | `BOOKING_NOT_CANCELLABLE` | 취소 불가 상태 (진료 중 등) |
 | 403 | `PATIENT_MISMATCH` | 세션 환자와 예약 환자 불일치 |
-| 400 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 |
+| 409 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
 
 ### 4.5 예약 취소 (관리자/의사 — 인증 기반)
 
@@ -958,8 +945,8 @@
 
 | 항목 | 값 |
 |------|-----|
-| Method | `PUT` |
-| Path | `/api/v1/missions/{missionId}/phase` |
+| Method | `PATCH` |
+| Path | `/api/v1/missions/{missionId}` |
 | Auth | Bearer Token (ADMIN) |
 
 **Request Body**
@@ -1011,6 +998,11 @@
 ```
 
 > 서버는 수신한 payload로 `MISSION.phase`, `MISSION.latitude`, `MISSION.longitude`를 직접 갱신한다. 별도 이벤트 리소스는 생성하지 않는다.
+>
+> **관리자 PATCH와의 충돌 방지 규칙**:
+> - `seqNo` 또는 `timestamp` 기준으로 마지막 반영값보다 오래된 이벤트는 무시한다.
+> - 이미 상위 단계로 전환된 `MISSION.phase`를 하위 단계로 역전이시키지 않는다 (예: ARRIVED 이후 EN_ROUTE 수신 시 phase 갱신 무시, 위치 정보만 갱신).
+> - `sourceEventId`가 중복 수신되면 멱등 처리한다.
 
 **Response** `202 Accepted`
 
@@ -1148,7 +1140,7 @@
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/sessions/{sessionId}/token` |
-| Auth | Bearer Token (DOCTOR) — 의사 재발급 시 / 불필요 — 환자 재발급 시 |
+| Auth | Bearer Token (DOCTOR) — 의사 재발급 시 / Bearer Token (ADMIN) — 환자 재발급 시 |
 
 > 토큰 만료 시 재발급. 세션 상태가 `IN_PROGRESS`인 경우에만 허용.
 
@@ -1177,7 +1169,7 @@
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
-| 400 | `SESSION_NOT_IN_PROGRESS` | 세션이 IN_PROGRESS가 아닌 경우 |
+| 409 | `SESSION_NOT_IN_PROGRESS` | 세션이 IN_PROGRESS가 아닌 경우 |
 
 ---
 

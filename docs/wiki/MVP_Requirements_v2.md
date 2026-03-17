@@ -707,32 +707,3 @@ MVP 핵심 흐름:
 11. 의사는 진료 요약, 처방 여부, 재진 필요 여부를 기록할 수 있다.
 12. 운영 로그가 기록된다.
 13. 예외 상황에서도 데모가 중단되지 않는다.
-
----
-
-## 16. Jira 태스크 기준 구현 계획
-
-다음 분해는 **차량 태블릿 진료 시작 요청 → GPU 본인 확인 → 환자 참가 → 진료 종료** 기능 구현을 위한 권장 Jira 태스크 단위다.
-
-| Task ID | 범위 | 선행 조건 | 주요 산출물 | 완료 조건 |
-|---------|------|-----------|-------------|-----------|
-| `CONSULT-01` | 문서 기준 고정 및 데이터 모델 정합화 | 없음 | API/상태 전이 기준 확정, ERD 반영 항목 목록 | `MVP_Requirements_v2`, `API_Specification`, `Architecture` 기준 리소스 모델이 확정된다. |
-| `CONSULT-02` | 진료 준비 상태 조회 API | `CONSULT-01` | `GET /api/v1/cases/{caseId}` 확정, 미션/세션 상태 포함 응답 | 차량/의사 UI가 케이스, 미션, session 존재 여부를 조회할 수 있다. |
-| `CONSULT-03` | 미션 phase/위치 관리 API 구현 | `CONSULT-01` | `GET /api/v1/missions/{missionId}`, `PUT /api/v1/missions/{missionId}/phase`, ROS2 위치 갱신 연동 | 운영자가 미션 단계와 차량 위치를 직접 관리/조회할 수 있다. |
-| `CONSULT-04` | GPU 본인 확인 연동 구현 | `CONSULT-02`, `CONSULT-03` | 얼굴/신분증 업로드, 기준 이미지 조회, GPU 응답 파싱 | 차량 태블릿이 별도 본인확인 결과 테이블 없이 GPU 응답으로 본인 확인을 수행할 수 있다. |
-| `CONSULT-05` | 의사 진료 세션 생성 API 구현 | `CONSULT-02`, `CONSULT-03` | `CONSULTATION_SESSION` 마이그레이션, `POST /api/v1/cases/{caseId}/sessions`, LiveKit doctor token 발급 | 배정된 의사만 케이스별 활성 세션 1개를 생성할 수 있다. |
-| `CONSULT-06` | 환자 참가 토큰 발급 및 입장 API 구현 | `CONSULT-04`, `CONSULT-05` | `POST /api/v1/sessions/{sessionId}/participants/patient/token`, 환자/케이스 일치 검증, GPU 본인 확인 성공 시 token 발급 | 차량 태블릿이 본인 확인을 통과한 환자를 의사가 만든 세션에 참가시킬 수 있다. |
-| `CONSULT-07` | 세션 상태 조회/재발급/웹훅 구현 | `CONSULT-05`, `CONSULT-06` | `GET /api/v1/sessions/{sessionId}`, `POST /api/v1/sessions/{sessionId}/token`, LiveKit webhook | 연결 상태, 재연결, ABANDONED/IN_PROGRESS 전이가 동작한다. |
-| `CONSULT-08` | 진료 종료 및 요약 기록 API 구현 | `CONSULT-07` | `PUT /api/v1/sessions/{sessionId}/summary`, `CONSULTATION_SUMMARY` 저장 | 진료 종료 시 요약/처방 여부/재진 필요 여부를 기록하고 세션을 `COMPLETED`로 종료한다. |
-| `CONSULT-09` | 차량 태블릿/관리자 UI 연동 | `CONSULT-03`, `CONSULT-04`, `CONSULT-06` | 진료 시작 버튼, 본인 확인 결과 표시, 세션 대기/참가 상태 UI, 미션 phase 전환 UI | 차량 측에서 진료 시작, GPU 본인 확인, 세션 대기, 환자 참가가 가능하다. |
-| `CONSULT-10` | 의사 UI 실데이터 연동 | `CONSULT-02`, `CONSULT-05`, `CONSULT-07`, `CONSULT-08` | 진료 시작 버튼 활성화 로직, 실제 세션 상태/요약 연동 | 목데이터 없이 의사 UI에서 준비 상태 케이스 기준으로 진료 시작/종료가 가능하다. |
-| `CONSULT-11` | 운영 로그/권한/통합 테스트 | `CONSULT-03`~`CONSULT-10` | 운영 로그 액션 추가, RBAC 검증, 통합 테스트 시나리오 | `gpu identity check + doctor session + patient join + summary` E2E가 테스트로 검증된다. |
-
-### 16.1 구현 순서 가이드
-
-1. `CONSULT-01`에서 리소스 모델을 먼저 고정한다.
-2. `CONSULT-02`와 `CONSULT-03`으로 진료 준비 상태와 미션 상태를 조회/저장 가능하게 만든다.
-3. `CONSULT-04`에서 GPU 본인 확인 액션을 먼저 붙인다.
-4. `CONSULT-05`~`CONSULT-08`로 세션 생성, 참가, 상태 관리, 종료 기록을 순차 구현한다.
-5. `CONSULT-09`, `CONSULT-10`에서 차량 태블릿/의사 UI를 실제 API에 연결한다.
-6. `CONSULT-11`에서 RBAC, 운영 로그, 통합 시나리오를 마감한다.

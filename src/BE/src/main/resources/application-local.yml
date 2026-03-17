@@ -43,5 +43,5 @@ livekit:
 
 app:
   seed:
-    enabled: ${APP_SEED_ENABLED:false}
+    enabled: ${APP_SEED_ENABLED:true}
     default-password: "${APP_SEED_DEFAULT_PASSWORD:Passw0rd!}"
