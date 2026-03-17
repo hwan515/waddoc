@@ -18,8 +18,11 @@ public enum ErrorCode {
     AUTH_ACCOUNT_PENDING_APPROVAL(HttpStatus.UNAUTHORIZED, "AUTH_ACCOUNT_PENDING_APPROVAL", "관리자 승인 대기 중인 계정입니다."),
     AUTH_ACCOUNT_LOCKED(HttpStatus.LOCKED, "AUTH_ACCOUNT_LOCKED", "비활성화된 계정입니다."),
     AUTH_UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "인증이 필요합니다."),
+    AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "해당 작업에 접근할 권한이 없습니다."),
     AUTH_REFRESH_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_EXPIRED", "리프레시 토큰이 만료되었거나 유효하지 않습니다."),
     AUTH_TOKEN_REUSE(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_REUSE", "이미 사용되었거나 무효화된 리프레시 토큰입니다."),
+    AUTH_DOCTOR_PROFILE_REQUIRED(HttpStatus.FORBIDDEN, "AUTH_DOCTOR_PROFILE_REQUIRED", "의사 프로필이 연결되지 않은 계정입니다."),
+    AUTH_GUARDIAN_NOT_APPROVED(HttpStatus.FORBIDDEN, "AUTH_GUARDIAN_NOT_APPROVED", "승인되지 않았거나 연결된 환자가 없는 보호자 계정입니다."),
 
     // Patient
     PATIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PATIENT_NOT_FOUND", "해당 환자를 찾을 수 없습니다."),

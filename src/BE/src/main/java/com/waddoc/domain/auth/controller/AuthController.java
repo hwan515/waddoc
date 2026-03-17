@@ -4,10 +4,12 @@ import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.LoginResponse;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
 import com.waddoc.domain.auth.service.AuthService;
+import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -37,11 +39,11 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
-            @RequestHeader(name = "Authorization", required = false) String authorizationHeader,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @CookieValue(name = "refresh_token", required = false) String refreshToken,
             HttpServletResponse response
     ) {
-        authService.logout(authorizationHeader, refreshToken, response);
+        authService.logout(authenticatedUser, refreshToken, response);
         return ResponseEntity.noContent().build();
     }
 }

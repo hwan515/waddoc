@@ -3,13 +3,14 @@ package com.waddoc.domain.auth.service;
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.LoginResponse;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
-import com.waddoc.domain.user.entity.ApprovalStatus;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.domain.user.repository.UserRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
+import com.waddoc.global.type.ApprovalStatus;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -21,7 +22,6 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final String BEARER_PREFIX = "Bearer ";
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
 
@@ -29,6 +29,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
+    private final LoginEligibilityService loginEligibilityService;
 
     public LoginResponse login(LoginRequest request, HttpServletResponse response) {
         User user = userRepository.findByUsername(request.getUsername())
@@ -45,6 +46,8 @@ public class AuthService {
         if (!user.isActive()) {
             throw new BusinessException(ErrorCode.AUTH_ACCOUNT_LOCKED);
         }
+
+        loginEligibilityService.validate(user);
 
         String accessToken = jwtTokenProvider.createAccessToken(user.getPublicId(), user.getRole());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getPublicId(), user.getRole());
@@ -82,8 +85,14 @@ public class AuthService {
         User user = userRepository.findByPublicId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED));
         if (user.getRole() != role || !user.isActive() || user.getApprovalStatus() != ApprovalStatus.APPROVED) {
-            refreshTokenService.delete(refreshToken);
+            refreshTokenService.deleteAllByUserId(userId);
             throw new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED);
+        }
+        try {
+            loginEligibilityService.validate(user);
+        } catch (BusinessException e) {
+            refreshTokenService.deleteAllByUserId(userId);
+            throw e;
         }
 
         String newAccessToken = jwtTokenProvider.createAccessToken(userId, role);
@@ -105,9 +114,8 @@ public class AuthService {
                 .build();
     }
 
-    public void logout(String authorizationHeader, String refreshToken, HttpServletResponse response) {
-        String accessToken = extractBearerToken(authorizationHeader);
-        if (!jwtTokenProvider.validateToken(accessToken)) {
+    public void logout(AuthenticatedUser authenticatedUser, String refreshToken, HttpServletResponse response) {
+        if (authenticatedUser == null) {
             throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
         }
 
@@ -121,7 +129,7 @@ public class AuthService {
     private void addRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
-                .secure(false) // 로컬 개발 단계에서는 false, 운영에서는 true 고려
+                .secure(false)
                 .path(REFRESH_TOKEN_COOKIE_PATH)
                 .sameSite("Strict")
                 .maxAge(maxAgeSeconds)
@@ -148,13 +156,6 @@ public class AuthService {
                 .expiresIn((int) jwtTokenProvider.getAccessTokenExpiry())
                 .user(buildUserInfo(user))
                 .build();
-    }
-
-    private String extractBearerToken(String authorizationHeader) {
-        if (authorizationHeader == null || !authorizationHeader.startsWith(BEARER_PREFIX)) {
-            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
-        }
-        return authorizationHeader.substring(BEARER_PREFIX.length()).trim();
     }
 
     private LoginResponse.UserInfo buildUserInfo(User user) {

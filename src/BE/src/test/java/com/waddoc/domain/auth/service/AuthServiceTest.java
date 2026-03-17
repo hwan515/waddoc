@@ -2,13 +2,14 @@ package com.waddoc.domain.auth.service;
 
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
-import com.waddoc.domain.user.entity.ApprovalStatus;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.domain.user.repository.UserRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
+import com.waddoc.global.type.ApprovalStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,11 +41,20 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private LoginEligibilityService loginEligibilityService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, passwordEncoder, jwtTokenProvider, refreshTokenService);
+        authService = new AuthService(
+                userRepository,
+                passwordEncoder,
+                jwtTokenProvider,
+                refreshTokenService,
+                loginEligibilityService
+        );
     }
 
     @Test
@@ -59,7 +69,7 @@ class AuthServiceTest {
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS);
 
-        verifyNoInteractions(passwordEncoder, jwtTokenProvider, refreshTokenService);
+        verifyNoInteractions(passwordEncoder, jwtTokenProvider, refreshTokenService, loginEligibilityService);
     }
 
     @Test
@@ -105,6 +115,33 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginThrowsWhenDoctorEligibilityValidationFails() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        LoginRequest request = buildLoginRequest("doctor_kim", "Passw0rd!");
+        User doctor = User.builder()
+                .username("doctor_kim")
+                .passwordHash("encoded-password")
+                .name("김의사")
+                .role(Role.DOCTOR)
+                .build();
+        setField(doctor, "approvalStatus", ApprovalStatus.APPROVED);
+        setField(doctor, "active", true);
+
+        when(userRepository.findByUsername("doctor_kim")).thenReturn(Optional.of(doctor));
+        when(passwordEncoder.matches("Passw0rd!", "encoded-password")).thenReturn(true);
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.AUTH_DOCTOR_PROFILE_REQUIRED))
+                .when(loginEligibilityService)
+                .validate(doctor);
+
+        assertThatThrownBy(() -> authService.login(request, response))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.AUTH_DOCTOR_PROFILE_REQUIRED);
+
+        verifyNoInteractions(jwtTokenProvider, refreshTokenService);
+    }
+
+    @Test
     void refreshRotatesTokenWhenRefreshTokenIsValid() {
         MockHttpServletResponse response = new MockHttpServletResponse();
         String refreshToken = "old-refresh-token";
@@ -141,8 +178,41 @@ class AuthServiceTest {
         assertThat(response.getHeader("Set-Cookie")).contains("refresh_token=new-refresh-token");
         assertThat(response.getHeader("Set-Cookie")).contains("Path=/api/v1/auth");
 
+        verify(loginEligibilityService).validate(user);
         verify(refreshTokenService).delete(refreshToken);
         verify(refreshTokenService).save("new-refresh-token", userId, refreshTokenExpiry);
+    }
+
+    @Test
+    void refreshRevokesAllUserTokensWhenGuardianEligibilityFails() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        String refreshToken = "guardian-refresh-token";
+        String userId = "usr_guardian01";
+        User guardian = User.builder()
+                .username("guardian_lee")
+                .passwordHash("encoded-password")
+                .name("이보호자")
+                .role(Role.GUARDIAN)
+                .build();
+        setField(guardian, "publicId", userId);
+        setField(guardian, "active", true);
+        setField(guardian, "approvalStatus", ApprovalStatus.APPROVED);
+
+        when(refreshTokenService.findUserIdByRefreshToken(refreshToken)).thenReturn(Optional.of(userId));
+        when(jwtTokenProvider.validateToken(refreshToken)).thenReturn(true);
+        when(jwtTokenProvider.getUserId(refreshToken)).thenReturn(userId);
+        when(jwtTokenProvider.getRole(refreshToken)).thenReturn(Role.GUARDIAN);
+        when(userRepository.findByPublicId(userId)).thenReturn(Optional.of(guardian));
+        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.AUTH_GUARDIAN_NOT_APPROVED))
+                .when(loginEligibilityService)
+                .validate(guardian);
+
+        assertThatThrownBy(() -> authService.refresh(refreshToken, response))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.AUTH_GUARDIAN_NOT_APPROVED);
+
+        verify(refreshTokenService).deleteAllByUserId(userId);
     }
 
     @Test
@@ -189,12 +259,10 @@ class AuthServiceTest {
     @Test
     void logoutDeletesStoredTokenAndExpiresCookie() {
         MockHttpServletResponse response = new MockHttpServletResponse();
-        String authorizationHeader = "Bearer valid-access-token";
         String refreshToken = "stored-refresh-token";
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser("usr_test01", Role.ADMIN);
 
-        when(jwtTokenProvider.validateToken("valid-access-token")).thenReturn(true);
-
-        authService.logout(authorizationHeader, refreshToken, response);
+        authService.logout(authenticatedUser, refreshToken, response);
 
         verify(refreshTokenService).delete(refreshToken);
         assertThat(response.getHeader("Set-Cookie")).contains("refresh_token=");
@@ -211,7 +279,7 @@ class AuthServiceTest {
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_UNAUTHORIZED);
 
-        verifyNoInteractions(jwtTokenProvider, refreshTokenService);
+        verifyNoInteractions(refreshTokenService);
     }
 
     private LoginRequest buildLoginRequest(String username, String password) {
