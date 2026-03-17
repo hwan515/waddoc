@@ -1,0 +1,37 @@
+[0.345s] Invoking command in '/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/lane_follow_pkg': PYTHONPATH=/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/lane_follow_pkg build --build-base /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build install --record /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/install.log --single-version-externally-managed install_data
+[0.480s] running egg_info
+[0.480s] creating ../build/lane_follow_pkg/lane_follow_pkg.egg-info
+[0.481s] writing ../build/lane_follow_pkg/lane_follow_pkg.egg-info/PKG-INFO
+[0.481s] writing dependency_links to ../build/lane_follow_pkg/lane_follow_pkg.egg-info/dependency_links.txt
+[0.481s] writing entry points to ../build/lane_follow_pkg/lane_follow_pkg.egg-info/entry_points.txt
+[0.481s] writing requirements to ../build/lane_follow_pkg/lane_follow_pkg.egg-info/requires.txt
+[0.481s] writing top-level names to ../build/lane_follow_pkg/lane_follow_pkg.egg-info/top_level.txt
+[0.481s] writing manifest file '../build/lane_follow_pkg/lane_follow_pkg.egg-info/SOURCES.txt'
+[0.482s] reading manifest file '../build/lane_follow_pkg/lane_follow_pkg.egg-info/SOURCES.txt'
+[0.482s] writing manifest file '../build/lane_follow_pkg/lane_follow_pkg.egg-info/SOURCES.txt'
+[0.482s] running build
+[0.482s] running build_py
+[0.482s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build
+[0.482s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build/lib
+[0.482s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build/lib/lane_follow_pkg
+[0.482s] copying lane_follow_pkg/__init__.py -> /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build/lib/lane_follow_pkg
+[0.482s] copying lane_follow_pkg/lane_detect.py -> /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build/lib/lane_follow_pkg
+[0.483s] running install
+[0.483s] running install_lib
+[0.483s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages/lane_follow_pkg
+[0.483s] copying /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build/lib/lane_follow_pkg/__init__.py -> /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages/lane_follow_pkg
+[0.483s] copying /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build/lib/lane_follow_pkg/lane_detect.py -> /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages/lane_follow_pkg
+[0.483s] byte-compiling /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages/lane_follow_pkg/__init__.py to __init__.cpython-310.pyc
+[0.483s] byte-compiling /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages/lane_follow_pkg/lane_detect.py to lane_detect.cpython-310.pyc
+[0.484s] running install_data
+[0.484s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/share/ament_index
+[0.484s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/share/ament_index/resource_index
+[0.484s] creating /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/share/ament_index/resource_index/packages
+[0.485s] copying resource/lane_follow_pkg -> /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/share/ament_index/resource_index/packages
+[0.485s] copying package.xml -> /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/share/lane_follow_pkg
+[0.485s] running install_egg_info
+[0.485s] Copying ../build/lane_follow_pkg/lane_follow_pkg.egg-info to /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages/lane_follow_pkg-0.0.0-py3.10.egg-info
+[0.486s] running install_scripts
+[0.496s] Installing lane_detect script to /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/lane_follow_pkg
+[0.497s] writing list of installed files to '/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/install.log'
+[0.510s] Invoked command in '/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/lane_follow_pkg' returned '0': PYTHONPATH=/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/install/lane_follow_pkg/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/lane_follow_pkg build --build-base /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/build install --record /home/seungyeon9944/Desktop/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/src/build/lane_follow_pkg/install.log --single-version-externally-managed install_data
