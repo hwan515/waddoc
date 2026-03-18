@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Entity
 @Table(name = "mission")
@@ -55,6 +56,15 @@ public class Mission extends BaseTimeEntity {
 
     @Column(precision = 10, scale = 7)
     private BigDecimal longitude;
+
+    @Column(name = "last_telemetry_source_event_id", length = 100)
+    private String lastTelemetrySourceEventId;
+
+    @Column(name = "last_telemetry_seq_no")
+    private Long lastTelemetrySeqNo;
+
+    @Column(name = "last_telemetry_at")
+    private LocalDateTime lastTelemetryAt;
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
@@ -107,5 +117,15 @@ public class Mission extends BaseTimeEntity {
     public void updateLocation(BigDecimal latitude, BigDecimal longitude) {
         this.latitude = latitude;
         this.longitude = longitude;
+    }
+
+    public void recordTelemetry(String sourceEventId, Long seqNo, LocalDateTime timestamp) {
+        this.lastTelemetrySourceEventId = sourceEventId;
+        this.lastTelemetrySeqNo = seqNo;
+        this.lastTelemetryAt = timestamp;
+    }
+
+    public boolean isTelemetryDuplicate(String sourceEventId) {
+        return sourceEventId != null && Objects.equals(this.lastTelemetrySourceEventId, sourceEventId);
     }
 }

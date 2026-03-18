@@ -36,6 +36,9 @@ livekit:
   api-secret: ${LIVEKIT_API_SECRET}
   url: ${LIVEKIT_URL:wss://${SERVER_DOMAIN}/livekit}
 
+telemetry:
+  api-key: ${TELEMETRY_API_KEY}
+
 server:
   servlet:
     session:

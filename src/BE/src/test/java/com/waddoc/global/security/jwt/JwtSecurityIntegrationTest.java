@@ -1,5 +1,7 @@
 package com.waddoc.global.security.jwt;
 
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.user.entity.Role;
 import org.junit.jupiter.api.Test;
@@ -7,9 +9,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +29,9 @@ class JwtSecurityIntegrationTest {
 
     @Autowired
     private MissionRepository missionRepository;
+
+    @Value("${telemetry.api-key}")
+    private String telemetryApiKey;
 
     @LocalServerPort
     private int port;
@@ -82,6 +89,48 @@ class JwtSecurityIntegrationTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("\"missionId\":\"" + missionId + "\"");
+    }
+
+    @Test
+    void telemetryApiKeyCanPostMissionTelemetry() {
+        Mission mission = missionRepository.findAllForAdminDashboard().stream()
+                .filter(candidate -> candidate.getPhase() == MissionPhase.DISPATCHED)
+                .findFirst()
+                .orElseThrow();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-API-Key", telemetryApiKey);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        String body = """
+                {
+                  "source": "ROS2",
+                  "sourceEventId": "ros2_msg_abc123",
+                  "seqNo": 42,
+                  "vehicleId": "%s",
+                  "phase": "%s",
+                  "latitude": %s,
+                  "longitude": %s,
+                  "speed": 30.5,
+                  "heading": 180,
+                  "timestamp": "2026-03-11T09:15:00+09:00",
+                  "metadata": {}
+                }
+                """.formatted(
+                mission.getVehicleId(),
+                mission.getPhase().name(),
+                mission.getLatitude().toPlainString(),
+                mission.getLongitude().toPlainString()
+        );
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/missions/" + mission.getPublicId() + "/telemetry",
+                HttpMethod.POST,
+                new HttpEntity<>(body, headers),
+                Void.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
     }
 
     @Test
