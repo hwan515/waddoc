@@ -69,6 +69,15 @@ public class Patient extends BaseTimeEntity {
         this.phone = phone;
     }
 
+    public void updateProfile(String name, LocalDate birthDate, String regionCode, String address, String phone) {
+        this.name = name;
+        this.birthDate = birthDate;
+        this.birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
+        this.regionCode = regionCode;
+        this.address = address;
+        this.phone = phone;
+    }
+
     public void updateReferenceImage(String referenceImagePath, User uploadedBy) {
         this.referenceImagePath = referenceImagePath;
         this.referenceImageUploadedBy = uploadedBy;

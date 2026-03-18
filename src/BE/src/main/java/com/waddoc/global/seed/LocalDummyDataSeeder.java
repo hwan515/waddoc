@@ -45,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Slf4j
@@ -63,6 +64,13 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private static final LocalTime SLOT_1400 = LocalTime.of(14, 0);
     private static final LocalTime SLOT_1430 = LocalTime.of(14, 30);
     private static final String DEFAULT_CHANNEL = "PHONE";
+    private static final String GIMCHEON_JEUNGSAN = "GIMCHEON_JEUNGSAN";
+    private static final String ADDRESS_JANGJEON_CLINIC = "경북 김천시 증산면 장전1길 69";
+    private static final String ADDRESS_JANGJEON_SIDE = "경북 김천시 증산면 장전3길 19";
+    private static final String ADDRESS_HWANGJEOM_MAIN = "경북 김천시 증산면 원황점길 422";
+    private static final String ADDRESS_HWANGJEOM_VALLEY = "경북 김천시 증산면 원황점길 436-33";
+    private static final String ADDRESS_GEUMGOK_MAIN = "경북 김천시 증산면 금곡리2길 89";
+    private static final String ADDRESS_GEUMGOK_SUB = "경북 김천시 증산면 금곡리2길 29-20";
 
     private final UserRepository userRepository;
     private final PatientRepository patientRepository;
@@ -104,15 +112,29 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 adminUser, "seed_doc_eye_han", "한의사", "OPHTHALMOLOGY", "안과");
         ensureDoctorProfile(pendingDoctorUser, "FAMILY_MEDICINE", "가정의학과");
 
-        Patient newBookingPatient = ensurePatient(
-                "홍길동", LocalDate.of(1958, 3, 15), "ULLEUNG", "울릉군 북면", "01012345678",
+        Patient completedCasePatient = ensurePatient(
+                "홍길동", LocalDate.of(1958, 3, 15), GIMCHEON_JEUNGSAN, ADDRESS_JANGJEON_CLINIC, "01049163720",
                 "seed/patients/hong-gildong-reference.jpg", adminUser);
-        Patient existingBookingPatient = ensurePatient(
-                "김영희", LocalDate.of(1964, 8, 21), "ULLEUNG", "울릉군 서면", "01055554444",
+        Patient dispatchedCasePatient = ensurePatient(
+                "김영희", LocalDate.of(1964, 8, 21), GIMCHEON_JEUNGSAN, ADDRESS_HWANGJEOM_MAIN, "01055554444",
                 "seed/patients/kim-younghee-reference.jpg", adminUser);
+        Patient enRouteCasePatient = ensurePatient(
+                "박순자", LocalDate.of(1951, 11, 2), GIMCHEON_JEUNGSAN, ADDRESS_GEUMGOK_MAIN, "01033337777",
+                "seed/patients/park-soonja-reference.jpg", adminUser);
+        Patient verifyingCasePatient = ensurePatient(
+                "이철수", LocalDate.of(1956, 6, 27), GIMCHEON_JEUNGSAN, ADDRESS_JANGJEON_SIDE, "01066668888",
+                "seed/patients/lee-cheolsu-reference.jpg", adminUser);
+        Patient consultingCasePatient = ensurePatient(
+                "최말순", LocalDate.of(1949, 1, 8), GIMCHEON_JEUNGSAN, ADDRESS_HWANGJEOM_VALLEY, "01077779999",
+                "seed/patients/choi-malsun-reference.jpg", adminUser);
+        Patient returningCasePatient = ensurePatient(
+                "정미숙", LocalDate.of(1961, 4, 18), GIMCHEON_JEUNGSAN, ADDRESS_GEUMGOK_SUB, "01088886666",
+                "seed/patients/jung-misuk-reference.jpg", adminUser);
 
-        ensureGuardianLink(existingBookingPatient, approvedGuardianUser, "DAUGHTER", GuardianLinkStatus.APPROVED, adminUser);
-        ensureGuardianLink(newBookingPatient, pendingGuardianUser, "SON", GuardianLinkStatus.PENDING, adminUser);
+        ensureGuardianLink(dispatchedCasePatient, approvedGuardianUser, "DAUGHTER", GuardianLinkStatus.APPROVED, adminUser);
+        ensureGuardianLink(enRouteCasePatient, approvedGuardianUser, "NEPHEW", GuardianLinkStatus.APPROVED, adminUser);
+        ensureGuardianLink(completedCasePatient, pendingGuardianUser, "SON", GuardianLinkStatus.PENDING, adminUser);
+        ensureGuardianLink(consultingCasePatient, pendingGuardianUser, "DAUGHTER_IN_LAW", GuardianLinkStatus.PENDING, adminUser);
 
         seedDepartmentSlots(List.of(
                 doctorKim,
@@ -125,26 +147,27 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         ScheduleSlot pastPreferredSlot = ensureSlot(doctorKim, today.minusDays(30), SLOT_1000, SLOT_1030);
         IntakeSession pastCompletedIntake = ensureIntakeSession(
-                newBookingPatient,
-                "01012345678",
+                completedCasePatient,
+                "01049163720",
                 "INTERNAL_MEDICINE",
                 "내과",
+                "혈압 관리와 기존 처방 약 복용 상담",
                 List.of(pastPreferredSlot.getPublicId()),
                 CompletionReason.BOOKING_CREATED
         );
-        Booking pastCompletedBooking = ensureBooking(newBookingPatient, pastPreferredSlot, BookingStatus.COMPLETED, pastCompletedIntake);
+        Booking pastCompletedBooking = ensureBooking(completedCasePatient, pastPreferredSlot, BookingStatus.COMPLETED, pastCompletedIntake);
         CareCase pastCase = ensureCareCase(pastCompletedBooking, pastCompletedIntake);
         ensureMission(
                 pastCase,
-                "ULLEUNG-01",
-                newBookingPatient.getAddress(),
+                "GIMCHEON-01",
+                completedCasePatient.getAddress(),
                 MissionPhase.COMPLETED,
-                new BigDecimal("37.4841000"),
-                new BigDecimal("130.9055000")
+                bd("35.8672000"),
+                bd("128.0589000")
         );
         ConsultationSession pastSession = ensureConsultationSession(
                 pastCase,
-                "seed-room-past-completed",
+                "seed-room-jangjeon-completed",
                 "ws://localhost:7880",
                 ConsultationSessionStatus.COMPLETED,
                 18
@@ -159,37 +182,163 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         ScheduleSlot futureExistingSlot = ensureSlot(doctorPark, today.plusDays(2), SLOT_0900, SLOT_0930);
         IntakeSession futureConfirmedIntake = ensureIntakeSession(
-                existingBookingPatient,
+                dispatchedCasePatient,
                 "01055554444",
                 "INTERNAL_MEDICINE",
                 "내과",
+                "만성질환 경과 확인과 재진 예약",
                 List.of(futureExistingSlot.getPublicId()),
                 CompletionReason.BOOKING_CREATED
         );
-        Booking futureConfirmedBooking = ensureBooking(existingBookingPatient, futureExistingSlot, BookingStatus.CONFIRMED, futureConfirmedIntake);
+        Booking futureConfirmedBooking = ensureBooking(dispatchedCasePatient, futureExistingSlot, BookingStatus.CONFIRMED, futureConfirmedIntake);
         CareCase futureCase = ensureCareCase(futureConfirmedBooking, futureConfirmedIntake);
         ensureMission(
                 futureCase,
-                "ULLEUNG-02",
-                existingBookingPatient.getAddress(),
+                "GIMCHEON-02",
+                dispatchedCasePatient.getAddress(),
                 MissionPhase.DISPATCHED,
-                new BigDecimal("37.4872000"),
-                new BigDecimal("130.8999000")
+                bd("35.8506398"),
+                bd("128.0542159")
         );
         ensureConsultationSession(
                 futureCase,
-                "seed-room-upcoming",
+                "seed-room-hwangjeom-dispatched",
                 "ws://localhost:7880",
                 ConsultationSessionStatus.READY,
                 null
         );
 
+        ScheduleSlot enRouteSlot = ensureSlot(doctorLee, today.plusDays(1), SLOT_1100, SLOT_1130);
+        IntakeSession enRouteIntake = ensureIntakeSession(
+                enRouteCasePatient,
+                "01033337777",
+                "DERMATOLOGY",
+                "피부과",
+                "팔과 목 부위 발진 악화",
+                List.of(enRouteSlot.getPublicId()),
+                CompletionReason.BOOKING_CREATED
+        );
+        Booking enRouteBooking = ensureBooking(enRouteCasePatient, enRouteSlot, BookingStatus.CONFIRMED, enRouteIntake);
+        CareCase enRouteCase = ensureCareCase(enRouteBooking, enRouteIntake);
+        ensureMission(
+                enRouteCase,
+                "GIMCHEON-03",
+                enRouteCasePatient.getAddress(),
+                MissionPhase.EN_ROUTE,
+                bd("35.8822245"),
+                bd("128.0461659")
+        );
+        ensureConsultationSession(
+                enRouteCase,
+                "seed-room-geumgok-enroute",
+                "ws://localhost:7880",
+                ConsultationSessionStatus.READY,
+                null
+        );
+
+        ScheduleSlot verifyingSlot = ensureSlot(doctorChoi, today.plusDays(1), SLOT_1400, SLOT_1430);
+        IntakeSession verifyingIntake = ensureIntakeSession(
+                verifyingCasePatient,
+                "01066668888",
+                "ORTHOPEDICS",
+                "정형외과",
+                "무릎 통증과 보행 불편",
+                List.of(verifyingSlot.getPublicId()),
+                CompletionReason.BOOKING_CREATED
+        );
+        Booking verifyingBooking = ensureBooking(verifyingCasePatient, verifyingSlot, BookingStatus.CONFIRMED, verifyingIntake);
+        CareCase verifyingCase = ensureCareCase(verifyingBooking, verifyingIntake);
+        ensureMission(
+                verifyingCase,
+                "GIMCHEON-04",
+                verifyingCasePatient.getAddress(),
+                MissionPhase.VERIFYING,
+                bd("35.8679186"),
+                bd("128.0592880")
+        );
+        ensureConsultationSession(
+                verifyingCase,
+                "seed-room-jangjeon-verifying",
+                "ws://localhost:7880",
+                ConsultationSessionStatus.READY,
+                null
+        );
+
+        ScheduleSlot consultingSlot = ensureSlot(doctorJung, today.plusDays(3), SLOT_1000, SLOT_1030);
+        IntakeSession consultingIntake = ensureIntakeSession(
+                consultingCasePatient,
+                "01077779999",
+                "NEUROLOGY",
+                "신경과",
+                "어지럼과 두통이 반복됨",
+                List.of(consultingSlot.getPublicId()),
+                CompletionReason.BOOKING_CREATED
+        );
+        Booking consultingBooking = ensureBooking(consultingCasePatient, consultingSlot, BookingStatus.CONFIRMED, consultingIntake);
+        CareCase consultingCase = ensureCareCase(consultingBooking, consultingIntake);
+        ensureMission(
+                consultingCase,
+                "GIMCHEON-05",
+                consultingCasePatient.getAddress(),
+                MissionPhase.CONSULTING,
+                bd("35.8494890"),
+                bd("128.0538504")
+        );
+        ensureConsultationSession(
+                consultingCase,
+                "seed-room-hwangjeom-consulting",
+                "ws://localhost:7880",
+                ConsultationSessionStatus.IN_PROGRESS,
+                null
+        );
+
+        ScheduleSlot returningSlot = ensureSlot(doctorHan, today.minusDays(3), SLOT_1400, SLOT_1430);
+        IntakeSession returningIntake = ensureIntakeSession(
+                returningCasePatient,
+                "01088886666",
+                "OPHTHALMOLOGY",
+                "안과",
+                "시야 흐림과 안구 건조감",
+                List.of(returningSlot.getPublicId()),
+                CompletionReason.BOOKING_CREATED
+        );
+        Booking returningBooking = ensureBooking(returningCasePatient, returningSlot, BookingStatus.COMPLETED, returningIntake);
+        CareCase returningCase = ensureCareCase(returningBooking, returningIntake);
+        ensureMission(
+                returningCase,
+                "GIMCHEON-06",
+                returningCasePatient.getAddress(),
+                MissionPhase.RETURNING,
+                bd("35.8828819"),
+                bd("128.0431673")
+        );
+        ConsultationSession returningSession = ensureConsultationSession(
+                returningCase,
+                "seed-room-geumgok-returning",
+                "ws://localhost:7880",
+                ConsultationSessionStatus.COMPLETED,
+                12
+        );
+        ensureConsultationSummary(
+                returningSession,
+                "안구 건조증 완화제 처방 후 2주 뒤 재평가 안내.",
+                true,
+                "인공눈물 1일 4회 점안",
+                true
+        );
+
         log.info(
-                "Local dummy data seeded. adminUsername={}, defaultPassword={}, newBookingPhone={}, existingBookingPhone={}, approvedGuardianUsername={}, pendingGuardianUsername={}, pendingDoctorUsername={}",
+                "Local dummy data seeded. adminUsername={}, defaultPassword={}, samplePatientPhones={}, approvedGuardianUsername={}, pendingGuardianUsername={}, pendingDoctorUsername={}",
                 adminUser.getUsername(),
                 defaultPassword,
-                "01012345678",
-                "01055554444",
+                List.of(
+                        completedCasePatient.getPhone(),
+                        dispatchedCasePatient.getPhone(),
+                        enRouteCasePatient.getPhone(),
+                        verifyingCasePatient.getPhone(),
+                        consultingCasePatient.getPhone(),
+                        returningCasePatient.getPhone()
+                ),
                 approvedGuardianUser.getUsername(),
                 pendingGuardianUser.getUsername(),
                 pendingDoctorUser.getUsername()
@@ -251,7 +400,9 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private Patient ensurePatient(String name, LocalDate birthDate, String regionCode, String address, String phone,
                                   String referenceImagePath, User uploadedBy) {
+        String birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
         Patient patient = patientRepository.findByPhone(phone)
+                .or(() -> patientRepository.findAllByNameAndBirthDate6(name, birthDate6).stream().findFirst())
                 .orElseGet(() -> {
                     return patientRepository.save(
                             Patient.builder()
@@ -263,6 +414,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                                     .build()
                     );
                 });
+
+        if (!name.equals(patient.getName())
+                || !birthDate.equals(patient.getBirthDate())
+                || !regionCode.equals(patient.getRegionCode())
+                || !address.equals(patient.getAddress())
+                || !phone.equals(patient.getPhone())) {
+            patient.updateProfile(name, birthDate, regionCode, address, phone);
+        }
 
         if (referenceImagePath != null
                 && (!patient.hasReferenceImage() || !referenceImagePath.equals(patient.getReferenceImagePath()))) {
@@ -296,6 +455,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private IntakeSession ensureIntakeSession(Patient patient, String callerNumber,
                                               String department, String departmentName,
+                                              String selectionReason,
                                               List<String> offeredSlotIds, CompletionReason completionReason) {
         IntakeSession intakeSession = intakeSessionRepository
                 .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, IntakeChannel.PHONE)
@@ -315,7 +475,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 departmentName,
                 ConfidenceLevel.HIGH,
                 false,
-                "로컬 시드용 진료과 선택 결과",
+                selectionReason,
                 offeredSlotIds
         );
 
@@ -442,6 +602,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             session.markReady();
         }
 
+        if (targetStatus == ConsultationSessionStatus.IN_PROGRESS && session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
+            session.connectDoctor();
+            session.connectPatient();
+        }
+
         if (targetStatus == ConsultationSessionStatus.COMPLETED && session.getStatus() != ConsultationSessionStatus.COMPLETED) {
             if (session.getStatus() == ConsultationSessionStatus.CREATED) {
                 session.markReady();
@@ -458,7 +623,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private ConsultationSummary ensureConsultationSummary(ConsultationSession session, String summaryNote,
                                                           boolean prescriptionIssued, String prescriptionNote,
                                                           boolean needsFollowUp) {
-        return consultationSummaryRepository.findBySession(session).orElseGet(() ->
+        ConsultationSummary summary = consultationSummaryRepository.findBySession(session).orElseGet(() ->
                 consultationSummaryRepository.save(
                         ConsultationSummary.builder()
                                 .session(session)
@@ -469,5 +634,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                                 .build()
                 )
         );
+        summary.update(summaryNote, prescriptionIssued, prescriptionNote, needsFollowUp);
+        return summary;
+    }
+
+    private BigDecimal bd(String value) {
+        return new BigDecimal(value);
     }
 }
