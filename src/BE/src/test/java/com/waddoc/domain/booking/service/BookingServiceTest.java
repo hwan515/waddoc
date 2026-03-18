@@ -25,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -35,10 +36,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -63,11 +61,14 @@ class BookingServiceTest {
     @Mock
     private SmsService smsService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private BookingService bookingService;
 
     @Test
-    void createBooking_smsFailureDoesNotBreakBookingCreation() {
+    void createBooking_publishesBookingCreatedSmsEvent() {
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
@@ -135,18 +136,18 @@ class BookingServiceTest {
                 변경이나 취소를 원하실 경우 최소 하루 전까지 연락 주시기 바랍니다.
 
                 ☎ 문의: 01049163720""";
-        doThrow(new IllegalStateException("SMS gateway down"))
-                .when(smsService).send(eq("01012345678"), anyString());
 
         CreateBookingResponse response = bookingService.createBooking(session.getPublicId(), request);
 
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<BookingCreatedSmsEvent> eventCaptor = ArgumentCaptor.forClass(BookingCreatedSmsEvent.class);
 
         assertThat(response.getBookingId()).isNotBlank();
         assertThat(response.getCaseId()).isNotBlank();
         assertThat(response.getTtsMessage()).contains("예약이 완료되었습니다.");
-        verify(smsService).send(eq("01012345678"), messageCaptor.capture());
-        assertThat(normalizeLineEndings(messageCaptor.getValue())).isEqualTo(normalizeLineEndings(smsMessage));
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().bookingId()).isEqualTo(response.getBookingId());
+        assertThat(eventCaptor.getValue().recipientPhone()).isEqualTo("01012345678");
+        assertThat(normalizeLineEndings(eventCaptor.getValue().message())).isEqualTo(normalizeLineEndings(smsMessage));
     }
 
     @Test

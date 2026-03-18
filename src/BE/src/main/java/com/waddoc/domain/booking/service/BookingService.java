@@ -15,9 +15,9 @@ import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
-import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
 public class BookingService {
 
@@ -40,6 +39,7 @@ public class BookingService {
     private final CareCaseRepository careCaseRepository;
     private final AuditLogService auditLogService;
     private final SmsService smsService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -108,7 +108,7 @@ public class BookingService {
                 departmentName, doctorName, month, day, amPm, displayHour);
         String smsMessage = buildBookingCreatedSms(patient, slot, doctorName, departmentName);
 
-        sendSmsSafely(session.getCallerNumber(), smsMessage, booking.getPublicId(), "BOOKING_CREATED");
+        publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -203,7 +203,7 @@ public class BookingService {
             throw new BusinessException(ErrorCode.PATIENT_MISMATCH);
         }
 
-        return cancelBookingInternal(booking, request, "SYSTEM", "SYSTEM", session.getCallerNumber());
+        return cancelBookingInternal(booking, request, "SYSTEM", "SYSTEM");
     }
 
     /** 4.5 — 인증 기반 예약 취소 */
@@ -213,16 +213,13 @@ public class BookingService {
         Booking booking = bookingRepository.findByPublicId(bookingId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.BOOKING_NOT_FOUND));
 
-        String callerNumber = booking.getPatient().getPhone();
-
         return cancelBookingInternal(booking, request,
                 actorId != null ? actorId : "SYSTEM",
-                actorRole != null ? actorRole : "SYSTEM",
-                callerNumber);
+                actorRole != null ? actorRole : "SYSTEM");
     }
 
     private CancelBookingResponse cancelBookingInternal(Booking booking, CancelBookingRequest request,
-                                                         String actorId, String actorRole, String callerNumber) {
+                                                         String actorId, String actorRole) {
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new BusinessException(ErrorCode.BOOKING_ALREADY_CANCELLED);
         }
@@ -237,8 +234,6 @@ public class BookingService {
         careCaseRepository.findByBooking(booking).ifPresent(CareCase::cancel);
 
         String ttsMessage = "예약이 취소되었습니다.";
-
-        sendSmsSafely(callerNumber, ttsMessage, booking.getPublicId(), "BOOKING_CANCELLED");
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -267,17 +262,13 @@ public class BookingService {
         return session;
     }
 
-    private void sendSmsSafely(String recipientPhone, String message, String bookingId, String eventType) {
+    private void publishBookingCreatedSms(String recipientPhone, String message, String bookingId) {
         if (recipientPhone == null || recipientPhone.isBlank()) {
             return;
         }
 
-        try {
-            smsService.send(recipientPhone, message);
-        } catch (Exception e) {
-            log.error("SMS send failed. eventType={}, bookingId={}, recipientPhone={}",
-                    eventType, bookingId, recipientPhone, e);
-        }
+        // 예약 저장이 커밋된 뒤에만 비동기 발송되도록 이벤트로 분리한다.
+        eventPublisher.publishEvent(new BookingCreatedSmsEvent(bookingId, recipientPhone, message));
     }
 
     private String buildBookingCreatedSms(Patient patient, ScheduleSlot slot, String doctorName, String departmentName) {
