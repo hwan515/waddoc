@@ -1,3 +1,0 @@
-[0.000000] (-) TimerEvent: {}
-[0.000265] (-) JobUnselected: {'identifier': 'ros_tcp_endpoint'}
-[0.000461] (-) EventReactorShutdown: {}
