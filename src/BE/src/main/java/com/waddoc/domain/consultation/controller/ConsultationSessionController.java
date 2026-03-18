@@ -1,11 +1,13 @@
 package com.waddoc.domain.consultation.controller;
 
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
+import com.waddoc.domain.consultation.dto.ConsultationSessionStatusResponse;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
 import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
 import com.waddoc.domain.consultation.dto.PutConsultationSummaryRequest;
 import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
 import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionQueryService;
 import com.waddoc.domain.consultation.service.ConsultationSessionTokenService;
 import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
@@ -36,6 +38,7 @@ public class ConsultationSessionController {
     private final ConsultationSummaryService consultationSummaryService;
     private final ConsultationWebhookService consultationWebhookService;
     private final ConsultationPatientTokenService consultationPatientTokenService;
+    private final ConsultationSessionQueryService consultationSessionQueryService;
     private final ConsultationSessionTokenService consultationSessionTokenService;
 
     // 10.6: LiveKit 서버가 보내는 webhook 이벤트를 수신해 연결 상태를 반영한다.
@@ -77,6 +80,16 @@ public class ConsultationSessionController {
     ) {
         // 의사/환자 재참여 시 만료된 LiveKit 토큰만 다시 발급한다.
         return ResponseEntity.ok(consultationSessionTokenService.reissueToken(sessionId, request, authenticatedUser));
+    }
+
+    @GetMapping("/{sessionId}")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
+    public ResponseEntity<ConsultationSessionStatusResponse> getSessionStatus(
+            @PathVariable String sessionId,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        // 프런트가 현재 room 상태와 참가자 연결 상태를 복구할 수 있도록 세션 스냅샷을 내려준다.
+        return ResponseEntity.ok(consultationSessionQueryService.getSessionStatus(sessionId, authenticatedUser));
     }
 
     // 10.5 조회: 담당 의사나 관리자가 저장된 진료 요약을 확인할 수 있다.

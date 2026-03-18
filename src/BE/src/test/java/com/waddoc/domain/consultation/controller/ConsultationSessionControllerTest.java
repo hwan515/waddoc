@@ -1,11 +1,14 @@
 package com.waddoc.domain.consultation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.waddoc.domain.consultation.dto.ConsultationSessionStatusResponse;
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
 import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
+import com.waddoc.domain.consultation.entity.ConnectionState;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionQueryService;
 import com.waddoc.domain.consultation.service.ConsultationSessionTokenService;
 import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
@@ -53,6 +56,9 @@ class ConsultationSessionControllerTest {
 
     @MockBean
     private ConsultationPatientTokenService consultationPatientTokenService;
+
+    @MockBean
+    private ConsultationSessionQueryService consultationSessionQueryService;
 
     @MockBean
     private ConsultationSessionTokenService consultationSessionTokenService;
@@ -142,6 +148,44 @@ class ConsultationSessionControllerTest {
                 .andExpect(jsonPath("$.patientToken").value("patient-token"))
                 .andExpect(jsonPath("$.identityCheck.matched").value(true))
                 .andExpect(jsonPath("$.room.roomId").value("room_ses_test123"));
+    }
+
+    @Test
+    void getSessionStatus_usesDocumentedGetPath() throws Exception {
+        String sessionId = "ses_test123";
+
+        when(consultationSessionQueryService.getSessionStatus(eq(sessionId), any()))
+                .thenReturn(ConsultationSessionStatusResponse.builder()
+                        .sessionId(sessionId)
+                        .caseId("case_test123")
+                        .status(ConsultationSessionStatus.IN_PROGRESS)
+                        .room(ConsultationSessionStatusResponse.RoomDetail.builder()
+                                .roomId("room_ses_test123")
+                                .livekitUrl("wss://livekit.example.com")
+                                .build())
+                        .doctor(ConsultationSessionStatusResponse.DoctorDetail.builder()
+                                .doctorId("doc_test123")
+                                .name("이국종")
+                                .connectionState(ConnectionState.CONNECTED)
+                                .joinedAt(OffsetDateTime.parse("2026-03-18T10:00:30+09:00"))
+                                .build())
+                        .patient(ConsultationSessionStatusResponse.PatientDetail.builder()
+                                .patientId("pat_test123")
+                                .name("홍길동")
+                                .connectionState(ConnectionState.CONNECTED)
+                                .joinedAt(OffsetDateTime.parse("2026-03-18T10:01:00+09:00"))
+                                .build())
+                        .reconnectCount(0)
+                        .startedAt(OffsetDateTime.parse("2026-03-18T10:00:00+09:00"))
+                        .build());
+
+        mockMvc.perform(get("/api/v1/sessions/{sessionId}", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value(sessionId))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.doctor.connectionState").value("CONNECTED"))
+                .andExpect(jsonPath("$.patient.patientId").value("pat_test123"))
+                .andExpect(jsonPath("$.reconnectCount").value(0));
     }
 
     @Test
