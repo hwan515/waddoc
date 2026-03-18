@@ -1,6 +1,7 @@
 package com.waddoc.domain.user.entity;
 
 import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.type.ApprovalStatus;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -11,7 +12,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 시스템 사용자 (의사, 관리자, 보호자). 환자는 별도 Patient 테이블.
+ * 시스템 사용자(의사, 관리자, 보호자). 환자는 별도 Patient 테이블.
  */
 @Entity
 @Table(name = "\"user\"")
