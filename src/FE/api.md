@@ -1144,8 +1144,9 @@
 | 403 | `MISSION_NOT_READY` | 미션이 환자 참가 가능한 준비 상태가 아님 |
 | 403 | `IDENTITY_CHECK_FAILED` | GPU 본인 확인 실패 |
 | 404 | `SESSION_NOT_FOUND` | 세션 없음 |
-| 400 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
+| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
 | 409 | `REFERENCE_IMAGE_MISSING` | 환자 기준 이미지가 등록되지 않음 |
+| 502 | `AI_IDV_REQUEST_FAILED` | 본인 확인 AI 서버 호출 실패 |
 
 ---
 
@@ -1185,6 +1186,10 @@
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 409 | `SESSION_NOT_IN_PROGRESS` | 세션이 IN_PROGRESS가 아닌 경우 |
+| 404 | `SESSION_NOT_FOUND` | 세션 없음 |
+| 403 | `AUTH_FORBIDDEN` | 재발급 권한이 없는 사용자 |
+| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
+| 400 | `INVALID_INPUT` | `PATIENT` 재발급 시 `patientId` 누락 |
 
 ---
 

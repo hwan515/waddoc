@@ -2,7 +2,11 @@ package com.waddoc.domain.consultation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
+import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
+import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionTokenService;
 import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
 import com.waddoc.global.error.GlobalExceptionHandler;
@@ -14,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
@@ -23,6 +28,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,6 +50,12 @@ class ConsultationSessionControllerTest {
 
     @MockBean
     private ConsultationWebhookService consultationWebhookService;
+
+    @MockBean
+    private ConsultationPatientTokenService consultationPatientTokenService;
+
+    @MockBean
+    private ConsultationSessionTokenService consultationSessionTokenService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
@@ -89,6 +101,70 @@ class ConsultationSessionControllerTest {
                 .andExpect(jsonPath("$.summary.summaryNote").value("편두통 소견"))
                 .andExpect(jsonPath("$.summary.isPrescriptionIssued").value(true))
                 .andExpect(jsonPath("$.durationMinutes").value(25));
+    }
+
+    @Test
+    void issuePatientToken_usesDocumentedMultipartPath() throws Exception {
+        String sessionId = "ses_test123";
+
+        when(consultationPatientTokenService.issuePatientToken(eq(sessionId), eq("pat_test123"), any(), any(), any()))
+                .thenReturn(IssuePatientTokenResponse.builder()
+                        .sessionId(sessionId)
+                        .patientToken("patient-token")
+                        .expiresIn(7200)
+                        .identityCheck(IssuePatientTokenResponse.IdentityCheckDetail.builder()
+                                .matched(true)
+                                .faceSimilarityScore(0.94)
+                                .idCardFaceSimilarityScore(0.91)
+                                .reasonCodes(java.util.List.of())
+                                .ocr(IssuePatientTokenResponse.OcrDetail.builder()
+                                        .name("홍길동")
+                                        .rrnMasked("580315-1******")
+                                        .address("김천시 증산면 장전1길 69")
+                                        .build())
+                                .build())
+                        .room(IssuePatientTokenResponse.RoomDetail.builder()
+                                .roomId("room_ses_test123")
+                                .livekitUrl("wss://livekit.example.com")
+                                .build())
+                        .build());
+
+        MockMultipartFile patientId = new MockMultipartFile("patientId", "", MediaType.TEXT_PLAIN_VALUE, "pat_test123".getBytes());
+        MockMultipartFile faceImage = new MockMultipartFile("faceImage", "face.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{1, 2, 3});
+        MockMultipartFile idCardImage = new MockMultipartFile("idCardImage", "id-card.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{4, 5, 6});
+
+        mockMvc.perform(multipart("/api/v1/sessions/{sessionId}/participants/patient/token", sessionId)
+                        .file(patientId)
+                        .file(faceImage)
+                        .file(idCardImage))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value(sessionId))
+                .andExpect(jsonPath("$.patientToken").value("patient-token"))
+                .andExpect(jsonPath("$.identityCheck.matched").value(true))
+                .andExpect(jsonPath("$.room.roomId").value("room_ses_test123"));
+    }
+
+    @Test
+    void reissueToken_usesDocumentedPostPath() throws Exception {
+        String sessionId = "ses_test123";
+
+        when(consultationSessionTokenService.reissueToken(eq(sessionId), any(), any()))
+                .thenReturn(ReissueConsultationTokenResponse.builder()
+                        .token("reissued-token")
+                        .expiresIn(7200)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/sessions/{sessionId}/token", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "participantType": "DOCTOR",
+                                  "patientId": null
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("reissued-token"))
+                .andExpect(jsonPath("$.expiresIn").value(7200));
     }
 
     @Test

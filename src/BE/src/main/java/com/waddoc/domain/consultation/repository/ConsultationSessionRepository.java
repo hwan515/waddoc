@@ -23,6 +23,18 @@ public interface ConsultationSessionRepository extends JpaRepository<Consultatio
             from ConsultationSession s
             join fetch s.careCase c
             join fetch c.booking b
+            join fetch c.patient p
+            join fetch c.doctor d
+            join fetch d.user du
+            where s.publicId = :publicId
+            """)
+    Optional<ConsultationSession> findWithParticipantsByPublicId(@Param("publicId") String publicId);
+
+    @Query("""
+            select s
+            from ConsultationSession s
+            join fetch s.careCase c
+            join fetch c.booking b
             join fetch c.doctor d
             join fetch d.user du
             where s.publicId = :publicId
