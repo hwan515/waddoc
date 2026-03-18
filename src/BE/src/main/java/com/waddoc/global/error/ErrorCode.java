@@ -45,6 +45,7 @@ public enum ErrorCode {
     BOOKING_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "예약을 찾을 수 없습니다."),
     CASE_NOT_FOUND(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "진료 케이스를 찾을 수 없습니다."),
     MISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "MISSION_NOT_FOUND", "미션을 찾을 수 없습니다."),
+    MISSION_ALREADY_EXISTS(HttpStatus.CONFLICT, "MISSION_ALREADY_EXISTS", "이미 생성된 미션이 존재합니다."),
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "진료 세션을 찾을 수 없습니다."),
     CONSULTATION_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "CONSULTATION_SUMMARY_NOT_FOUND", "진료 요약을 찾을 수 없습니다."),
     LIVEKIT_WEBHOOK_INVALID_SIGNATURE(HttpStatus.UNAUTHORIZED, "LIVEKIT_WEBHOOK_INVALID_SIGNATURE", "유효하지 않은 LiveKit Webhook 서명입니다."),
