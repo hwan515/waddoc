@@ -39,4 +39,14 @@ function localSavePlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), localSavePlugin()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080', // 백엔드 서버 주소
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
 })

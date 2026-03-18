@@ -2,57 +2,70 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, ShieldCheck } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
+import apiClient from '../../../utils/api';
 
 const EMRLogin = () => {
     const navigate = useNavigate();
-    const login = useAuthStore((state) => state.login);
 
     const [formData, setFormData] = useState({
-        medId: '',
+        id: '',
         password: '',
-        role: 'doctor' // EMR is exclusively for doctors
+        role: 'doctor'
     });
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.medId || !formData.password) {
+        if (!formData.id || !formData.password) {
             alert('사번과 비밀번호를 입력해주세요.');
             return;
         }
 
-        // Mock Login
-        login({ email: formData.medId, role: formData.role });
-        navigate('/emr/dashboard');
+        try {
+            const response = await apiClient.post('/auth/login', {
+                username: formData.id,
+                password: formData.password
+            });
+
+            const { accessToken, user } = response.data;
+            if (user?.role === 'DOCTOR') {
+                useAuthStore.getState().setAuth(accessToken, user);
+                navigate('/emr/dashboard');
+            } else {
+                alert('의사 전용 계정이 아닙니다.');
+            }
+        } catch (error) {
+            console.error('Login Failed:', error);
+            alert('로그인에 실패했습니다. 사번과 비밀번호를 다시 확인해주세요.');
+        }
     };
 
     return (
         <div className="h-screen bg-slate-50 flex items-center justify-center p-4">
             <div className="max-w-md w-full">
 
-                {/* Header Section */}
+                {/* 헤더 */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0353A4] mb-4 shadow-lg shadow-blue-900/20">
                         <Activity className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">MediCloud EMR</h1>
-                    <p className="text-slate-500 mt-2 text-sm">통합 전자의무기록 시스템 로그인</p>
+                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">EMR(Mock)</h1>
                 </div>
 
-                {/* Login Card */}
+                {/* 로그인 카드 */}
                 <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100">
                     <form onSubmit={handleSubmit} className="space-y-6">
 
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-2">의료진 사번 (ID)</label>
                             <input
-                                name="medId"
+                                name="id"
                                 type="text"
                                 required
-                                value={formData.medId}
+                                value={formData.id}
                                 onChange={handleChange}
                                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#0353A4] focus:border-[#0353A4] transition-all bg-slate-50 focus:bg-white"
                                 placeholder="사번을 입력하세요 (예: D10023)"

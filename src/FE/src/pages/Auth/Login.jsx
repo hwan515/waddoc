@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Activity, Eye, EyeOff } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
+import apiClient from '../../utils/api';
 
 const Login = () => {
     const navigate = useNavigate();
-    const login = useAuthStore((state) => state.login);
 
     const [formData, setFormData] = useState({
-        email: '',
+        id: '',
         password: '',
         role: 'patient' // 고정
     });
@@ -23,18 +23,27 @@ const Login = () => {
     //     setFormData({ ...formData, role });
     // };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.email || !formData.password) {
-            alert('이메일과 비밀번호를 입력해주세요.');
+        if (!formData.id || !formData.password) {
+            alert('아이디와 비밀번호를 입력해주세요.');
             return;
         }
 
-        // Auth Store 로그인 (Mock)
-        login(formData);
+        try {
+            const response = await apiClient.post('/auth/login', {
+                username: formData.id,
+                password: formData.password
+            });
 
-        // 환자 전용 플랫폼이므로 무조건 patient portal로 접속
-        navigate('/patient/portal');
+            const { accessToken, user } = response.data;
+            // 의사/관리자라도 로그인 할 수는 있겠으나 우선 저장
+            useAuthStore.getState().setAuth(accessToken, user);
+            navigate('/patient/portal');
+        } catch (error) {
+            console.error('Login Failed:', error);
+            alert('로그인에 실패했습니다. 아이디와 비밀번호를 다시 확인해주세요.');
+        }
     };
 
     return (
@@ -49,7 +58,7 @@ const Login = () => {
                         <Activity className="w-8 h-8 text-primary" strokeWidth={2.5} />
                     </div>
                     <span className="font-bold text-2xl text-dark tracking-tight">
-                        Vital<span className="text-primary">Connect</span>
+                        Waddoc<span className="text-primary"> 왔닥</span>
                     </span>
                 </div>
 
@@ -64,17 +73,17 @@ const Login = () => {
 
                         {/* Role Selector Removes (Patient Only) */}
 
-                        {/* Email Input */}
+                        {/* ID Input */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-800 mb-2">이메일</label>
+                            <label className="block text-sm font-bold text-slate-800 mb-2">아이디</label>
                             <input
-                                name="email"
-                                type="email"
+                                name="id"
+                                type="text"
                                 required
-                                value={formData.email}
+                                value={formData.id}
                                 onChange={handleChange}
                                 className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all sm:text-sm font-medium"
-                                placeholder="이메일을 입력해주세요"
+                                placeholder="아이디를 입력해주세요"
                             />
                         </div>
 

@@ -4,6 +4,7 @@ import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import { generateECGData, mockConsultationDetails, mockVitals } from '../../mockdata/consultations';
 import { useWebRTC } from '../../hooks/useWebRTC';
+import apiClient from '../../utils/api';
 
 const VideoConference = () => {
     // eslint-disable-next-line no-unused-vars
@@ -14,6 +15,58 @@ const VideoConference = () => {
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [ecgData, setEcgData] = useState(generateECGData(50));
+    
+    // API Data
+    const [consultationDetails, setConsultationDetails] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch case details
+    useEffect(() => {
+        const fetchCaseDetails = async () => {
+            if (!id || id === 'test-room') {
+                // 테스트용 방일 경우 mock 활용
+                setConsultationDetails(mockConsultationDetails);
+                setIsLoading(false);
+                return;
+            }
+            try {
+                const res = await apiClient.get(`/cases/${id}`);
+                const caseData = res.data;
+                const pt = caseData.patient || {};
+                const intake = caseData.intakeSummary || {};
+
+                // 나이 계산
+                let age = '-';
+                if (pt.birthDate6) {
+                    const birthYearStr = pt.birthDate6.substring(0, 2);
+                    let birthYear = parseInt(birthYearStr);
+                    birthYear += birthYear > 30 ? 1900 : 2000;
+                    age = new Date().getFullYear() - birthYear;
+                }
+
+                setConsultationDetails({
+                    caseId: caseData.caseId,
+                    patientName: pt.name || '알 수 없음',
+                    patientId: pt.patientId,
+                    age: age,
+                    gender: pt.gender || 'M',
+                    symptoms: intake.selectionReason || '문진 내용이 없습니다.',
+                    recentVisits: pt.lastConsultationDate || '최근 진료 기록 없음',
+                    department: intake.departmentName || '내과',
+                    bloodType: pt.bloodType ? pt.bloodType.replace('_PLUS', '+').replace('_MINUS', '-') : '확인 불가',
+                    allergies: '데이터 없음',
+                    medicalHistory: '데이터 없음'
+                });
+            } catch (error) {
+                console.error("Failed to fetch case details:", error);
+                setConsultationDetails(mockConsultationDetails); // Fallback
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchCaseDetails();
+    }, [id]);
 
     // WebRTC Hook 로드 (의사는 방을 여는 Initiator 역할)
     const {
@@ -76,11 +129,15 @@ const VideoConference = () => {
         joinRoom(); // 화상 통신 시작 및 방 접속
     };
 
+    if (isLoading || !consultationDetails) {
+        return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">진료 정보를 불러오는 중입니다...</div>;
+    }
+
     // 의사는 화면 확인용 준비 라운지(Pre-join)를 거치도록 함
     if (!isJoined) {
         return (
             <PreJoinRoom
-                patientName={mockConsultationDetails.patientName}
+                patientName={consultationDetails.patientName}
                 micEnabled={micEnabled}
                 setMicEnabled={setMicEnabled}
                 videoEnabled={videoEnabled}
@@ -94,7 +151,7 @@ const VideoConference = () => {
     // 메인 화상 진료실 (의사 권한으로 접속)
     return (
         <ConsultationRoom
-            details={mockConsultationDetails}
+            details={consultationDetails}
             vitals={mockVitals}
             ecgData={ecgData}
             micEnabled={micEnabled}
