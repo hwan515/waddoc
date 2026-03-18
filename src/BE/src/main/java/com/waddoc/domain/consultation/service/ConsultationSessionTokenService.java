@@ -2,6 +2,7 @@ package com.waddoc.domain.consultation.service;
 
 import com.waddoc.domain.audit.service.AuditLogService;
 import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
+import com.waddoc.domain.consultation.entity.ConnectionState;
 import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
@@ -86,7 +87,18 @@ public class ConsultationSessionTokenService {
             throw new BusinessException(ErrorCode.PATIENT_MISMATCH);
         }
 
-        // 재발급은 이미 연결된 세션의 동일 환자만 허용한다.
+        // 재발급은 최초 입장용이 아니라, 이미 입장 이력이 있는 동일 환자의 재입장에만 허용한다.
+        if (session.getPatientJoinedAt() == null) {
+            throw new BusinessException(ErrorCode.PATIENT_NOT_JOINED_SESSION);
+        }
+
+        // 이미 CONNECTED 상태라면 재입장이 아니라 연결 중인 세션으로 보고 재발급하지 않는다.
+        ConnectionState patientConnectionState = session.getPatientConnectionState();
+        if (patientConnectionState != ConnectionState.RECONNECTING
+                && patientConnectionState != ConnectionState.DISCONNECTED) {
+            throw new BusinessException(ErrorCode.PATIENT_NOT_RECONNECTABLE);
+        }
+
         String token = consultationLiveKitService.issuePatientToken(session, patient);
         auditLogService.log(
                 "CONSULTATION_PATIENT_TOKEN_REISSUED",

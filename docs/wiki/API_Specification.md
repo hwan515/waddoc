@@ -1171,7 +1171,7 @@
 | participantType | Auth | 추가 검증 |
 |-----------------|------|----------|
 | `DOCTOR` | Bearer Token 필수 | 해당 세션의 담당 의사인지 확인 |
-| `PATIENT` | Bearer Token (ADMIN) 필수 | 차량 태블릿으로 요청. `patientId` 필수 + 이미 입장한 동일 환자인지 재검증 |
+| `PATIENT` | Bearer Token (ADMIN) 필수 | 차량 태블릿으로 요청. `patientId` 필수 + `patientJoinedAt` 존재 + 연결 상태가 `RECONNECTING` 또는 `DISCONNECTED` 인 동일 환자인지 재검증 |
 
 **Response** `200 OK`
 ```json
@@ -1189,6 +1189,8 @@
 | 404 | `SESSION_NOT_FOUND` | 세션 없음 |
 | 403 | `AUTH_FORBIDDEN` | 재발급 권한이 없는 사용자 |
 | 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
+| 409 | `PATIENT_NOT_JOINED_SESSION` | 동일 환자이지만 아직 세션 입장 이력이 없는 경우 |
+| 409 | `PATIENT_NOT_RECONNECTABLE` | 환자 연결 상태가 재입장 가능한 상태가 아닌 경우 |
 | 400 | `INVALID_INPUT` | `PATIENT` 재발급 시 `patientId` 누락 |
 
 ---

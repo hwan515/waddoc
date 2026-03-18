@@ -3,6 +3,7 @@ package com.waddoc.domain.consultation.service;
 import com.waddoc.domain.audit.service.AuditLogService;
 import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
+import com.waddoc.domain.consultation.entity.ConnectionState;
 import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
@@ -24,6 +25,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Optional;
 
@@ -76,6 +78,7 @@ class ConsultationSessionTokenServiceTest {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
         ConsultationSession session = buildSession("pat_test123");
         session.start();
+        markPatientJoined(session, ConnectionState.DISCONNECTED);
         PostConsultationTokenRequest request = request(PostConsultationTokenRequest.ParticipantType.PATIENT, "pat_test123");
 
         when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
@@ -87,6 +90,24 @@ class ConsultationSessionTokenServiceTest {
         assertThat(response.getToken()).isEqualTo("patient-token");
         assertThat(response.getExpiresIn()).isEqualTo(7200);
         verify(accessControlService).assertAdmin(admin);
+    }
+
+    @Test
+    void reissueToken_reissuesPatientTokenWhenPatientIsReconnecting() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        ConsultationSession session = buildSession("pat_test123");
+        session.start();
+        markPatientJoined(session, ConnectionState.RECONNECTING);
+        PostConsultationTokenRequest request = request(PostConsultationTokenRequest.ParticipantType.PATIENT, "pat_test123");
+
+        when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
+        when(consultationLiveKitService.issuePatientToken(session, session.getCareCase().getPatient())).thenReturn("patient-token");
+        when(consultationLiveKitService.getParticipantTokenExpiresInSeconds()).thenReturn(7200);
+
+        ReissueConsultationTokenResponse response = consultationSessionTokenService.reissueToken("ses_test123", request, admin);
+
+        assertThat(response.getToken()).isEqualTo("patient-token");
+        assertThat(response.getExpiresIn()).isEqualTo(7200);
     }
 
     @Test
@@ -116,6 +137,37 @@ class ConsultationSessionTokenServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PATIENT_MISMATCH);
+    }
+
+    @Test
+    void reissueToken_rejectsWhenPatientNeverJoinedSession() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        ConsultationSession session = buildSession("pat_test123");
+        session.start();
+        PostConsultationTokenRequest request = request(PostConsultationTokenRequest.ParticipantType.PATIENT, "pat_test123");
+
+        when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> consultationSessionTokenService.reissueToken("ses_test123", request, admin))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PATIENT_NOT_JOINED_SESSION);
+    }
+
+    @Test
+    void reissueToken_rejectsWhenPatientIsAlreadyConnected() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        ConsultationSession session = buildSession("pat_test123");
+        session.start();
+        markPatientJoined(session, ConnectionState.CONNECTED);
+        PostConsultationTokenRequest request = request(PostConsultationTokenRequest.ParticipantType.PATIENT, "pat_test123");
+
+        when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> consultationSessionTokenService.reissueToken("ses_test123", request, admin))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PATIENT_NOT_RECONNECTABLE);
     }
 
     @Test
@@ -196,6 +248,11 @@ class ConsultationSessionTokenServiceTest {
                 .build();
         setField(session, "publicId", "ses_test123");
         return session;
+    }
+
+    private void markPatientJoined(ConsultationSession session, ConnectionState connectionState) {
+        setField(session, "patientJoinedAt", LocalDateTime.of(2026, 3, 18, 16, 5, 0));
+        setField(session, "patientConnectionState", connectionState);
     }
 
     private void setField(Object target, String fieldName, Object value) {
