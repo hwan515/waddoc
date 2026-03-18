@@ -67,7 +67,7 @@ public class ConsultationSession extends BaseCreatedEntity {
         this.publicId = PublicIdGenerator.generate("ses_");
         this.careCase = careCase;
         this.status = ConsultationSessionStatus.CREATED;
-        this.roomId = roomId;
+        this.roomId = roomId != null ? roomId : "room_" + this.publicId;
         this.livekitUrl = livekitUrl;
         this.doctorConnectionState = ConnectionState.DISCONNECTED;
         this.patientConnectionState = ConnectionState.DISCONNECTED;

@@ -1034,6 +1034,7 @@
 
 > 의사가 "진료 시작"을 클릭하면 세션을 생성하고 **의사 본인의 LiveKit 토큰만** 발급한다.
 > 의사는 이미 Bearer Token으로 인증되어 있으므로, `doctorId`는 Request Body에서 제거하고 **서버가 Access Token의 principal에서 온 `userId` → `DOCTOR_PROFILE`을 조회**한다.
+> 동일 케이스에 `CREATED`, `READY`, `IN_PROGRESS` 상태의 활성 세션이 이미 있으면 새 세션을 만들지 않고 **기존 세션을 재사용**하며, 의사의 **재참여용 LiveKit 토큰을 재발급**한다.
 
 **Request Body**: 없음
 
@@ -1052,12 +1053,26 @@
 }
 ```
 
+**Response** `200 OK` (기존 활성 세션 재사용 / 재참여)
+```json
+{
+  "sessionId": "ses_L6pQr1",
+  "caseId": "case_T7nLp4",
+  "status": "IN_PROGRESS",
+  "room": {
+    "roomId": "room_ses_L6pQr1",
+    "livekitUrl": "wss://<DOMAIN>/livekit"
+  },
+  "doctorToken": "eyJhbGci...(reissued)",
+  "createdAt": "2026-03-11T10:00:00+09:00"
+}
+```
+
 **Errors**
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 403 | `CASE_NOT_ASSIGNED` | 해당 의사에게 배정되지 않은 케이스 |
-| 409 | `SESSION_ALREADY_EXISTS` | 이미 활성 세션이 존재 |
 
 ---
 
