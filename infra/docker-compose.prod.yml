@@ -94,7 +94,7 @@ services:
   # === Cache ===
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD} --notify-keyspace-events Ex
     volumes:
       - redis_data:/data
     expose:
