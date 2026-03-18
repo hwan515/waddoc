@@ -1,5 +1,6 @@
 package com.waddoc.global.config;
 
+import io.livekit.server.RoomServiceClient;
 import io.livekit.server.WebhookReceiver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -14,5 +15,15 @@ public class LiveKitConfig {
             @Value("${livekit.api-secret}") String apiSecret
     ) {
         return new WebhookReceiver(apiKey, apiSecret);
+    }
+
+    @Bean
+    public RoomServiceClient liveKitRoomServiceClient(
+            @Value("${livekit.host}") String host,
+            @Value("${livekit.api-key}") String apiKey,
+            @Value("${livekit.api-secret}") String apiSecret
+    ) {
+        String normalizedHost = host.endsWith("/") ? host : host + "/";
+        return RoomServiceClient.createClient(normalizedHost, apiKey, apiSecret);
     }
 }
