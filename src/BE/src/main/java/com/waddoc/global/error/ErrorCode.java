@@ -53,6 +53,8 @@ public enum ErrorCode {
     MISSION_PHASE_TRANSITION_INVALID(HttpStatus.BAD_REQUEST, "MISSION_PHASE_TRANSITION_INVALID", "허용되지 않는 미션 단계 전환입니다."),
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "진료 세션을 찾을 수 없습니다."),
     SESSION_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "SESSION_NOT_IN_PROGRESS", "세션이 진행 중 상태가 아닙니다."),
+    PATIENT_NOT_JOINED_SESSION(HttpStatus.CONFLICT, "PATIENT_NOT_JOINED_SESSION", "해당 환자는 아직 이 세션에 입장한 이력이 없습니다."),
+    PATIENT_NOT_RECONNECTABLE(HttpStatus.CONFLICT, "PATIENT_NOT_RECONNECTABLE", "현재 환자 연결 상태에서는 토큰을 재발급할 수 없습니다."),
     REFERENCE_IMAGE_MISSING(HttpStatus.CONFLICT, "REFERENCE_IMAGE_MISSING", "환자 기준 이미지가 등록되지 않았습니다."),
     IDENTITY_CHECK_FAILED(HttpStatus.FORBIDDEN, "IDENTITY_CHECK_FAILED", "본인 확인에 실패했습니다. 다시 촬영해주세요."),
     LIVEKIT_ROOM_CREATE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "LIVEKIT_ROOM_CREATE_FAILED", "LiveKit 룸 생성에 실패했습니다."),
