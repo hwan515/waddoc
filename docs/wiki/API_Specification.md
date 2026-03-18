@@ -1186,6 +1186,10 @@
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 409 | `SESSION_NOT_IN_PROGRESS` | 세션이 IN_PROGRESS가 아닌 경우 |
+| 404 | `SESSION_NOT_FOUND` | 세션 없음 |
+| 403 | `AUTH_FORBIDDEN` | 재발급 권한이 없는 사용자 |
+| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
+| 400 | `INVALID_INPUT` | `PATIENT` 재발급 시 `patientId` 누락 |
 
 ---
 

@@ -2,8 +2,11 @@ package com.waddoc.domain.consultation.controller;
 
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
 import com.waddoc.domain.consultation.dto.PutConsultationSummaryRequest;
+import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
 import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionTokenService;
 import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
 import com.waddoc.global.security.AuthenticatedUser;
@@ -33,6 +36,7 @@ public class ConsultationSessionController {
     private final ConsultationSummaryService consultationSummaryService;
     private final ConsultationWebhookService consultationWebhookService;
     private final ConsultationPatientTokenService consultationPatientTokenService;
+    private final ConsultationSessionTokenService consultationSessionTokenService;
 
     // 10.6: LiveKit 서버가 보내는 webhook 이벤트를 수신해 연결 상태를 반영한다.
     @PostMapping("/webhook/livekit")
@@ -62,6 +66,17 @@ public class ConsultationSessionController {
                         authenticatedUser
                 )
         );
+    }
+
+    @PostMapping("/{sessionId}/token")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
+    public ResponseEntity<ReissueConsultationTokenResponse> reissueToken(
+            @PathVariable String sessionId,
+            @Valid @RequestBody PostConsultationTokenRequest request,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        // 의사/환자 재참여 시 만료된 LiveKit 토큰만 다시 발급한다.
+        return ResponseEntity.ok(consultationSessionTokenService.reissueToken(sessionId, request, authenticatedUser));
     }
 
     // 10.5 조회: 담당 의사나 관리자가 저장된 진료 요약을 확인할 수 있다.

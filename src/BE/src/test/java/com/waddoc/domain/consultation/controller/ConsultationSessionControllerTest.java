@@ -3,8 +3,10 @@ package com.waddoc.domain.consultation.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionTokenService;
 import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
 import com.waddoc.global.error.GlobalExceptionHandler;
@@ -51,6 +53,9 @@ class ConsultationSessionControllerTest {
 
     @MockBean
     private ConsultationPatientTokenService consultationPatientTokenService;
+
+    @MockBean
+    private ConsultationSessionTokenService consultationSessionTokenService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
@@ -137,6 +142,29 @@ class ConsultationSessionControllerTest {
                 .andExpect(jsonPath("$.patientToken").value("patient-token"))
                 .andExpect(jsonPath("$.identityCheck.matched").value(true))
                 .andExpect(jsonPath("$.room.roomId").value("room_ses_test123"));
+    }
+
+    @Test
+    void reissueToken_usesDocumentedPostPath() throws Exception {
+        String sessionId = "ses_test123";
+
+        when(consultationSessionTokenService.reissueToken(eq(sessionId), any(), any()))
+                .thenReturn(ReissueConsultationTokenResponse.builder()
+                        .token("reissued-token")
+                        .expiresIn(7200)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/sessions/{sessionId}/token", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "participantType": "DOCTOR",
+                                  "patientId": null
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("reissued-token"))
+                .andExpect(jsonPath("$.expiresIn").value(7200));
     }
 
     @Test
