@@ -41,6 +41,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
+    // SMS
+    implementation("com.solapi:sdk:1.0.3")
+
     // LiveKit
     implementation("io.livekit:livekit-server:0.6.1")
 

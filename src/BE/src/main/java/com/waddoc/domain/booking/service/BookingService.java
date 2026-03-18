@@ -15,17 +15,24 @@ import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class BookingService {
+
+    private static final DateTimeFormatter BOOKING_SMS_DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd, HH:mm");
 
     private final IntakeSessionRepository intakeSessionRepository;
     private final ScheduleSlotRepository scheduleSlotRepository;
@@ -99,11 +106,9 @@ public class BookingService {
         String ttsMessage = String.format(
                 "%s %s 선생님, %d월 %d일 %s %d시 예약이 완료되었습니다.",
                 departmentName, doctorName, month, day, amPm, displayHour);
+        String smsMessage = buildBookingCreatedSms(patient, slot, doctorName, departmentName);
 
-        // SMS Mock
-        if (session.getCallerNumber() != null) {
-            smsService.send(session.getCallerNumber(), ttsMessage);
-        }
+        sendSmsSafely(session.getCallerNumber(), smsMessage, booking.getPublicId(), "BOOKING_CREATED");
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -233,10 +238,7 @@ public class BookingService {
 
         String ttsMessage = "예약이 취소되었습니다.";
 
-        // SMS Mock
-        if (callerNumber != null) {
-            smsService.send(callerNumber, ttsMessage);
-        }
+        sendSmsSafely(callerNumber, ttsMessage, booking.getPublicId(), "BOOKING_CANCELLED");
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -263,5 +265,40 @@ public class BookingService {
         }
 
         return session;
+    }
+
+    private void sendSmsSafely(String recipientPhone, String message, String bookingId, String eventType) {
+        if (recipientPhone == null || recipientPhone.isBlank()) {
+            return;
+        }
+
+        try {
+            smsService.send(recipientPhone, message);
+        } catch (Exception e) {
+            log.error("SMS send failed. eventType={}, bookingId={}, recipientPhone={}",
+                    eventType, bookingId, recipientPhone, e);
+        }
+    }
+
+    private String buildBookingCreatedSms(Patient patient, ScheduleSlot slot, String doctorName, String departmentName) {
+        String contactNumber = normalizeDisplayPhone(smsService.getContactNumber());
+        String appointmentDateTime = LocalDateTime.of(slot.getSlotDate(), slot.getStartTime())
+                .format(BOOKING_SMS_DATE_TIME_FORMATTER);
+
+        return String.format(
+                "예약 확인%n[왔닥]%n안녕하세요, %s님.%n진료 예약이 아래와 같이 확정되었습니다.%n%n일시: %s%n의사: %s (%s)%n※ 유의사항%n%n예약 시간 10분 전까지 준비 부탁드립니다.%n변경이나 취소를 원하실 경우 최소 하루 전까지 연락 주시기 바랍니다.%n%n☎ 문의: %s",
+                patient.getName(),
+                appointmentDateTime,
+                doctorName,
+                departmentName,
+                contactNumber
+        );
+    }
+
+    private String normalizeDisplayPhone(String phoneNumber) {
+        if (phoneNumber == null) {
+            return "";
+        }
+        return phoneNumber.replaceAll("[^0-9]", "");
     }
 }
