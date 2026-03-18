@@ -2,6 +2,7 @@ package com.waddoc.domain.consultation.service;
 
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
+import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import io.livekit.server.AccessToken;
@@ -24,6 +25,9 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 public class ConsultationLiveKitService {
+
+    private static final long PARTICIPANT_TOKEN_TTL_MILLIS = TimeUnit.HOURS.toMillis(2);
+    private static final int PARTICIPANT_TOKEN_EXPIRES_IN_SECONDS = 7200;
 
     private final RoomServiceClient roomServiceClient;
 
@@ -53,7 +57,7 @@ public class ConsultationLiveKitService {
         AccessToken accessToken = new AccessToken(apiKey, apiSecret);
         accessToken.setIdentity("doctor:" + doctorProfile.getPublicId());
         accessToken.setName(doctorProfile.getUser().getName());
-        accessToken.setTtl(TimeUnit.HOURS.toMillis(2));
+        accessToken.setTtl(PARTICIPANT_TOKEN_TTL_MILLIS);
         accessToken.addGrants(
                 new RoomJoin(true),
                 new RoomName(session.getRoomId()),
@@ -62,6 +66,26 @@ public class ConsultationLiveKitService {
                 new CanPublishData(true)
         );
         return accessToken.toJwt();
+    }
+
+    public String issuePatientToken(ConsultationSession session, Patient patient) {
+        AccessToken accessToken = new AccessToken(apiKey, apiSecret);
+        // webhook에서 참가자 구분에 쓰는 identity 규칙과 동일하게 맞춘다.
+        accessToken.setIdentity("patient:" + patient.getPublicId());
+        accessToken.setName(patient.getName());
+        accessToken.setTtl(PARTICIPANT_TOKEN_TTL_MILLIS);
+        accessToken.addGrants(
+                new RoomJoin(true),
+                new RoomName(session.getRoomId()),
+                new CanPublish(true),
+                new CanSubscribe(true),
+                new CanPublishData(true)
+        );
+        return accessToken.toJwt();
+    }
+
+    public int getParticipantTokenExpiresInSeconds() {
+        return PARTICIPANT_TOKEN_EXPIRES_IN_SECONDS;
     }
 
     public String getLivekitUrl() {
