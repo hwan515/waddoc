@@ -30,12 +30,28 @@ public class ConsultationSummaryService {
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
 
+    @Transactional(readOnly = true)
+    public ConsultationSummaryResponse getSummary(String sessionId, AuthenticatedUser authenticatedUser) {
+        // 세션 조회 API는 세션-케이스-담당 의사 기준으로 접근 권한을 확인한다.
+        ConsultationSession session = consultationSessionRepository.findWithDoctorAndCaseByPublicId(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        accessControlService.assertAssignedDoctorOrAdmin(authenticatedUser, session.getCareCase());
+
+        // 요약은 session과 1:1이므로 세션 기준으로 단건 조회한다.
+        ConsultationSummary summary = consultationSummaryRepository.findBySession(session)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONSULTATION_SUMMARY_NOT_FOUND));
+
+        return ConsultationSummaryResponse.from(session, summary);
+    }
+
     @Transactional
     public ConsultationSummaryResponse saveSummary(
             String sessionId,
             PutConsultationSummaryRequest request,
             AuthenticatedUser authenticatedUser
     ) {
+        // 저장 API는 의사 전용이므로 관리자 허용 메서드가 아니라 의사 프로필을 직접 확인한다.
         DoctorProfile doctorProfile = accessControlService.getDoctorProfileOrThrow(authenticatedUser);
         ConsultationSession session = consultationSessionRepository.findWithDoctorAndCaseByPublicId(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
@@ -78,6 +94,7 @@ public class ConsultationSummaryService {
             session.getCareCase().getBooking().complete();
         }
 
+        // 요약 내용 전문은 로그에 남기지 않고 운영 추적에 필요한 최소 정보만 남긴다.
         String correlationId = "corr_ses_" + session.getPublicId();
         auditLogService.log(
                 "CONSULTATION_SUMMARY_SAVED",

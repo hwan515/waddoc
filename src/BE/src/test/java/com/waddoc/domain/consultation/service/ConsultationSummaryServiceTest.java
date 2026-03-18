@@ -55,6 +55,50 @@ class ConsultationSummaryServiceTest {
     private ConsultationSummaryService consultationSummaryService;
 
     @Test
+    void getSummary_returnsSavedSummaryForAssignedDoctor() {
+        DoctorProfile doctor = buildDoctorProfile("usr_doctor");
+        ConsultationSession session = buildSession(doctor);
+        session.start();
+        ConsultationSummary summary = ConsultationSummary.builder()
+                .session(session)
+                .summaryNote("기존 요약")
+                .prescriptionIssued(true)
+                .prescriptionNote("타이레놀 500mg")
+                .needsFollowUp(false)
+                .build();
+
+        when(consultationSessionRepository.findWithDoctorAndCaseByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(consultationSummaryRepository.findBySession(session)).thenReturn(Optional.of(summary));
+
+        ConsultationSummaryResponse response = consultationSummaryService.getSummary(
+                session.getPublicId(),
+                new AuthenticatedUser("usr_doctor", Role.DOCTOR)
+        );
+
+        assertThat(response.getSessionId()).isEqualTo(session.getPublicId());
+        assertThat(response.getSummary().getSummaryNote()).isEqualTo("기존 요약");
+        assertThat(response.getSummary().isPrescriptionIssued()).isTrue();
+        verify(accessControlService).assertAssignedDoctorOrAdmin(new AuthenticatedUser("usr_doctor", Role.DOCTOR), session.getCareCase());
+    }
+
+    @Test
+    void getSummary_throwsWhenSummaryDoesNotExist() {
+        DoctorProfile doctor = buildDoctorProfile("usr_doctor");
+        ConsultationSession session = buildSession(doctor);
+
+        when(consultationSessionRepository.findWithDoctorAndCaseByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(consultationSummaryRepository.findBySession(session)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> consultationSummaryService.getSummary(
+                session.getPublicId(),
+                new AuthenticatedUser("usr_doctor", Role.DOCTOR)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.CONSULTATION_SUMMARY_NOT_FOUND);
+    }
+
+    @Test
     void saveSummary_createsSummaryAndCompletesSessionCaseAndBooking() {
         DoctorProfile doctor = buildDoctorProfile("usr_doctor");
         ConsultationSession session = buildSession(doctor);

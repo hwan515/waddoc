@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,6 +42,33 @@ class ConsultationSessionControllerTest {
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @Test
+    void getSummary_usesDocumentedGetPath() throws Exception {
+        String sessionId = "ses_test123";
+
+        when(consultationSummaryService.getSummary(eq(sessionId), any()))
+                .thenReturn(ConsultationSummaryResponse.builder()
+                        .sessionId(sessionId)
+                        .caseId("case_test123")
+                        .status(ConsultationSessionStatus.COMPLETED)
+                        .summary(ConsultationSummaryResponse.SummaryDetail.builder()
+                                .summaryNote("편두통 소견")
+                                .prescriptionIssued(true)
+                                .prescriptionNote("타이레놀 500mg")
+                                .needsFollowUp(true)
+                                .build())
+                        .endedAt(OffsetDateTime.parse("2026-03-18T10:25:00+09:00"))
+                        .durationMinutes(25)
+                        .build());
+
+        mockMvc.perform(get("/api/v1/sessions/{sessionId}/summary", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value(sessionId))
+                .andExpect(jsonPath("$.summary.summaryNote").value("편두통 소견"))
+                .andExpect(jsonPath("$.summary.isPrescriptionIssued").value(true))
+                .andExpect(jsonPath("$.durationMinutes").value(25));
+    }
 
     @Test
     void saveSummary_usesDocumentedPutPath() throws Exception {
