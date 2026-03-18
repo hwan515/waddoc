@@ -44,4 +44,11 @@ public class ConsultationSummary extends BaseCreatedEntity {
         this.prescriptionNote = prescriptionNote;
         this.needsFollowUp = needsFollowUp;
     }
+
+    public void update(String summaryNote, boolean prescriptionIssued, String prescriptionNote, boolean needsFollowUp) {
+        this.summaryNote = summaryNote;
+        this.prescriptionIssued = prescriptionIssued;
+        this.prescriptionNote = prescriptionNote;
+        this.needsFollowUp = needsFollowUp;
+    }
 }

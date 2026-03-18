@@ -87,4 +87,47 @@ public class ConsultationSession extends BaseCreatedEntity {
         this.endedAt = LocalDateTime.now();
         this.durationMinutes = durationMinutes;
     }
+
+    public void connectDoctor() {
+        this.doctorConnectionState = ConnectionState.CONNECTED;
+        if (this.doctorJoinedAt == null) {
+            this.doctorJoinedAt = LocalDateTime.now();
+        }
+        transitionToInProgressIfReady();
+    }
+
+    public void connectPatient() {
+        this.patientConnectionState = ConnectionState.CONNECTED;
+        if (this.patientJoinedAt == null) {
+            this.patientJoinedAt = LocalDateTime.now();
+        }
+        transitionToInProgressIfReady();
+    }
+
+    public void disconnectDoctor() {
+        this.doctorConnectionState = ConnectionState.DISCONNECTED;
+    }
+
+    public void disconnectPatient() {
+        this.patientConnectionState = ConnectionState.DISCONNECTED;
+    }
+
+    public boolean isDoctorConnected() {
+        return this.doctorConnectionState == ConnectionState.CONNECTED;
+    }
+
+    public boolean isPatientConnected() {
+        return this.patientConnectionState == ConnectionState.CONNECTED;
+    }
+
+    private void transitionToInProgressIfReady() {
+        if (this.status == ConsultationSessionStatus.CREATED) {
+            markReady();
+        }
+        if (this.status == ConsultationSessionStatus.READY
+                && this.doctorConnectionState == ConnectionState.CONNECTED
+                && this.patientConnectionState == ConnectionState.CONNECTED) {
+            start();
+        }
+    }
 }
