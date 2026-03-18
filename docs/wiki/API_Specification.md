@@ -1288,6 +1288,9 @@
       "patientId": "pat_Zk3mQ9",
       "name": "홍길동",
       "birthDate6": "580315",
+      "phone": "01012345678",
+      "regionCode": "ULLEUNG",
+      "address": "경북 울릉군 울릉읍 ...",
       "relation": "자녀",
       "approvedAt": "2026-01-15"
     }

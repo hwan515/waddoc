@@ -4,6 +4,7 @@ import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSummary;
+import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.guardian.dto.GuardianConsultationSummariesResponse;
@@ -50,26 +51,26 @@ class GuardianQueryServiceTest {
         User guardianUser = User.builder()
                 .username("guardian_lee")
                 .passwordHash("encoded-password")
-                .name("이보호자")
+                .name("Guardian Lee")
                 .role(Role.GUARDIAN)
                 .build();
         User adminUser = User.builder()
                 .username("admin")
                 .passwordHash("encoded-password")
-                .name("관리자")
+                .name("Admin")
                 .role(Role.ADMIN)
                 .build();
         Patient patient = Patient.builder()
-                .name("홍길동")
+                .name("Kim Younghee")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
-                .address("울릉군")
+                .address("Ulleung-eup, Ulleung-gun")
                 .phone("01012345678")
                 .build();
         PatientGuardianLink link = PatientGuardianLink.builder()
                 .patient(patient)
                 .guardianUser(guardianUser)
-                .relation("자녀")
+                .relation("DAUGHTER")
                 .build();
         link.approve(adminUser);
 
@@ -83,30 +84,33 @@ class GuardianQueryServiceTest {
         );
 
         assertThat(response.getPatients()).hasSize(1);
-        assertThat(response.getPatients().get(0).getName()).isEqualTo("홍길동");
-        assertThat(response.getPatients().get(0).getRelation()).isEqualTo("자녀");
+        assertThat(response.getPatients().get(0).getName()).isEqualTo("Kim Younghee");
+        assertThat(response.getPatients().get(0).getPhone()).isEqualTo("01012345678");
+        assertThat(response.getPatients().get(0).getRegionCode()).isEqualTo("ULLEUNG");
+        assertThat(response.getPatients().get(0).getAddress()).isEqualTo("Ulleung-eup, Ulleung-gun");
+        assertThat(response.getPatients().get(0).getRelation()).isEqualTo("DAUGHTER");
         verify(accessControlService).assertGuardian(new AuthenticatedUser("usr_guardian", Role.GUARDIAN));
     }
 
     @Test
     void getConsultationSummariesReturnsCompletedSummaries() {
         Patient patient = Patient.builder()
-                .name("홍길동")
+                .name("Kim Younghee")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
-                .address("울릉군")
+                .address("Ulleung-eup, Ulleung-gun")
                 .phone("01012345678")
                 .build();
         User doctorUser = User.builder()
                 .username("doctor_kim")
                 .passwordHash("encoded-password")
-                .name("김의사")
+                .name("Dr. Kim")
                 .role(Role.DOCTOR)
                 .build();
         DoctorProfile doctorProfile = DoctorProfile.builder()
                 .user(doctorUser)
                 .department("INTERNAL_MEDICINE")
-                .departmentName("내과")
+                .departmentName("Internal Medicine")
                 .build();
         Booking booking = Booking.builder()
                 .patient(patient)
@@ -135,9 +139,9 @@ class GuardianQueryServiceTest {
 
         ConsultationSummary summary = ConsultationSummary.builder()
                 .session(session)
-                .summaryNote("편두통 소견. 수분 섭취 권장.")
+                .summaryNote("Headache and mild cough. Rest and hydration advised.")
                 .prescriptionIssued(true)
-                .prescriptionNote("타이레놀 500mg")
+                .prescriptionNote("Tylenol 500mg")
                 .needsFollowUp(true)
                 .build();
 
@@ -147,7 +151,7 @@ class GuardianQueryServiceTest {
         )).thenReturn(patient);
         when(consultationSummaryRepository.findAllByPatientPublicIdAndSessionStatus(
                 patient.getPublicId(),
-                com.waddoc.domain.consultation.entity.ConsultationSessionStatus.COMPLETED
+                ConsultationSessionStatus.COMPLETED
         )).thenReturn(List.of(summary));
 
         GuardianConsultationSummariesResponse response = guardianQueryService.getConsultationSummaries(
@@ -155,9 +159,9 @@ class GuardianQueryServiceTest {
                 patient.getPublicId()
         );
 
-        assertThat(response.getPatientName()).isEqualTo("홍길동");
+        assertThat(response.getPatientName()).isEqualTo("Kim Younghee");
         assertThat(response.getTotalCount()).isEqualTo(1);
-        assertThat(response.getSummaries().get(0).getDoctorName()).isEqualTo("김의사");
+        assertThat(response.getSummaries().get(0).getDoctorName()).isEqualTo("Dr. Kim");
         assertThat(response.getSummaries().get(0).isPrescriptionIssued()).isTrue();
     }
 }

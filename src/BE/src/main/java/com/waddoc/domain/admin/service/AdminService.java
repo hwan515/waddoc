@@ -149,7 +149,7 @@ public class AdminService {
             int size
     ) {
         accessControlService.assertAdmin(authenticatedUser);
-        Page<Patient> patientPage = patientRepository.searchAdminPatients(
+        Page<Patient> patientPage = searchAdminPatients(
                 normalize(name),
                 normalize(phone),
                 pageRequest(page, size)
@@ -236,6 +236,26 @@ public class AdminService {
 
     private Pageable pageRequest(int page, int size) {
         return PageRequest.of(page, size);
+    }
+
+    private Page<Patient> searchAdminPatients(String name, String phone, Pageable pageable) {
+        if (name == null && phone == null) {
+            return patientRepository.findAllByOrderByCreatedAtDesc(pageable);
+        }
+
+        if (name == null) {
+            return patientRepository.findAllByPhoneContainingOrderByCreatedAtDesc(phone, pageable);
+        }
+
+        if (phone == null) {
+            return patientRepository.findAllByNameContainingIgnoreCaseOrderByCreatedAtDesc(name, pageable);
+        }
+
+        return patientRepository.findAllByNameContainingIgnoreCaseAndPhoneContainingOrderByCreatedAtDesc(
+                name,
+                phone,
+                pageable
+        );
     }
 
     private String normalize(String value) {

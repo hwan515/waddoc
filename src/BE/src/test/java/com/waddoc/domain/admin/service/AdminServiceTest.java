@@ -2,6 +2,7 @@ package com.waddoc.domain.admin.service;
 
 import com.waddoc.domain.admin.dto.AdminBookingListResponse;
 import com.waddoc.domain.admin.dto.AdminCaseListResponse;
+import com.waddoc.domain.admin.dto.AdminPatientListResponse;
 import com.waddoc.domain.admin.dto.GuardianLinkApprovalResponse;
 import com.waddoc.domain.admin.dto.GuardianLinkRejectionResponse;
 import com.waddoc.domain.auth.service.RefreshTokenService;
@@ -134,6 +135,28 @@ class AdminServiceTest {
         assertThat(response.getCases()).hasSize(1);
         assertThat(response.getCases().get(0).getMissionPhase()).isEqualTo(MissionPhase.VERIFYING);
         assertThat(response.getCases().get(0).getSessionStatus()).isEqualTo(ConsultationSessionStatus.READY);
+        verify(accessControlService).assertAdmin(admin);
+    }
+
+    @Test
+    void getPatientsWithoutFiltersReturnsPagedPatients() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Patient patient = Patient.builder()
+                .name("Hong")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .regionCode("ULLEUNG")
+                .address("Ulleung")
+                .phone("01012345678")
+                .build();
+
+        when(patientRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(patient), PageRequest.of(0, 20), 1));
+
+        AdminPatientListResponse response = adminService.getPatients(admin, null, null, 0, 20);
+
+        assertThat(response.getTotalCount()).isEqualTo(1);
+        assertThat(response.getPatients()).hasSize(1);
+        assertThat(response.getPatients().get(0).getName()).isEqualTo("Hong");
         verify(accessControlService).assertAdmin(admin);
     }
 

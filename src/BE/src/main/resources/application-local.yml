@@ -41,6 +41,9 @@ livekit:
   api-secret: devsecret
   url: ${LIVEKIT_URL:ws://localhost:7880}
 
+telemetry:
+  api-key: ${TELEMETRY_API_KEY:telemetry-dev-key}
+
 app:
   seed:
     enabled: ${APP_SEED_ENABLED:true}
