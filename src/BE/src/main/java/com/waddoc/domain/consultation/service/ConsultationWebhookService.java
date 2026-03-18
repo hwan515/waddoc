@@ -7,39 +7,32 @@ import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import io.livekit.server.WebhookReceiver;
-import livekit.LivekitModels;
 import livekit.LivekitWebhook;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.scheduling.TaskScheduler;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledFuture;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConsultationWebhookService {
 
+    private static final String WEBHOOK_IDEMPOTENCY_PREFIX = "webhook:event:";
+    private static final Duration WEBHOOK_IDEMPOTENCY_TTL = Duration.ofMinutes(5);
+
     private final ConsultationSessionRepository consultationSessionRepository;
     private final AuditLogService auditLogService;
     private final WebhookReceiver webhookReceiver;
-
-    @Qualifier("consultationWebhookTaskScheduler")
-    private final TaskScheduler taskScheduler;
-
-    // TODO: 백엔드를 다중 인스턴스로 확장하면 이 인메모리 타이머를 Redis/DB 기반 지연 작업으로 옮겨야 한다.
-    // 현재 구현은 동일 인스턴스가 left/joined webhook을 모두 처리하는 단일 서버 전제를 둔다.
-    private final Map<String, ScheduledFuture<?>> disconnectTasks = new ConcurrentHashMap<>();
+    private final DisconnectTimerService disconnectTimerService;
+    private final StringRedisTemplate redisTemplate;
 
     @Transactional
     public void handleWebhook(String body, String authorizationHeader) {
@@ -56,6 +49,17 @@ public class ConsultationWebhookService {
             return;
         }
 
+        // 웹훅 멱등성: 이미 처리된 이벤트는 무시
+        String eventId = event.getId();
+        if (eventId != null && !eventId.isBlank()) {
+            String idempotencyKey = WEBHOOK_IDEMPOTENCY_PREFIX + eventId;
+            Boolean wasAbsent = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "1", WEBHOOK_IDEMPOTENCY_TTL);
+            if (!Boolean.TRUE.equals(wasAbsent)) {
+                log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
+                return;
+            }
+        }
+
         switch (eventName) {
             case "participant_joined" -> handleParticipantJoined(event);
             case "participant_left" -> handleParticipantLeft(event);
@@ -67,7 +71,7 @@ public class ConsultationWebhookService {
     private void handleParticipantJoined(LivekitWebhook.WebhookEvent event) {
         ConsultationSession session = findSessionByRoom(event);
         ParticipantRole participantRole = resolveParticipantRole(session, event);
-        cancelDisconnectTimer(session.getPublicId(), participantRole);
+        disconnectTimerService.cancel(session.getPublicId(), participantRole.name());
 
         switch (participantRole) {
             case DOCTOR -> session.connectDoctor();
@@ -106,7 +110,7 @@ public class ConsultationWebhookService {
             }
         }
 
-        scheduleDisconnectTimer(session, participantRole);
+        disconnectTimerService.schedule(session.getPublicId(), participantRole.name());
 
         auditLogService.log(
                 "LIVEKIT_PARTICIPANT_LEFT",
@@ -123,8 +127,8 @@ public class ConsultationWebhookService {
 
     private void handleRoomFinished(LivekitWebhook.WebhookEvent event) {
         ConsultationSession session = findSessionByRoom(event);
-        cancelDisconnectTimer(session.getPublicId(), ParticipantRole.DOCTOR);
-        cancelDisconnectTimer(session.getPublicId(), ParticipantRole.PATIENT);
+        disconnectTimerService.cancel(session.getPublicId(), ParticipantRole.DOCTOR.name());
+        disconnectTimerService.cancel(session.getPublicId(), ParticipantRole.PATIENT.name());
 
         if (session.getStatus() != ConsultationSessionStatus.COMPLETED) {
             session.complete(calculateDurationMinutes(session, LocalDateTime.now()));
@@ -182,44 +186,6 @@ public class ConsultationWebhookService {
                 || normalized.equals(rolePrefix + "-" + expected)
                 || normalized.endsWith(":" + expected)
                 || normalized.endsWith("-" + expected);
-    }
-
-    private void scheduleDisconnectTimer(ConsultationSession session, ParticipantRole participantRole) {
-        String taskKey = buildTaskKey(session.getPublicId(), participantRole);
-        cancelDisconnectTimer(session.getPublicId(), participantRole);
-
-        ScheduledFuture<?> future = taskScheduler.schedule(
-                () -> {
-                    disconnectTasks.remove(taskKey);
-                    auditLogService.log(
-                            "LIVEKIT_RECONNECT_TIMEOUT",
-                            "CONSULTATION_SESSION",
-                            session.getPublicId(),
-                            "corr_ses_" + session.getPublicId(),
-                            Map.of(
-                                    "participantRole", participantRole.name(),
-                                    "doctorConnected", session.isDoctorConnected(),
-                                    "patientConnected", session.isPatientConnected()
-                            )
-                    );
-                },
-                Instant.now().plusSeconds(30)
-        );
-
-        if (future != null) {
-            disconnectTasks.put(taskKey, future);
-        }
-    }
-
-    private void cancelDisconnectTimer(String sessionId, ParticipantRole participantRole) {
-        ScheduledFuture<?> future = disconnectTasks.remove(buildTaskKey(sessionId, participantRole));
-        if (future != null) {
-            future.cancel(false);
-        }
-    }
-
-    private String buildTaskKey(String sessionId, ParticipantRole participantRole) {
-        return sessionId + ":" + participantRole.name();
     }
 
     private int calculateDurationMinutes(ConsultationSession session, LocalDateTime endedAt) {

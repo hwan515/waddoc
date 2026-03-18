@@ -22,19 +22,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.scheduling.TaskScheduler;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Optional;
-import java.util.concurrent.ScheduledFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,10 +49,16 @@ class ConsultationWebhookServiceTest {
     private AuditLogService auditLogService;
 
     @Mock
-    private TaskScheduler taskScheduler;
+    private DisconnectTimerService disconnectTimerService;
 
     @Mock
     private WebhookReceiver webhookReceiver;
+
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
 
     @InjectMocks
     private ConsultationWebhookService consultationWebhookService;
@@ -61,6 +67,7 @@ class ConsultationWebhookServiceTest {
     void handleWebhook_marksDoctorAndPatientConnectedAndStartsSession() {
         ConsultationSession session = buildSession();
         when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
+        stubIdempotencyCheck();
 
         String doctorJoinedBody = participantEventBody("participant_joined", "room_ses_test123", "doc_usr_doctor");
         String patientJoinedBody = participantEventBody("participant_joined", "room_ses_test123", "patient:pat_test123");
@@ -85,14 +92,12 @@ class ConsultationWebhookServiceTest {
     }
 
     @Test
-    void handleWebhook_marksParticipantDisconnectedAndStartsReconnectTimer() {
+    void handleWebhook_marksParticipantDisconnectedAndSchedulesRedisTimer() {
         ConsultationSession session = buildSession();
         session.connectDoctor();
-        @SuppressWarnings("unchecked")
-        ScheduledFuture<Object> future = (ScheduledFuture<Object>) mock(ScheduledFuture.class);
 
         when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
-        doReturn(future).when(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+        stubIdempotencyCheck();
 
         String body = participantEventBody("participant_left", "room_ses_test123", "doctor:doc_usr_doctor");
         when(webhookReceiver.receive(body, "signed-header"))
@@ -101,7 +106,7 @@ class ConsultationWebhookServiceTest {
         consultationWebhookService.handleWebhook(body, "signed-header");
 
         assertThat(session.getDoctorConnectionState()).isEqualTo(ConnectionState.DISCONNECTED);
-        verify(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+        verify(disconnectTimerService).schedule("ses_test123", "DOCTOR");
     }
 
     @Test
@@ -111,6 +116,7 @@ class ConsultationWebhookServiceTest {
         session.connectPatient();
 
         when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
+        stubIdempotencyCheck();
 
         String body = """
                 {
@@ -128,7 +134,9 @@ class ConsultationWebhookServiceTest {
         assertThat(session.getStatus()).isEqualTo(ConsultationSessionStatus.COMPLETED);
         assertThat(session.getEndedAt()).isNotNull();
         assertThat(session.getDurationMinutes()).isNotNull();
-        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
+        verify(disconnectTimerService).cancel("ses_test123", "DOCTOR");
+        verify(disconnectTimerService).cancel("ses_test123", "PATIENT");
+        verify(disconnectTimerService, never()).schedule(anyString(), anyString());
     }
 
     @Test
@@ -139,6 +147,11 @@ class ConsultationWebhookServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.LIVEKIT_WEBHOOK_INVALID_SIGNATURE);
+    }
+
+    private void stubIdempotencyCheck() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), eq("1"), any(Duration.class))).thenReturn(true);
     }
 
     private ConsultationSession buildSession() {
@@ -215,6 +228,7 @@ class ConsultationWebhookServiceTest {
 
     private LivekitWebhook.WebhookEvent buildParticipantEvent(String eventName, String roomName, String identity) {
         return LivekitWebhook.WebhookEvent.newBuilder()
+                .setId("evt_" + eventName + "_" + identity.hashCode())
                 .setEvent(eventName)
                 .setRoom(LivekitModels.Room.newBuilder().setName(roomName).build())
                 .setParticipant(LivekitModels.ParticipantInfo.newBuilder().setIdentity(identity).build())
@@ -223,6 +237,7 @@ class ConsultationWebhookServiceTest {
 
     private LivekitWebhook.WebhookEvent buildRoomFinishedEvent(String roomName) {
         return LivekitWebhook.WebhookEvent.newBuilder()
+                .setId("evt_room_finished_" + roomName.hashCode())
                 .setEvent("room_finished")
                 .setRoom(LivekitModels.Room.newBuilder().setName(roomName).build())
                 .build();
