@@ -24,6 +24,15 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             from Mission m
             join fetch m.careCase c
             join fetch c.patient p
+            where m.publicId = :publicId
+            """)
+    Optional<Mission> findWithDetailsByPublicId(@Param("publicId") String publicId);
+
+    @Query("""
+            select m
+            from Mission m
+            join fetch m.careCase c
+            join fetch c.patient p
             order by coalesce(m.dispatchedAt, m.createdAt) desc, m.publicId desc
             """)
     List<Mission> findAllForAdminDashboard();
