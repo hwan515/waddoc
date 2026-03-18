@@ -2,17 +2,21 @@ package com.waddoc.domain.consultation.controller;
 
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.dto.PutConsultationSummaryRequest;
+import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
 import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,6 +26,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConsultationSessionController {
 
     private final ConsultationSummaryService consultationSummaryService;
+    private final ConsultationWebhookService consultationWebhookService;
+
+    // 10.6: LiveKit 서버가 보내는 webhook 이벤트를 수신해 연결 상태를 반영한다.
+    @PostMapping("/webhook/livekit")
+    public ResponseEntity<Void> handleLiveKitWebhook(
+            @RequestBody String body,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader
+    ) {
+        consultationWebhookService.handleWebhook(body, authorizationHeader);
+        return ResponseEntity.ok().build();
+    }
 
     // 10.5 조회: 담당 의사나 관리자가 저장된 진료 요약을 확인할 수 있다.
     @GetMapping("/{sessionId}/summary")
