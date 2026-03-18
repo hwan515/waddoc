@@ -9,6 +9,7 @@ import com.waddoc.domain.intake.entity.CompletionReason;
 import com.waddoc.domain.intake.entity.IntakeStatus;
 import com.waddoc.domain.intake.service.IntakeSessionService;
 import com.waddoc.global.error.GlobalExceptionHandler;
+import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -41,6 +42,9 @@ class IntakeSessionControllerTest {
 
     @MockBean
     private IntakeSessionService intakeSessionService;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
 
     @Test
     void updateSession_bindsPatientWithDocumentedPatchContract() throws Exception {

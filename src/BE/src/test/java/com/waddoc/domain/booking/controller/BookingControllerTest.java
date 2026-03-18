@@ -6,6 +6,7 @@ import com.waddoc.domain.booking.dto.BookingSummaryResponse;
 import com.waddoc.domain.booking.dto.CancelBookingResponse;
 import com.waddoc.domain.booking.service.BookingService;
 import com.waddoc.global.error.GlobalExceptionHandler;
+import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -41,6 +42,9 @@ class BookingControllerTest {
 
     @MockBean
     private BookingService bookingService;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
 
     @Test
     void getExistingBookings_usesDocumentedBookingsPath() throws Exception {

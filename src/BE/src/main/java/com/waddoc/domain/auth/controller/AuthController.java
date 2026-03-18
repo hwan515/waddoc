@@ -2,12 +2,17 @@ package com.waddoc.domain.auth.controller;
 
 import com.waddoc.domain.auth.dto.LoginRequest;
 import com.waddoc.domain.auth.dto.LoginResponse;
+import com.waddoc.domain.auth.dto.GuardianSignupRequest;
+import com.waddoc.domain.auth.dto.GuardianSignupResponse;
 import com.waddoc.domain.auth.dto.TokenRefreshResponse;
 import com.waddoc.domain.auth.service.AuthService;
+import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,6 +21,14 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+
+    @PostMapping("/guardians/signup")
+    public ResponseEntity<GuardianSignupResponse> signupGuardian(
+            @Valid @RequestBody GuardianSignupRequest request
+    ) {
+        GuardianSignupResponse response = authService.signupGuardian(request);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+    }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(
@@ -37,11 +50,11 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
-            @RequestHeader(name = "Authorization", required = false) String authorizationHeader,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @CookieValue(name = "refresh_token", required = false) String refreshToken,
             HttpServletResponse response
     ) {
-        authService.logout(authorizationHeader, refreshToken, response);
+        authService.logout(authenticatedUser, refreshToken, response);
         return ResponseEntity.noContent().build();
     }
 }

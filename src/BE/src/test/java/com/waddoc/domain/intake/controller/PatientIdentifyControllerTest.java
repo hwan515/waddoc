@@ -10,6 +10,7 @@ import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.error.GlobalExceptionHandler;
+import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -42,6 +43,9 @@ class PatientIdentifyControllerTest {
 
     @MockBean
     private PatientIdentifyService patientIdentifyService;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
 
     @Test
     void identifyByCallerNumber_returnsPatientResponse() throws Exception {

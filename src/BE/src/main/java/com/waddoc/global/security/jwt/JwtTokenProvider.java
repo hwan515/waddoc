@@ -1,6 +1,7 @@
 package com.waddoc.global.security.jwt;
 
 import com.waddoc.domain.user.entity.Role;
+import com.waddoc.global.security.AuthenticatedUser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.JwtException;
@@ -79,6 +80,10 @@ public class JwtTokenProvider {
     public Role getRole(String token) {
         String roleValue = parseClaims(token).get(ROLE_CLAIM, String.class);
         return Role.valueOf(roleValue);
+    }
+
+    public AuthenticatedUser getAuthenticatedUser(String token) {
+        return new AuthenticatedUser(getUserId(token), getRole(token));
     }
 
     public long getAccessTokenExpiry() {
