@@ -7,7 +7,7 @@ import type { BookingResult, CompletionReason, IdentifyResult } from '../types/i
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const DEFAULT_CALLER_PHONE =
-  import.meta.env.VITE_CALLER_PHONE ?? '01012345678';
+  import.meta.env.VITE_CALLER_PHONE ?? '01049163720';
 
 const DEPARTMENT_MENU_MESSAGE =
   '원하시는 진료과를 선택해주세요. 내과는 1번, 피부과는 2번, 정형외과는 3번, 신경과는 4번, 안과는 5번, 다시 듣기는 0번입니다.';
