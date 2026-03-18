@@ -53,19 +53,84 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     join fetch c.doctor d
                     join fetch d.user du
                     left join fetch c.intakeSession i
-                    where (:appointmentDate is null or b.appointmentDate = :appointmentDate)
-                      and (:status is null or c.status = :status)
+                    order by b.appointmentDate desc, b.startTime desc
+                    """,
+            countQuery = """
+                    select count(c)
+                    from CareCase c
+                    """
+    )
+    Page<CareCase> findAllForAdmin(Pageable pageable);
+
+    @Query(
+            value = """
+                    select c
+                    from CareCase c
+                    join fetch c.booking b
+                    join fetch c.patient p
+                    join fetch c.doctor d
+                    join fetch d.user du
+                    left join fetch c.intakeSession i
+                    where b.appointmentDate = :appointmentDate
                     order by b.appointmentDate desc, b.startTime desc
                     """,
             countQuery = """
                     select count(c)
                     from CareCase c
                     join c.booking b
-                    where (:appointmentDate is null or b.appointmentDate = :appointmentDate)
-                      and (:status is null or c.status = :status)
+                    where b.appointmentDate = :appointmentDate
                     """
     )
-    Page<CareCase> searchAdminCases(
+    Page<CareCase> findAllForAdminByAppointmentDate(
+            @Param("appointmentDate") LocalDate appointmentDate,
+            Pageable pageable
+    );
+
+    @Query(
+            value = """
+                    select c
+                    from CareCase c
+                    join fetch c.booking b
+                    join fetch c.patient p
+                    join fetch c.doctor d
+                    join fetch d.user du
+                    left join fetch c.intakeSession i
+                    where c.status = :status
+                    order by b.appointmentDate desc, b.startTime desc
+                    """,
+            countQuery = """
+                    select count(c)
+                    from CareCase c
+                    where c.status = :status
+                    """
+    )
+    Page<CareCase> findAllForAdminByStatus(
+            @Param("status") CaseStatus status,
+            Pageable pageable
+    );
+
+    @Query(
+            value = """
+                    select c
+                    from CareCase c
+                    join fetch c.booking b
+                    join fetch c.patient p
+                    join fetch c.doctor d
+                    join fetch d.user du
+                    left join fetch c.intakeSession i
+                    where b.appointmentDate = :appointmentDate
+                      and c.status = :status
+                    order by b.appointmentDate desc, b.startTime desc
+                    """,
+            countQuery = """
+                    select count(c)
+                    from CareCase c
+                    join c.booking b
+                    where b.appointmentDate = :appointmentDate
+                      and c.status = :status
+                    """
+    )
+    Page<CareCase> findAllForAdminByAppointmentDateAndStatus(
             @Param("appointmentDate") LocalDate appointmentDate,
             @Param("status") CaseStatus status,
             Pageable pageable

@@ -97,15 +97,23 @@ public class AdminService {
             int size
     ) {
         accessControlService.assertAdmin(authenticatedUser);
-        Page<CareCase> casePage = careCaseRepository.searchAdminCases(date, status, pageRequest(page, size));
+        Page<CareCase> casePage = searchAdminCases(date, status, pageRequest(page, size));
         if (casePage.isEmpty()) {
             return AdminCaseListResponse.of(Collections.emptyList(), casePage);
         }
 
         Map<Long, MissionPhase> missionPhaseByCaseId = missionRepository.findAllByCareCaseIn(casePage.getContent()).stream()
-                .collect(Collectors.toMap(mission -> mission.getCareCase().getId(), Mission::getPhase));
+                .collect(Collectors.toMap(
+                        mission -> mission.getCareCase().getId(),
+                        Mission::getPhase,
+                        (existing, replacement) -> replacement
+                ));
         Map<Long, ConsultationSessionStatus> sessionStatusByCaseId = consultationSessionRepository.findAllByCareCaseIn(casePage.getContent()).stream()
-                .collect(Collectors.toMap(session -> session.getCareCase().getId(), ConsultationSession::getStatus));
+                .collect(Collectors.toMap(
+                        session -> session.getCareCase().getId(),
+                        ConsultationSession::getStatus,
+                        (existing, replacement) -> replacement
+                ));
 
         List<AdminCaseSummaryResponse> responses = casePage.getContent().stream()
                 .map(careCase -> AdminCaseSummaryResponse.from(
@@ -256,6 +264,22 @@ public class AdminService {
                 phone,
                 pageable
         );
+    }
+
+    private Page<CareCase> searchAdminCases(LocalDate date, CaseStatus status, Pageable pageable) {
+        if (date == null && status == null) {
+            return careCaseRepository.findAllForAdmin(pageable);
+        }
+
+        if (date == null) {
+            return careCaseRepository.findAllForAdminByStatus(status, pageable);
+        }
+
+        if (status == null) {
+            return careCaseRepository.findAllForAdminByAppointmentDate(date, pageable);
+        }
+
+        return careCaseRepository.findAllForAdminByAppointmentDateAndStatus(date, status, pageable);
     }
 
     private String normalize(String value) {

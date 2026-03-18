@@ -10,6 +10,7 @@ import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.entity.CareCase;
+import com.waddoc.domain.carecase.entity.CaseStatus;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
@@ -125,7 +126,7 @@ class AdminServiceTest {
                 .build();
         session.markReady();
 
-        when(careCaseRepository.searchAdminCases(null, null, PageRequest.of(0, 20)))
+        when(careCaseRepository.findAllForAdmin(PageRequest.of(0, 20)))
                 .thenReturn(new PageImpl<>(List.of(careCase), PageRequest.of(0, 20), 1));
         when(missionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of(mission));
         when(consultationSessionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of(session));
@@ -136,6 +137,72 @@ class AdminServiceTest {
         assertThat(response.getCases().get(0).getMissionPhase()).isEqualTo(MissionPhase.VERIFYING);
         assertThat(response.getCases().get(0).getSessionStatus()).isEqualTo(ConsultationSessionStatus.READY);
         verify(accessControlService).assertAdmin(admin);
+    }
+
+    @Test
+    void getCasesWithDateOnlyUsesDateFilteredQuery() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        LocalDate appointmentDate = LocalDate.of(2026, 3, 18);
+        Booking booking = buildBooking();
+        setField(booking, "appointmentDate", appointmentDate);
+        CareCase careCase = buildCareCase(booking);
+        setField(careCase, "id", 100L);
+
+        when(careCaseRepository.findAllForAdminByAppointmentDate(appointmentDate, PageRequest.of(0, 50)))
+                .thenReturn(new PageImpl<>(List.of(careCase), PageRequest.of(0, 50), 1));
+        when(missionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of());
+        when(consultationSessionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of());
+
+        AdminCaseListResponse response = adminService.getCases(admin, appointmentDate, null, 0, 50);
+
+        assertThat(response.getCases()).hasSize(1);
+        assertThat(response.getCases().get(0).getCaseId()).isEqualTo(careCase.getPublicId());
+        verify(careCaseRepository).findAllForAdminByAppointmentDate(appointmentDate, PageRequest.of(0, 50));
+    }
+
+    @Test
+    void getCasesKeepsLatestStateWhenDuplicateMetadataExists() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Booking booking = buildBooking();
+        CareCase careCase = buildCareCase(booking);
+        setField(careCase, "id", 100L);
+        Mission firstMission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId("VEH-01")
+                .destination("울릉군")
+                .build();
+        firstMission.updatePhase(MissionPhase.DISPATCHED);
+        Mission secondMission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId("VEH-02")
+                .destination("울릉군")
+                .build();
+        secondMission.updatePhase(MissionPhase.VERIFYING);
+
+        ConsultationSession firstSession = ConsultationSession.builder()
+                .careCase(careCase)
+                .roomId("room-1")
+                .livekitUrl("wss://livekit.test")
+                .build();
+        firstSession.markReady();
+        ConsultationSession secondSession = ConsultationSession.builder()
+                .careCase(careCase)
+                .roomId("room-2")
+                .livekitUrl("wss://livekit.test")
+                .build();
+        secondSession.start();
+
+        when(careCaseRepository.findAllForAdmin(PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(careCase), PageRequest.of(0, 20), 1));
+        when(missionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of(firstMission, secondMission));
+        when(consultationSessionRepository.findAllByCareCaseIn(List.of(careCase)))
+                .thenReturn(List.of(firstSession, secondSession));
+
+        AdminCaseListResponse response = adminService.getCases(admin, null, null, 0, 20);
+
+        assertThat(response.getCases()).hasSize(1);
+        assertThat(response.getCases().get(0).getMissionPhase()).isEqualTo(MissionPhase.VERIFYING);
+        assertThat(response.getCases().get(0).getSessionStatus()).isEqualTo(ConsultationSessionStatus.IN_PROGRESS);
     }
 
     @Test
@@ -229,12 +296,14 @@ class AdminServiceTest {
     }
 
     private CareCase buildCareCase(Booking booking) {
-        return CareCase.builder()
+        CareCase careCase = CareCase.builder()
                 .booking(booking)
                 .patient(booking.getPatient())
                 .doctor(booking.getDoctor())
                 .intakeSession(null)
                 .build();
+        setField(careCase, "status", CaseStatus.CREATED);
+        return careCase;
     }
 
     private PatientGuardianLink buildGuardianLink(User guardianUser) {
