@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 
 /**
- * 비즈니스 에러 코드 정의. HTTP 상태 + API 에러코드 + 메시지 매핑.
+ * 비즈니스 에러 코드 정의. HTTP 상태 + API 에러 코드 + 메시지 매핑.
  */
 @Getter
 @RequiredArgsConstructor
@@ -28,6 +28,8 @@ public enum ErrorCode {
     // Patient
     PATIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PATIENT_NOT_FOUND", "해당 환자를 찾을 수 없습니다."),
     PATIENT_PHONE_NOT_FOUND(HttpStatus.NOT_FOUND, "PATIENT_PHONE_NOT_FOUND", "환자 전화번호로 대상을 찾을 수 없습니다."),
+    PATIENT_PHONE_CONFLICT(HttpStatus.CONFLICT, "PATIENT_PHONE_CONFLICT", "이미 등록된 전화번호입니다."),
+    PATIENT_REFERENCE_IMAGE_INVALID(HttpStatus.BAD_REQUEST, "PATIENT_REFERENCE_IMAGE_INVALID", "기준 이미지는 JPEG 또는 PNG 형식만 업로드할 수 있습니다."),
     GUARDIAN_NOT_LINKED(HttpStatus.FORBIDDEN, "GUARDIAN_NOT_LINKED", "해당 환자에 연결되지 않은 보호자 계정입니다."),
     GUARDIAN_LINK_ALREADY_EXISTS(HttpStatus.CONFLICT, "GUARDIAN_LINK_ALREADY_EXISTS", "동일 환자-보호자 가입 이력이 이미 존재합니다."),
     GUARDIAN_LINK_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "GUARDIAN_LINK_REQUEST_NOT_FOUND", "보호자 가입 요청을 찾을 수 없습니다."),
