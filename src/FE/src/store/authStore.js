@@ -1,27 +1,29 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-// Mock Auth Store
-const useAuthStore = create((set) => ({
-    user: null, // null means not logged in
+const useAuthStore = create(
+    persist(
+        (set) => ({
+            user: null, // null means not logged in
+            token: null, // Store accessToken
 
-    // 로그인 액션 (임시 Mock)
-    login: (userData) => {
-        // userData는 { email, password, role } 의 형태를 띰
-        // 실제로는 API 호출이 들어갈 자리
-        set({
-            user: {
-                id: Math.random().toString(36).substring(7),
-                name: userData.email.split('@')[0] || '테스트',
-                email: userData.email,
-                role: userData.role || 'patient', // 'patient', 'doctor', 'operator'
+            // 로그인 액션 (실제 API 응답 결과를 받아와서 세팅)
+            setAuth: (token, userData) => {
+                set({
+                    token: token,
+                    user: userData
+                });
+            },
+
+            // 로그아웃 액션
+            logout: () => {
+                set({ user: null, token: null });
             }
-        });
-    },
-
-    // 로그아웃 액션
-    logout: () => {
-        set({ user: null });
-    }
-}));
+        }),
+        {
+            name: 'auth-storage', // localStorage key name
+        }
+    )
+);
 
 export default useAuthStore;

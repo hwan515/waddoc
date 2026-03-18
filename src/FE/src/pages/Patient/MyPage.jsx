@@ -1,27 +1,70 @@
 import { useNavigate } from 'react-router-dom';
 import { Activity, User, LogOut, Phone, MapPin, HeartPulse, Stethoscope, ChevronLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import useAuthStore from '../../store/authStore';
-import { mockPatientProfile, mockMedicalRecords } from '../../mockdata/patient';
+import apiClient from '../../utils/api';
 
 const MyPage = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
 
-    const user = mockPatientProfile;
+    const [user, setUser] = useState({ 
+        name: '로딩중', phone: '', address: '', age: '-', gender: 'M', bloodType: '-', allergies: [], chronicDiseases: []
+    });
+    const [totalVisits, setTotalVisits] = useState(0);
+    const [mostVisitedDoctor, setMostVisitedDoctor] = useState('기록 없음');
 
-    // 통계 계산
-    const totalVisits = mockMedicalRecords.filter(r => r.status === '완료').length;
+    useEffect(() => {
+        const fetchMyPageData = async () => {
+            try {
+                const patientsRes = await apiClient.get('/guardians/patients');
+                const patients = patientsRes.data.patients || [];
+                
+                if (patients.length > 0) {
+                    const primaryPatient = patients[0];
+                    // 간단한 나이 계산 (YYMMDD)
+                    let age = '-';
+                    if (primaryPatient.birthDate6) {
+                        const birthYearStr = primaryPatient.birthDate6.substring(0, 2);
+                        let birthYear = parseInt(birthYearStr);
+                        birthYear += birthYear > 30 ? 1900 : 2000;
+                        age = new Date().getFullYear() - birthYear;
+                    }
 
-    // 가장 많이 진료를 본 의사 계산
-    const doctorCounts = mockMedicalRecords.reduce((acc, record) => {
-        if (record.status === '완료') {
-            acc[record.doctorName] = (acc[record.doctorName] || 0) + 1;
-        }
-        return acc;
-    }, {});
+                    setUser({
+                        ...primaryPatient,
+                        age: age,
+                        gender: 'M', // API 미제공 임시
+                        phone: '010-0000-0000', // API 미제공 임시
+                        address: '주소 정보 미등록', // API 미제공 임시
+                        bloodType: 'A+', // API 미제공 임시
+                        allergies: [], // API 미제공 임시
+                        chronicDiseases: [] // API 미제공 임시
+                    });
 
-    // 가장 많이 방문한 의사명 찾기
-    const mostVisitedDoctor = Object.keys(doctorCounts).reduce((a, b) => doctorCounts[a] > doctorCounts[b] ? a : b, '기록 없음');
+                    // 진료 요약 조회하여 통계 계산
+                    const summariesRes = await apiClient.get(`/guardians/patients/${primaryPatient.patientId}/summaries`);
+                    const summaries = summariesRes.data.summaries || [];
+                    
+                    setTotalVisits(summaries.length);
+                    
+                    const doctorCounts = summaries.reduce((acc, record) => {
+                        acc[record.doctorName] = (acc[record.doctorName] || 0) + 1;
+                        return acc;
+                    }, {});
+
+                    if (Object.keys(doctorCounts).length > 0) {
+                        const topDoctor = Object.keys(doctorCounts).reduce((a, b) => doctorCounts[a] > doctorCounts[b] ? a : b);
+                        setMostVisitedDoctor(topDoctor);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch my page data:", error);
+            }
+        };
+
+        fetchMyPageData();
+    }, []);
 
     const handleLogout = () => {
         logout();

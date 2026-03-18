@@ -94,6 +94,10 @@ public class Booking extends BaseTimeEntity {
         this.cancelledAt = LocalDateTime.now();
     }
 
+    public void complete() {
+        this.status = BookingStatus.COMPLETED;
+    }
+
     /** CONFIRMED 상태만 취소 가능 */
     public boolean isCancellable() {
         return this.status == BookingStatus.CONFIRMED;

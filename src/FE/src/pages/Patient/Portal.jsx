@@ -1,16 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, User, Calendar as CalendarIcon, List, LogOut } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
-import { mockPatientProfile, mockMedicalRecords, mockCalendarEvents } from '../../mockdata/patient';
+import apiClient from '../../utils/api';
 
 const PatientPortal = () => {
     const [activeTab, setActiveTab] = useState('list');
     const navigate = useNavigate();
     const logout = useAuthStore(state => state.logout);
 
-    // In real app, we would get `user` from authStore, but we use mockPatientProfile here.
-    const user = mockPatientProfile;
+    const [user, setUser] = useState({ name: '로딩중' });
+    const [medicalRecords, setMedicalRecords] = useState([]);
+    const [calendarEvents, setCalendarEvents] = useState([]);
+
+    useEffect(() => {
+        const fetchPatientData = async () => {
+            try {
+                // 1. 환자 목록 조회 (MVP로 첫번째 환자 선택)
+                const patientsRes = await apiClient.get('/guardians/patients');
+                const patients = patientsRes.data.patients || [];
+
+                if (patients.length > 0) {
+                    const primaryPatient = patients[0];
+                    setUser(primaryPatient);
+
+                    // 2. 해당 환자의 지난 진료 요약(Medical Records) 조회
+                    const summariesRes = await apiClient.get(`/guardians/patients/${primaryPatient.patientId}/summaries`);
+                    const summaries = summariesRes.data.summaries || [];
+
+                    // 리스트 뷰 & 캘린더 뷰 포맷으로 파싱
+                    const mappedRecords = summaries.map(s => ({
+                        date: s.consultationDate || '',
+                        time: '-', // API 명세상 시간은 제공되지 않으므로 임시 대시
+                        doctorName: s.doctorName,
+                        department: s.departmentName,
+                        status: '완료', // summaries API는 완료된 것만 내려줌
+                        hasPrescription: s.isPrescriptionIssued,
+                        hasNote: !!s.summaryNote
+                    }));
+
+                    const mappedEvents = summaries.map(s => ({
+                        id: s.caseId,
+                        title: `${s.departmentName} 진료`,
+                        date: s.consultationDate, // ex) '2026-03-11'
+                        doctor: s.doctorName,
+                        type: 'past'
+                    }));
+
+                    setMedicalRecords(mappedRecords);
+                    setCalendarEvents(mappedEvents);
+                }
+            } catch (error) {
+                console.error("Failed to fetch guardian patient data:", error);
+            }
+        };
+
+        fetchPatientData();
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -28,7 +74,7 @@ const PatientPortal = () => {
                             <Activity className="w-6 h-6 text-[#0353A4]" strokeWidth={2.5} />
                         </div>
                         <span className="font-bold text-xl text-slate-800 tracking-tight">
-                            Vital<span className="text-[#0353A4]">Connect</span>
+                            Waddoc<span className="text-[#0353A4]"> 왔닥</span>
                         </span>
                     </div>
 
@@ -79,9 +125,9 @@ const PatientPortal = () => {
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0353A4]/20 via-[#B9D6F2] to-[#B9D6F2]/30 z-10"></div>
 
                     {activeTab === 'calendar' ? (
-                        <CalendarView records={mockCalendarEvents} />
+                        <CalendarView records={calendarEvents} />
                     ) : (
-                        <ListView records={mockMedicalRecords} />
+                        <ListView records={medicalRecords} />
                     )}
                 </div>
             </main>
@@ -216,11 +262,10 @@ const ListView = ({ records }) => {
                                 </td>
                                 <td className="px-6 py-4 border-r border-slate-200 text-center">
                                     <div className="flex justify-center">
-                                        <span className={`text-xs px-3 py-1.5 rounded-lg font-bold min-w-[60px] shadow-sm ${
-                                            r.status === '완료' 
-                                            ? 'bg-slate-100 text-slate-600 border border-slate-200' 
+                                        <span className={`text-xs px-3 py-1.5 rounded-lg font-bold min-w-[60px] shadow-sm ${r.status === '완료'
+                                            ? 'bg-slate-100 text-slate-600 border border-slate-200'
                                             : 'bg-green-50 text-green-600 border border-green-200 ring-1 ring-green-100'
-                                        }`}>
+                                            }`}>
                                             {r.status}
                                         </span>
                                     </div>

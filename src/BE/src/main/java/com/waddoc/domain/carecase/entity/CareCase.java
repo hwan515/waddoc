@@ -62,4 +62,8 @@ public class CareCase extends BaseTimeEntity {
     public void cancel() {
         this.status = CaseStatus.CANCELLED;
     }
+
+    public void complete() {
+        this.status = CaseStatus.COMPLETED;
+    }
 }

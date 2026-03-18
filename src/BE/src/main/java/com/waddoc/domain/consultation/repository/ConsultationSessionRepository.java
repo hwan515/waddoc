@@ -17,6 +17,29 @@ public interface ConsultationSessionRepository extends JpaRepository<Consultatio
 
     Optional<ConsultationSession> findByPublicId(String publicId);
 
+    // 요약 저장 시 권한 체크와 응답 조립에 필요한 연관 엔티티를 한 번에 조회한다.
+    @Query("""
+            select s
+            from ConsultationSession s
+            join fetch s.careCase c
+            join fetch c.booking b
+            join fetch c.doctor d
+            join fetch d.user du
+            where s.publicId = :publicId
+            """)
+    Optional<ConsultationSession> findWithDoctorAndCaseByPublicId(@Param("publicId") String publicId);
+
+    @Query("""
+            select s
+            from ConsultationSession s
+            join fetch s.careCase c
+            join fetch c.patient p
+            join fetch c.doctor d
+            join fetch d.user du
+            where s.roomId = :roomId
+            """)
+    Optional<ConsultationSession> findWithParticipantsByRoomId(@Param("roomId") String roomId);
+
     Optional<ConsultationSession> findByCareCase(CareCase careCase);
 
     List<ConsultationSession> findAllByCareCaseIn(List<CareCase> careCases);
