@@ -46,6 +46,10 @@ public class Mission extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private MissionPhase phase;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "previous_phase", length = 20)
+    private MissionPhase previousPhase;
+
     @Column(precision = 10, scale = 7)
     private BigDecimal latitude;
 
@@ -78,6 +82,19 @@ public class Mission extends BaseTimeEntity {
     }
 
     public void updatePhase(MissionPhase phase) {
+        if (this.phase == phase) {
+            return;
+        }
+
+        MissionPhase currentPhase = this.phase;
+        if (phase == MissionPhase.INCIDENT) {
+            this.previousPhase = currentPhase;
+        } else if (currentPhase == MissionPhase.INCIDENT && phase == this.previousPhase) {
+            this.previousPhase = null;
+        } else {
+            this.previousPhase = currentPhase;
+        }
+
         this.phase = phase;
         if (phase == MissionPhase.DISPATCHED && this.dispatchedAt == null) {
             this.dispatchedAt = LocalDateTime.now();

@@ -6,6 +6,8 @@ import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseRequest;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -140,6 +143,98 @@ class MissionCommandServiceTest {
         verify(accessControlService).assertAdmin(admin);
     }
 
+    @Test
+    void updateMissionPhaseAdvancesToNextPhase() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission();
+        setField(mission, "publicId", "ms_F2gHn6");
+        setField(mission, "updatedAt", LocalDateTime.of(2026, 3, 11, 9, 45));
+
+        mission.updatePhase(MissionPhase.DISPATCHED);
+        mission.updatePhase(MissionPhase.EN_ROUTE);
+
+        when(missionRepository.findByPublicId("ms_F2gHn6")).thenReturn(Optional.of(mission));
+        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateMissionPhaseResponse response = missionCommandService.updateMissionPhase(
+                admin,
+                "ms_F2gHn6",
+                UpdateMissionPhaseRequest.builder()
+                        .phase(MissionPhase.ARRIVED)
+                        .reason("Arrived on site")
+                        .build()
+        );
+
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.ARRIVED);
+        assertThat(response.getMissionId()).isEqualTo("ms_F2gHn6");
+        assertThat(response.getPhase()).isEqualTo(MissionPhase.ARRIVED);
+        assertThat(response.getPreviousPhase()).isEqualTo(MissionPhase.EN_ROUTE);
+        assertThat(response.getUpdatedAt()).isEqualTo(OffsetDateTime.parse("2026-03-11T09:45:00+09:00"));
+        verify(accessControlService).assertAdmin(admin);
+    }
+
+    @Test
+    void updateMissionPhaseAllowsIncidentRecoveryToPreviousPhase() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission();
+        setField(mission, "publicId", "ms_F2gHn6");
+
+        mission.updatePhase(MissionPhase.DISPATCHED);
+        mission.updatePhase(MissionPhase.EN_ROUTE);
+
+        when(missionRepository.findByPublicId("ms_F2gHn6")).thenReturn(Optional.of(mission));
+        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        missionCommandService.updateMissionPhase(
+                admin,
+                "ms_F2gHn6",
+                UpdateMissionPhaseRequest.builder()
+                        .phase(MissionPhase.INCIDENT)
+                        .reason("Temporary incident")
+                        .build()
+        );
+
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.INCIDENT);
+        assertThat(mission.getPreviousPhase()).isEqualTo(MissionPhase.EN_ROUTE);
+
+        UpdateMissionPhaseResponse response = missionCommandService.updateMissionPhase(
+                admin,
+                "ms_F2gHn6",
+                UpdateMissionPhaseRequest.builder()
+                        .phase(MissionPhase.EN_ROUTE)
+                        .reason("Recovered from incident")
+                        .build()
+        );
+
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.EN_ROUTE);
+        assertThat(mission.getPreviousPhase()).isNull();
+        assertThat(response.getPreviousPhase()).isEqualTo(MissionPhase.INCIDENT);
+        verify(accessControlService, times(2)).assertAdmin(admin);
+    }
+
+    @Test
+    void updateMissionPhaseThrowsWhenTransitionIsInvalid() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission();
+        setField(mission, "publicId", "ms_F2gHn6");
+
+        when(missionRepository.findByPublicId("ms_F2gHn6")).thenReturn(Optional.of(mission));
+
+        assertThatThrownBy(() -> missionCommandService.updateMissionPhase(
+                admin,
+                "ms_F2gHn6",
+                UpdateMissionPhaseRequest.builder()
+                        .phase(MissionPhase.ARRIVED)
+                        .reason("Skip ahead")
+                        .build()
+        ))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.MISSION_PHASE_TRANSITION_INVALID));
+
+        verify(accessControlService).assertAdmin(admin);
+    }
+
     private CareCase buildCareCase() {
         Patient patient = Patient.builder()
                 .name("Hong Gil-dong")
@@ -175,6 +270,16 @@ class MissionCommandServiceTest {
                 .patient(patient)
                 .doctor(doctorProfile)
                 .intakeSession(null)
+                .build();
+    }
+
+    private Mission buildMission() {
+        return Mission.builder()
+                .careCase(buildCareCase())
+                .vehicleId("v-001")
+                .destination("Ulleung")
+                .dispatchedAt(LocalDateTime.of(2026, 3, 11, 8, 30))
+                .estimatedArrivalTime(LocalDateTime.of(2026, 3, 11, 9, 45))
                 .build();
     }
 

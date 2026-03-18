@@ -4,6 +4,8 @@ import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseRequest;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.mission.service.MissionQueryService;
@@ -16,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,5 +61,14 @@ public class MissionController {
             @PathVariable String missionId
     ) {
         return ResponseEntity.ok(missionQueryService.getMissionDetail(authenticatedUser, missionId));
+    }
+
+    @PatchMapping("/{missionId}")
+    public ResponseEntity<UpdateMissionPhaseResponse> updateMissionPhase(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String missionId,
+            @Valid @RequestBody UpdateMissionPhaseRequest request
+    ) {
+        return ResponseEntity.ok(missionCommandService.updateMissionPhase(authenticatedUser, missionId, request));
     }
 }

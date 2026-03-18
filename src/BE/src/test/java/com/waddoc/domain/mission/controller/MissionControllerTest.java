@@ -4,6 +4,7 @@ import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
 import com.waddoc.domain.mission.dto.MissionSummaryResponse;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.mission.service.MissionQueryService;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -107,6 +109,34 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.phase").value("CREATED"))
                 .andExpect(jsonPath("$.vehicleId").value("v-001"))
                 .andExpect(jsonPath("$.createdAt").value("2026-03-10T14:00:00+09:00"));
+    }
+
+    @Test
+    void updateMissionPhaseReturnsUpdatedResponse() throws Exception {
+        when(missionCommandService.updateMissionPhase(
+                isNull(),
+                eq("ms_F2gHn6"),
+                any()
+        )).thenReturn(UpdateMissionPhaseResponse.builder()
+                .missionId("ms_F2gHn6")
+                .phase(MissionPhase.ARRIVED)
+                .previousPhase(MissionPhase.EN_ROUTE)
+                .updatedAt(OffsetDateTime.parse("2026-03-11T09:45:00+09:00"))
+                .build());
+
+        mockMvc.perform(patch("/api/v1/missions/{missionId}", "ms_F2gHn6")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "phase": "ARRIVED",
+                                  "reason": "Arrived on site"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.missionId").value("ms_F2gHn6"))
+                .andExpect(jsonPath("$.phase").value("ARRIVED"))
+                .andExpect(jsonPath("$.previousPhase").value("EN_ROUTE"))
+                .andExpect(jsonPath("$.updatedAt").value("2026-03-11T09:45:00+09:00"));
     }
 
     @Test

@@ -4,7 +4,10 @@ import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseRequest;
+import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -49,5 +52,63 @@ public class MissionCommandService {
 
         Mission savedMission = missionRepository.save(mission);
         return CreateMissionResponse.from(savedMission);
+    }
+
+    public UpdateMissionPhaseResponse updateMissionPhase(
+            AuthenticatedUser authenticatedUser,
+            String missionId,
+            UpdateMissionPhaseRequest request
+    ) {
+        accessControlService.assertAdmin(authenticatedUser);
+
+        Mission mission = missionRepository.findByPublicId(missionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
+
+        validatePhaseTransition(mission, request.getPhase());
+
+        MissionPhase previousPhase = mission.getPhase();
+        mission.updatePhase(request.getPhase());
+
+        Mission savedMission = missionRepository.save(mission);
+        return UpdateMissionPhaseResponse.of(savedMission, previousPhase);
+    }
+
+    private void validatePhaseTransition(Mission mission, MissionPhase targetPhase) {
+        MissionPhase currentPhase = mission.getPhase();
+        if (currentPhase == targetPhase) {
+            return;
+        }
+
+        if (currentPhase == MissionPhase.COMPLETED || currentPhase == MissionPhase.FAILED) {
+            throw new BusinessException(ErrorCode.MISSION_PHASE_TRANSITION_INVALID);
+        }
+
+        if (currentPhase == MissionPhase.INCIDENT) {
+            if (mission.getPreviousPhase() != targetPhase) {
+                throw new BusinessException(ErrorCode.MISSION_PHASE_TRANSITION_INVALID);
+            }
+            return;
+        }
+
+        if (targetPhase == MissionPhase.INCIDENT || targetPhase == MissionPhase.FAILED) {
+            return;
+        }
+
+        if (nextPhaseOf(currentPhase) != targetPhase) {
+            throw new BusinessException(ErrorCode.MISSION_PHASE_TRANSITION_INVALID);
+        }
+    }
+
+    private MissionPhase nextPhaseOf(MissionPhase phase) {
+        return switch (phase) {
+            case CREATED -> MissionPhase.DISPATCHED;
+            case DISPATCHED -> MissionPhase.EN_ROUTE;
+            case EN_ROUTE -> MissionPhase.ARRIVED;
+            case ARRIVED -> MissionPhase.VERIFYING;
+            case VERIFYING -> MissionPhase.CONSULTING;
+            case CONSULTING -> MissionPhase.RETURNING;
+            case RETURNING -> MissionPhase.COMPLETED;
+            default -> null;
+        };
     }
 }
