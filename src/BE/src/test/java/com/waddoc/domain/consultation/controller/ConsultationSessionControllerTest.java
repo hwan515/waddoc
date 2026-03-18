@@ -3,6 +3,7 @@ package com.waddoc.domain.consultation.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
+import com.waddoc.domain.consultation.service.ConsultationWebhookService;
 import com.waddoc.domain.consultation.service.ConsultationSummaryService;
 import com.waddoc.global.error.GlobalExceptionHandler;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,7 +43,26 @@ class ConsultationSessionControllerTest {
     private ConsultationSummaryService consultationSummaryService;
 
     @MockBean
+    private ConsultationWebhookService consultationWebhookService;
+
+    @MockBean
     private JwtTokenProvider jwtTokenProvider;
+
+    @Test
+    void handleLiveKitWebhook_usesDocumentedWebhookPath() throws Exception {
+        mockMvc.perform(post("/api/v1/sessions/webhook/livekit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "signed-webhook-token")
+                        .content("""
+                                {
+                                  "event": "room_finished",
+                                  "room": {
+                                    "name": "room_ses_test123"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk());
+    }
 
     @Test
     void getSummary_usesDocumentedGetPath() throws Exception {
