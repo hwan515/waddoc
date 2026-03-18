@@ -55,7 +55,7 @@ function App() {
         <Route path="/robot/measure/blood" element={<Blood />} />
         <Route path="/robot/measure/spo2" element={<SpO2 />} />
         <Route path="/robot/measure/ecg" element={<Ecg />} />
-        <Route path="/robot/conference" element={<Conference />} />
+        <Route path="/robot/conference/:id" element={<Conference />} />
         <Route path="/robot/finish" element={<Finish />} />
 
       </Routes>

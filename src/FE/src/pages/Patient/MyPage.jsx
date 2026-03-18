@@ -9,7 +9,7 @@ const MyPage = () => {
     const logout = useAuthStore((state) => state.logout);
 
     const [user, setUser] = useState({ 
-        name: '로딩중', phone: '', address: '', age: '-', gender: 'M', bloodType: '-', allergies: [], chronicDiseases: []
+        name: '로딩중', phone: '-', address: '-', birthDate: '-', createdAt: '-', referenceImagePath: null
     });
     const [totalVisits, setTotalVisits] = useState(0);
     const [mostVisitedDoctor, setMostVisitedDoctor] = useState('기록 없음');
@@ -22,6 +22,7 @@ const MyPage = () => {
                 
                 if (patients.length > 0) {
                     const primaryPatient = patients[0];
+                    console.log("[MyPage] 보호자 환자 정보 API 응답:", primaryPatient);
                     // 간단한 나이 계산 (YYMMDD)
                     let age = '-';
                     if (primaryPatient.birthDate6) {
@@ -31,15 +32,22 @@ const MyPage = () => {
                         age = new Date().getFullYear() - birthYear;
                     }
 
+                    // 전화번호 포맷 정규식 (010-0000-0000)
+                    const formatPhoneNumber = (phoneNumberString) => {
+                        if (!phoneNumberString) return '-';
+                        const cleaned = ('' + phoneNumberString).replace(/\D/g, '');
+                        const match = cleaned.match(/^(\d{3})(\d{3,4})(\d{4})$/);
+                        if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+                        return phoneNumberString;
+                    };
+
                     setUser({
                         ...primaryPatient,
-                        age: age,
-                        gender: 'M', // API 미제공 임시
-                        phone: '010-0000-0000', // API 미제공 임시
-                        address: '주소 정보 미등록', // API 미제공 임시
-                        bloodType: 'A+', // API 미제공 임시
-                        allergies: [], // API 미제공 임시
-                        chronicDiseases: [] // API 미제공 임시
+                        phone: formatPhoneNumber(primaryPatient.phone), 
+                        address: primaryPatient.address || '-',
+                        birthDate: primaryPatient.birthDate || primaryPatient.birthDate6 || '-',
+                        createdAt: primaryPatient.approvedAt || primaryPatient.createdAt || '-',
+                        referenceImagePath: primaryPatient.referenceImagePath || primaryPatient.reference_image_path || null
                     });
 
                     // 진료 요약 조회하여 통계 계산
@@ -115,8 +123,12 @@ const MyPage = () => {
                     <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-[#0353A4]/5 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
 
                     <div className="flex flex-col md:flex-row items-center md:items-start gap-8 relative z-10">
-                        <div className="w-24 h-24 bg-[#0353A4]/10 rounded-full flex items-center justify-center border-4 border-white shadow-md flex-shrink-0">
-                            <User className="w-10 h-10 text-[#0353A4]" />
+                        <div className="w-24 h-24 bg-[#0353A4]/10 rounded-full flex items-center justify-center border-4 border-white shadow-md flex-shrink-0 overflow-hidden">
+                            {user.referenceImagePath ? (
+                                <img src={user.referenceImagePath} alt="Patient Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <User className="w-10 h-10 text-[#0353A4]" />
+                            )}
                         </div>
 
                         <div className="flex-1 text-center md:text-left">
@@ -166,39 +178,29 @@ const MyPage = () => {
                         </div>
                     </div>
 
-                    {/* Medical Details */}
+                    {/* Basic Patient Details */}
                     <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60">
                         <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
                             <User className="w-5 h-5 text-[#0353A4]" />
-                            상세 건강 정보
+                            기본 정보
                         </h2>
 
                         <div className="space-y-5">
                             <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                                <span className="text-slate-500 font-medium">연령/성별</span>
-                                <span className="font-bold text-slate-800">{user.age}세 / {user.gender === 'M' ? '남성' : '여성'}</span>
+                                <span className="text-slate-500 font-medium">생년월일</span>
+                                <span className="font-bold text-slate-800">{user.birthDate}</span>
                             </div>
                             <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                                <span className="text-slate-500 font-medium">혈액형</span>
-                                <span className="font-bold text-red-500 bg-red-50 px-3 py-1 rounded-lg">{user.bloodType}</span>
+                                <span className="text-slate-500 font-medium">연락처</span>
+                                <span className="font-bold text-slate-800">{user.phone}</span>
+                            </div>
+                            <div className="flex items-start justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
+                                <span className="text-slate-500 font-medium whitespace-nowrap mr-4">주소</span>
+                                <span className="font-bold text-slate-800 text-right break-keep">{user.address}</span>
                             </div>
                             <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                                <span className="text-slate-500 font-medium">알레르기 보유</span>
-                                <div className="flex gap-2 text-right">
-                                    {user.allergies.length > 0
-                                        ? user.allergies.map((a, i) => <span key={i} className="font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg text-sm">{a}</span>)
-                                        : <span className="font-medium text-slate-400">없음</span>
-                                    }
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                                <span className="text-slate-500 font-medium">만성 질환</span>
-                                <div className="flex gap-2 text-right">
-                                    {user.chronicDiseases.length > 0
-                                        ? user.chronicDiseases.map((a, i) => <span key={i} className="font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-lg text-sm">{a}</span>)
-                                        : <span className="font-medium text-slate-400">없음</span>
-                                    }
-                                </div>
+                                <span className="text-slate-500 font-medium">가입일(승인일)</span>
+                                <span className="font-bold text-slate-800">{user.createdAt}</span>
                             </div>
                         </div>
                     </div>
