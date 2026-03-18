@@ -44,9 +44,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Component
@@ -161,6 +163,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 pastCase,
                 "GIMCHEON-01",
                 completedCasePatient.getAddress(),
+                LocalDateTime.of(
+                        pastCompletedBooking.getAppointmentDate(),
+                        LocalTime.of(8, 30)
+                ),
+                LocalDateTime.of(
+                        pastCompletedBooking.getAppointmentDate(),
+                        LocalTime.of(9, 45)
+                ),
                 MissionPhase.COMPLETED,
                 bd("35.8672000"),
                 bd("128.0589000")
@@ -196,6 +206,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 futureCase,
                 "GIMCHEON-02",
                 dispatchedCasePatient.getAddress(),
+                LocalDateTime.of(
+                        futureConfirmedBooking.getAppointmentDate(),
+                        LocalTime.of(8, 0)
+                ),
+                LocalDateTime.of(
+                        futureConfirmedBooking.getAppointmentDate(),
+                        LocalTime.of(8, 45)
+                ),
                 MissionPhase.DISPATCHED,
                 bd("35.8506398"),
                 bd("128.0542159")
@@ -224,6 +242,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 enRouteCase,
                 "GIMCHEON-03",
                 enRouteCasePatient.getAddress(),
+                LocalDateTime.of(
+                        enRouteBooking.getAppointmentDate(),
+                        LocalTime.of(10, 30)
+                ),
+                LocalDateTime.of(
+                        enRouteBooking.getAppointmentDate(),
+                        LocalTime.of(10, 55)
+                ),
                 MissionPhase.EN_ROUTE,
                 bd("35.8822245"),
                 bd("128.0461659")
@@ -252,6 +278,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 verifyingCase,
                 "GIMCHEON-04",
                 verifyingCasePatient.getAddress(),
+                LocalDateTime.of(
+                        verifyingBooking.getAppointmentDate(),
+                        LocalTime.of(13, 30)
+                ),
+                LocalDateTime.of(
+                        verifyingBooking.getAppointmentDate(),
+                        LocalTime.of(13, 55)
+                ),
                 MissionPhase.VERIFYING,
                 bd("35.8679186"),
                 bd("128.0592880")
@@ -280,6 +314,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 consultingCase,
                 "GIMCHEON-05",
                 consultingCasePatient.getAddress(),
+                LocalDateTime.of(
+                        consultingBooking.getAppointmentDate(),
+                        LocalTime.of(9, 30)
+                ),
+                LocalDateTime.of(
+                        consultingBooking.getAppointmentDate(),
+                        LocalTime.of(9, 55)
+                ),
                 MissionPhase.CONSULTING,
                 bd("35.8494890"),
                 bd("128.0538504")
@@ -308,6 +350,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 returningCase,
                 "GIMCHEON-06",
                 returningCasePatient.getAddress(),
+                LocalDateTime.of(
+                        returningBooking.getAppointmentDate(),
+                        LocalTime.of(13, 30)
+                ),
+                LocalDateTime.of(
+                        returningBooking.getAppointmentDate(),
+                        LocalTime.of(13, 55)
+                ),
                 MissionPhase.RETURNING,
                 bd("35.8828819"),
                 bd("128.0431673")
@@ -566,14 +616,22 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     }
 
     private Mission ensureMission(CareCase careCase, String vehicleId, String destination,
+                                  LocalDateTime dispatchedAt, LocalDateTime estimatedArrivalTime,
                                   MissionPhase targetPhase, BigDecimal latitude, BigDecimal longitude) {
         Mission mission = missionRepository.findByCareCase(careCase).orElseGet(() -> missionRepository.save(
                 Mission.builder()
                         .careCase(careCase)
                         .vehicleId(vehicleId)
                         .destination(destination)
+                        .dispatchedAt(dispatchedAt)
+                        .estimatedArrivalTime(estimatedArrivalTime)
                         .build()
         ));
+
+        if (!Objects.equals(mission.getDispatchedAt(), dispatchedAt)
+                || !Objects.equals(mission.getEstimatedArrivalTime(), estimatedArrivalTime)) {
+            mission.assignSchedule(dispatchedAt, estimatedArrivalTime);
+        }
 
         if (latitude != null && longitude != null) {
             mission.updateLocation(latitude, longitude);

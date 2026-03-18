@@ -36,6 +36,12 @@ public class Mission extends BaseTimeEntity {
     @Column(columnDefinition = "TEXT")
     private String destination;
 
+    @Column(name = "dispatched_at")
+    private LocalDateTime dispatchedAt;
+
+    @Column(name = "estimated_arrival_time")
+    private LocalDateTime estimatedArrivalTime;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MissionPhase phase;
@@ -50,16 +56,32 @@ public class Mission extends BaseTimeEntity {
     private LocalDateTime completedAt;
 
     @Builder
-    public Mission(CareCase careCase, String vehicleId, String destination) {
+    public Mission(
+            CareCase careCase,
+            String vehicleId,
+            String destination,
+            LocalDateTime dispatchedAt,
+            LocalDateTime estimatedArrivalTime
+    ) {
         this.publicId = PublicIdGenerator.generate("ms_");
         this.careCase = careCase;
         this.vehicleId = vehicleId;
         this.destination = destination;
+        this.dispatchedAt = dispatchedAt;
+        this.estimatedArrivalTime = estimatedArrivalTime;
         this.phase = MissionPhase.CREATED;
+    }
+
+    public void assignSchedule(LocalDateTime dispatchedAt, LocalDateTime estimatedArrivalTime) {
+        this.dispatchedAt = dispatchedAt;
+        this.estimatedArrivalTime = estimatedArrivalTime;
     }
 
     public void updatePhase(MissionPhase phase) {
         this.phase = phase;
+        if (phase == MissionPhase.DISPATCHED && this.dispatchedAt == null) {
+            this.dispatchedAt = LocalDateTime.now();
+        }
         if (phase == MissionPhase.COMPLETED) {
             this.completedAt = LocalDateTime.now();
         }
