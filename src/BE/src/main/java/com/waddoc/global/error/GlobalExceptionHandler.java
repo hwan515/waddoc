@@ -2,6 +2,8 @@ package com.waddoc.global.error;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindException;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -25,20 +27,27 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     protected ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException e) {
-        List<ErrorResponse.FieldError> details = e.getBindingResult().getFieldErrors().stream()
+        return ResponseEntity.badRequest().body(buildInvalidInputResponse(e.getBindingResult()));
+    }
+
+    @ExceptionHandler(BindException.class)
+    protected ResponseEntity<ErrorResponse> handleBindException(BindException e) {
+        return ResponseEntity.badRequest().body(buildInvalidInputResponse(e.getBindingResult()));
+    }
+
+    private ErrorResponse buildInvalidInputResponse(BindingResult bindingResult) {
+        List<ErrorResponse.FieldError> details = bindingResult.getFieldErrors().stream()
                 .map(fe -> ErrorResponse.FieldError.builder()
                         .field(fe.getField())
                         .reason(fe.getDefaultMessage())
                         .build())
                 .toList();
 
-        ErrorResponse response = ErrorResponse.builder()
+        return ErrorResponse.builder()
                 .errorCode("INVALID_INPUT")
                 .message("입력값이 올바르지 않습니다.")
                 .timestamp(LocalDateTime.now())
                 .details(details)
                 .build();
-
-        return ResponseEntity.badRequest().body(response);
     }
 }
