@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useWebRTC } from '../../hooks/useWebRTC';
 
 const Conference = () => {
+    const { id } = useParams();
+
     // 환자는 방에 접속하는 Participant 역할 (isInitiator = false)
-    // 현재 테스트를 위해 의사와 동일한 'test-room'을 하드코딩합니다. 나중에는 URL 파라미터나 상태값으로 받아와야 합니다.
     const {
         localVideoRef,
         remoteVideoRef,
         localStream,
-        remoteStream, // 추가: 상대방 스트림
+        remoteStream,
         initCamera,
         joinRoom,
         cleanupMedia
-    } = useWebRTC('test-room', false);
+    } = useWebRTC(id || 'test-room', false);
 
     const [isJoined, setIsJoined] = useState(false);
 
@@ -31,7 +33,6 @@ const Conference = () => {
         return () => {
             cleanupMedia();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // 내 카메라(local) 비디오 태그 연결 보장
