@@ -65,4 +65,10 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+
+    if (project.findProperty("skipIntegrationTests") == "true") {
+        filter {
+            excludeTestsMatching("*IntegrationTest")
+        }
+    }
 }

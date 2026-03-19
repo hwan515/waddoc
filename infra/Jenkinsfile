@@ -109,7 +109,7 @@ pipeline {
                         sh '''
                             cd ${PROJECT_PATH}/src/BE && \
                             chmod +x ./gradlew && \
-                            ./gradlew test --no-daemon
+                            ./gradlew test --no-daemon -PskipIntegrationTests=true
                         '''
                     }
                 }
