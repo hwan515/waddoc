@@ -11,6 +11,8 @@ COPY . .
 # 환자용 모바일 앱 — API base URL 주입
 ARG VITE_API_BASE_URL=/api/v1
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ARG VITE_BASE_PATH=/phone/
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 RUN npm run build
 
 # Nginx로 정적 파일 서빙 (포트 3001)

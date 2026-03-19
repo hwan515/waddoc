@@ -171,6 +171,7 @@ pipeline {
                                 docker buildx build \
                                   --builder ${BUILDX_BUILDER}-fp \
                                   --build-arg VITE_API_BASE_URL=/api/v1 \
+                                  --build-arg VITE_BASE_PATH=/phone/ \
                                   --tag ${DOCKER_IMAGE_FP}:${BUILD_NUMBER} \
                                   --tag ${DOCKER_IMAGE_FP}:latest \
                                   --push .
