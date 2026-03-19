@@ -12,6 +12,7 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "axios": "^1.13.6",
     "cors": "^2.8.6",
     "face-api.js": "^0.22.2",
     "lucide-react": "^0.577.0",
