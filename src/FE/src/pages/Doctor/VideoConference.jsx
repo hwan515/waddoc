@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import '@livekit/components-styles';
 import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import { generateECGData, mockConsultationDetails, mockVitals } from '../../mockdata/consultations';
@@ -23,7 +25,7 @@ const VideoConference = () => {
     // Fetch case details
     useEffect(() => {
         const fetchCaseDetails = async () => {
-            if (!id || id === 'test-room') {
+            if (!id || id === 'test-room' || id.startsWith('RV_')) {
                 // 테스트용 방일 경우 mock 활용
                 setConsultationDetails(mockConsultationDetails);
                 setIsLoading(false);
@@ -68,33 +70,18 @@ const VideoConference = () => {
         fetchCaseDetails();
     }, [id]);
 
-    // WebRTC Hook 로드 (의사는 방을 여는 Initiator 역할)
-    const {
-        localVideoRef,
-        remoteVideoRef,
-        localStream,
-        initCamera,
-        joinRoom,
-        toggleMedia,
-        cleanupMedia
-    } = useWebRTC(id || 'test-room', true);
+    // WebRTC Hook 로드 (의사는 방을 여는 Initiator 역할) - LiveKit으로 인해 더 이상 사용하지 않음
+    // const { localVideoRef, remoteVideoRef, localStream, initCamera, joinRoom, toggleMedia, cleanupMedia } = useWebRTC(id || 'test-room', true);
+    
+    // 강제 화면 송출을 위해 임시 Ref 유지 (PreJoin용)
+    const localVideoRef = null;
 
-    // 카메라/마이크 On/Off 상태 동기화
+    // 카메라/마이크 On/Off 상태 동기화 (LiveKitRoom에서 props로 제어됨)
+    // PreJoinRoom에서 미디어 초기화를 담당하도록 변경 가능하지만, 현재는 LiveKitRoom 진입 전 상태로만 사용
     useEffect(() => {
-        toggleMedia('audio', micEnabled);
-    }, [micEnabled, toggleMedia]);
-
-    useEffect(() => {
-        toggleMedia('video', videoEnabled);
-    }, [videoEnabled, toggleMedia]);
-
-    // 마운트 시 카메라 권한 요청 및 비디오/오디오 스트림 미리 켜두기 (방 접속 전)
-    useEffect(() => {
-        initCamera(videoEnabled, micEnabled);
-
-        // 언마운트 시 미디어 스트림 정리
+        // initCamera(videoEnabled, micEnabled);
         return () => {
-            cleanupMedia();
+            // cleanupMedia();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -120,13 +107,39 @@ const VideoConference = () => {
     }, [isJoined]);
 
     const handleEndCall = () => {
-        cleanupMedia(); // 미디어 스트림 정리
         navigate('/emr/dashboard');
     };
 
-    const handleJoin = () => {
-        setIsJoined(true);
-        joinRoom(); // 화상 통신 시작 및 방 접속
+    const handleJoin = async () => {
+        try {
+            if (!id || id === 'test-room' || id.startsWith('RV_')) {
+                console.warn('임시(데모) 예약건이므로 방 생성 API를 건너뛰고 데모 모드로 전환합니다.');
+                setIsJoined(true);
+                return;
+            }
+
+            // [API 연동] 의사의 진료 세션 생성 및 LiveKit 토큰 발급 요청
+            // POST /api/v1/cases/{caseId}/sessions
+            const response = await apiClient.post(`/cases/${id}/sessions`);
+            
+            if (response.data && response.data.doctorToken) {
+                // 발급받은 토큰과 LiveKit URL을 로컬 스토리지에 보관 (추후 LiveKitRoom 컴포넌트에 주입 용도)
+                localStorage.setItem('webrtc_doctor_token', response.data.doctorToken);
+                if (response.data.room && response.data.room.livekitUrl) {
+                    localStorage.setItem('webrtc_livekit_url', response.data.room.livekitUrl);
+                }
+                
+                console.log("✅ 의사 세션(LiveKit) 생성 완료:", response.data);
+            }
+            
+            // 현재 단계(LiveKit 적용)에서는 발급받은 토큰으로 방에 입장
+            setIsJoined(true);
+            
+        } catch (error) {
+            console.error("❌ 세션 생성 API 호출 실패:", error);
+            console.warn("백엔드 세션 생성 API 호출에 실패했습니다.\n데모 진행을 위해 가짜 토큰으로 임시 입장합니다.");
+            setIsJoined(true);
+        }
     };
 
     if (isLoading || !consultationDetails) {
@@ -143,27 +156,40 @@ const VideoConference = () => {
                 videoEnabled={videoEnabled}
                 setVideoEnabled={setVideoEnabled}
                 onJoin={handleJoin}
-                localVideoRef={localVideoRef}
+                localVideoRef={null}
             />
         );
     }
 
+    const livekitToken = localStorage.getItem('webrtc_doctor_token') || 'test-token';
+    const livekitUrl = localStorage.getItem('webrtc_livekit_url') || 'wss://test.livekit.cloud';
+
     // 메인 화상 진료실 (의사 권한으로 접속)
     return (
-        <ConsultationRoom
-            details={consultationDetails}
-            vitals={mockVitals}
-            ecgData={ecgData}
-            micEnabled={micEnabled}
-            setMicEnabled={setMicEnabled}
-            videoEnabled={videoEnabled}
-            setVideoEnabled={setVideoEnabled}
-            onEndCall={handleEndCall}
-            role="DOCTOR"
-            localVideoRef={localVideoRef}
-            remoteVideoRef={remoteVideoRef}
-            localStream={localStream}
-        />
+        <LiveKitRoom
+            connect={livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
+            video={videoEnabled}
+            audio={micEnabled}
+            token={livekitToken}
+            serverUrl={livekitUrl}
+            data-lk-theme="default"
+            className="w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
+            onDisconnected={handleEndCall}
+        >
+            <ConsultationRoom
+                details={consultationDetails}
+                vitals={mockVitals}
+                ecgData={ecgData}
+                micEnabled={micEnabled}
+                setMicEnabled={setMicEnabled}
+                videoEnabled={videoEnabled}
+                setVideoEnabled={setVideoEnabled}
+                onEndCall={handleEndCall}
+                role="DOCTOR"
+            />
+            {/* LiveKit 오디오 랜더링 허용을 위한 트랙 랜더러 (기본 숨김) */}
+            <RoomAudioRenderer />
+        </LiveKitRoom>
     );
 };
 
