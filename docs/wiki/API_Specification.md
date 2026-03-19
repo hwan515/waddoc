@@ -46,17 +46,17 @@
 ## 목차
 
 1. [인증 API](#1-인증-api-apiv1auth)
-2. [환자 식별 API](#2-환자-식별-api-apiv1patients)
+2. [환자 식별 API](#2-환자-식별-api-apiv1intakesessionsintakesessionididentify)
 3. [인테이크(문진) API](#3-인테이크문진-api-apiv1intake)
 4. [예약 API](#4-예약-api-apiv1bookings)
 5. [케이스 API](#5-케이스-api-apiv1cases)
 6. [미션(차량 출동) API](#6-미션차량-출동-api-apiv1missions)
-8. [동의 API (P1 별도 문서)](#8-동의-api-p1)
-9. [실시간 알림 API](#9-실시간-알림-api-apiv1doctorsmenotifications)
-10. [화상진료 세션 API](#10-화상진료-세션-api-apiv1sessions)
-11. [보호자 API](#11-보호자-api-apiv1guardians)
-12. [관리자 API](#12-관리자-api-apiv1admin)
-15. [상태 Enum 정의](#15-상태-enum-정의)
+7. [동의 API (P1 별도 문서)](#7-동의-api-p1)
+8. [실시간 알림 API](#8-실시간-알림-api-apiv1doctorsmenotifications)
+9. [화상진료 세션 API](#9-화상진료-세션-api-apiv1sessions)
+10. [보호자 API](#10-보호자-api-apiv1guardians)
+11. [관리자 API](#11-관리자-api-apiv1admin)
+12. [상태 Enum 정의](#12-상태-enum-정의)
 
 ---
 
@@ -1009,7 +1009,7 @@
 
 ---
 
-## 8. 동의 API (P1)
+## 7. 동의 API (P1)
 
 > 동의 UI 및 동의 기록은 MVP 제외 범위다.
 >
@@ -1017,7 +1017,7 @@
 
 ---
 
-## 9. 실시간 알림 API (`/api/v1/doctors/me/notifications`)
+## 8. 실시간 알림 API (`/api/v1/doctors/me/notifications`)
 
 > 의사 EMR 화면에서 신규 예약 알림을 실시간으로 수신하기 위한 **Server-Sent Events (SSE)** API다.
 >
@@ -1025,7 +1025,7 @@
 >
 > 동일 의사의 다중 탭 연결을 허용한다.
 
-### 9.1 의사 알림 스트림 구독
+### 8.1 의사 알림 스트림 구독
 
 | 항목 | 값 |
 |------|-----|
@@ -1049,7 +1049,7 @@ retry: 3000
 data: {"connectedAt":"2026-03-19T17:20:00+09:00"}
 ```
 
-**신규 예약 알림 이벤트 예시** (예약 생성 이벤트 연동 후)
+**신규 예약 알림 이벤트 예시**
 ```text
 id: 73a8f5a7-8df7-4f08-b52e-0d0cb3e0a2f5
 event: notification
@@ -1057,6 +1057,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 ```
 
 > `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
+>
+> `notification` 이벤트는 예약과 케이스 생성 트랜잭션이 정상 커밋된 뒤 발행된다. 활성 SSE 연결이 없더라도 예약 생성 자체는 실패하지 않는다.
 
 **`notification` payload**
 
@@ -1084,15 +1086,15 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-## 10. 화상진료 세션 API (`/api/v1/sessions`)
+## 9. 화상진료 세션 API (`/api/v1/sessions`)
 
 > LiveKit 기반 1:1 WebRTC 화상진료 세션을 관리한다.
 >
 > **토큰 발급 정책**: 의사와 환자의 토큰은 **별도 엔드포인트**에서 발급한다.
-> - 의사: 세션 생성 시 (10.1) 자신의 토큰만 발급
-> - 환자: 미션이 진료 준비 단계에 도달한 뒤 차량 태블릿에서 **GPU 본인 확인과 함께** 요청 (10.2)
+> - 의사: 세션 생성 시 (9.1) 자신의 토큰만 발급
+> - 환자: 미션이 진료 준비 단계에 도달한 뒤 차량 태블릿에서 **GPU 본인 확인과 함께** 요청 (9.2)
 
-### 10.1 진료 세션 생성 — 의사 토큰 발급
+### 9.1 진료 세션 생성 — 의사 토큰 발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1144,7 +1146,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 10.2 환자 토큰 발급 + GPU 본인 확인 (차량 태블릿 — 관리자 인증)
+### 9.2 환자 토큰 발급 + GPU 본인 확인 (차량 태블릿 — 관리자 인증)
 
 | 항목 | 값 |
 |------|-----|
@@ -1218,7 +1220,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 10.3 세션 토큰 재발급
+### 9.3 세션 토큰 재발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1263,7 +1265,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 10.4 세션 상태 조회
+### 9.4 세션 상태 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1300,7 +1302,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 10.5 진료 종료 및 요약 기록
+### 9.5 진료 종료 및 요약 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1337,7 +1339,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 10.6 LiveKit Webhook 수신 (서버 간)
+### 9.6 LiveKit Webhook 수신 (서버 간)
 
 | 항목 | 값 |
 |------|-----|
@@ -1357,12 +1359,12 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-## 11. 보호자 API (`/api/v1/guardians`)
+## 10. 보호자 API (`/api/v1/guardians`)
 
 > 관리자 승인을 완료한 보호자 계정만 접근할 수 있다.
 > 보호자는 로그인 후 연결된 환자의 **완료된 진료 요약만 읽기 전용으로** 조회한다.
 
-### 11.1 연결된 환자 목록 조회
+### 10.1 연결된 환자 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1390,7 +1392,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 11.2 환자의 완료된 진료 요약 목록 조회
+### 10.2 환자의 완료된 진료 요약 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1426,9 +1428,9 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-## 12. 관리자 API (`/api/v1/admin`)
+## 11. 관리자 API (`/api/v1/admin`)
 
-### 12.1 예약 전체 목록 조회
+### 11.1 예약 전체 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1469,7 +1471,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 12.2 케이스 전체 목록 조회
+### 11.2 케이스 전체 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1481,7 +1483,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 12.3 세션 전체 목록 조회
+### 11.3 세션 전체 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1493,7 +1495,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 12.4 환자 목록 조회
+### 11.4 환자 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1512,7 +1514,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 12.5 보호자 가입 요청 목록 조회
+### 11.5 보호자 가입 요청 목록 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1552,7 +1554,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 12.6 보호자 가입 승인
+### 11.6 보호자 가입 승인
 
 | 항목 | 값 |
 |------|-----|
@@ -1584,7 +1586,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 12.7 보호자 가입 반려
+### 11.7 보호자 가입 반려
 
 | 항목 | 값 |
 |------|-----|
@@ -1611,7 +1613,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 > 반려된 보호자 계정은 로그인할 수 없으며, 관리자 확인 전까지 비활성 상태로 유지된다.
 
-**Errors** (`12.6`, `12.7` 공통)
+**Errors** (`11.6`, `11.7` 공통)
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
@@ -1620,7 +1622,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-## 15. 상태 Enum 정의
+## 12. 상태 Enum 정의
 
 > **`doctorId` 참조 규칙**: API의 `doctorId`는 `DOCTOR_PROFILE.public_id` 값을 의미한다. 내부 저장은 `doctor_profile_id`(`bigint` PK)를 사용한다. 사용자 식별이 필요할 때는 별도로 `userId`를 사용한다.
 >
