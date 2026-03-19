@@ -61,6 +61,10 @@ services:
       - LIVEKIT_HOST=http://livekit:7880
       - LIVEKIT_URL=wss://${SERVER_DOMAIN}/livekit
       - JWT_SECRET=${JWT_SECRET}
+      - SOLAPI_API_KEY=${SOLAPI_API_KEY}
+      - SOLAPI_API_SECRET=${SOLAPI_API_SECRET}
+      - SOLAPI_SENDER_NUMBER=${SOLAPI_SENDER_NUMBER}
+      - TELEMETRY_API_KEY=${TELEMETRY_API_KEY}
     volumes:
       - uploads:/data/uploads
     depends_on:
