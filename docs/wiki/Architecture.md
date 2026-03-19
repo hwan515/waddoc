@@ -607,12 +607,13 @@ Spring Boot는 위 응답을 받아 다음을 수행한다.
 2. 생년월일 또는 주민등록번호 마스킹값과 `PATIENT.birth_date6` 비교
 3. OCR 주소와 `PATIENT.address` 비교
 4. 얼굴 3자 점수와 OCR 신뢰도를 함께 사용해 최종 `VERIFIED`, `FAILED`, `MANUAL_REVIEW` 판정
+5. `VERIFIED`인 경우 영속 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 활력징후 단계 이후 환자 토큰 발급 시 재사용
 
 보안 원칙:
 
 - 주민등록번호 전체 원문은 GPU 서버 응답, Spring 로그, DB에 저장하지 않는다.
 - 응답에는 `rrnMasked` 또는 해시 비교 결과만 포함한다.
-- 원본 신분증 이미지는 운영 정책에 따라 단기 보관 후 삭제하거나, 저장이 필요하면 암호화 저장과 접근 감사를 필수로 한다.
+- 원본 신분증 이미지는 기본적으로 요청 처리 후 즉시 폐기하고, 실패 케이스 또는 운영자 수동 요청 시에만 예외 저장 후 TTL 정리한다.
 
 ### 6.2 실시간 STT AI API
 
@@ -870,7 +871,8 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 | 참가자 | 발급 시점 | API | Auth | 발급 조건 |
 |--------|-----------|-----|------|-----------|
 | 의사 | 세션 생성 시 | `POST /cases/{caseId}/sessions` | Bearer Token (DOCTOR) | 로그인 + 케이스 배정 확인 |
-| 환자 | 본인확인 후 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | VERIFICATION.status = VERIFIED |
+| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 환자 일치, 기준 이미지 존재 |
+| 환자 | 세션 입장 시 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | 최근 본인 확인 성공 상태 + 세션 준비 완료 |
 
 | 항목 | 정책 |
 |------|------|
@@ -886,11 +888,15 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 3. 응답: doctorToken + room 정보
 4. 의사 WebRTC 입장
 
-환자 토큰 발급 흐름:
-1. 차량 도착 → 본인확인 VERIFIED
-2. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
-3. 서버: VERIFICATION 상태 검증 → patientToken 발급
-4. 환자 WebRTC 입장
+환자 현장 진료 준비 흐름:
+1. 차량 도착 → 환자 탑승 → "진료 시작" 클릭
+2. 서버: MISSION.phase = VERIFYING
+3. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/missions/{missionId}/identity-check (ADMIN Bearer)
+4. 서버: 기준 이미지 조회 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
+5. 차량 태블릿: 활력징후 단계 진행
+6. 의사 세션 준비 후 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
+7. 서버: 최근 본인 확인 성공 상태 검증 → patientToken 발급
+8. 환자 WebRTC 입장
 
 LiveKit Room Token 생성 시 포함 정보:
 - room: "session_{consultation_session_id}"
@@ -1254,7 +1260,7 @@ sudo ufw enable
 | 디렉터리 | TTL | 정리 주체 |
 |----------|-----|----------|
 | temp/ | 24시간 | Spring @Scheduled |
-| verification-probe/ | 검증 완료 후 7일 | Spring @Scheduled |
+| verification-probe/ | 실패 케이스 또는 운영자 요청 저장분만 7일 | Spring @Scheduled |
 | audio/intake/ | STT 완료 후 30일 | Spring @Scheduled |
 | patient-reference/ | 환자 탈퇴 시까지 유지 | 관리자 수동 |
 

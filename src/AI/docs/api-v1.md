@@ -123,6 +123,56 @@ Response:
 
 ## Internal REST API: FastAPI
 
+### `GET /idv/api/v1/health`
+
+GPU 기반 본인확인(IDV) 프로세스 헬스체크입니다.
+
+Response:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### `POST /idv/api/v1/verify`
+
+Spring이 차량 탑승 환자의 본인확인을 위해 호출하는 내부 API입니다.
+
+Request: `multipart/form-data`
+
+- `verificationId`
+- `patientId`
+- `verificationMode=FACE_AND_IDCARD`
+- `referenceImage`
+- `faceImage`
+- `idCardImage`
+
+Response:
+
+```json
+{
+  "verificationId": "vrf_001",
+  "status": "SUCCEEDED",
+  "matched": true,
+  "faceSimilarityScore": 0.94,
+  "idCardFaceSimilarityScore": 0.91,
+  "reasonCodes": [],
+  "ocr": {
+    "name": "홍길동",
+    "rrnMasked": "580315-1******",
+    "address": "경북 울릉군 울릉읍 ..."
+  },
+  "qualityChecks": {
+    "faceDetected": true,
+    "singleFace": true,
+    "idCardDetected": true,
+    "ocrConfidence": 0.97
+  },
+  "modelVersion": "idv-ocr-face-v1"
+}
+```
+
 ### `GET /api/v1/health`
 
 기본 헬스체크입니다.

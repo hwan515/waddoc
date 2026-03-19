@@ -1016,13 +1016,13 @@
 
 ---
 
-## 10. 화상진료 세션 API (`/api/v1/sessions`)
+## 10. 진료 진입/화상진료 세션 API (`/api/v1/missions`, `/api/v1/sessions`)
 
-> LiveKit 기반 1:1 WebRTC 화상진료 세션을 관리한다.
+> 차량 도착 후 환자 본인 확인부터 LiveKit 기반 1:1 WebRTC 화상진료 세션 입장까지의 진입 흐름을 관리한다.
 >
 > **토큰 발급 정책**: 의사와 환자의 토큰은 **별도 엔드포인트**에서 발급한다.
 > - 의사: 세션 생성 시 (10.1) 자신의 토큰만 발급
-> - 환자: 미션이 진료 준비 단계에 도달한 뒤 차량 태블릿에서 **GPU 본인 확인과 함께** 요청 (10.2)
+> - 환자: 미션이 진료 준비 단계에 도달한 뒤 차량 태블릿에서 **본인 확인** 요청 (10.2), 이후 **활력징후 단계 완료 후, 의사 세션이 준비되면** **환자 토큰 발급** 요청 (10.3)
 
 ### 10.1 진료 세션 생성 — 의사 토큰 발급
 
@@ -1076,19 +1076,20 @@
 
 ---
 
-### 10.2 환자 토큰 발급 + GPU 본인 확인 (차량 태블릿 — 관리자 인증)
+### 10.2 환자 본인 확인 (차량 태블릿 — 관리자 인증)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/sessions/{sessionId}/participants/patient/token` |
+| Path | `/api/v1/missions/{missionId}/identity-check` |
 | Auth | Bearer Token (ADMIN) |
 
 > 차량 태블릿은 **운영 단말**로 정의하며, 관리자 계정으로 로그인되어 있다.
+> `진료 시작` 버튼은 환자 세션 생성이 아니라, 미션 단계 전환과 본인 확인/현장 진료 준비 시작을 의미한다.
 > 서버는 `patientId` 기준으로 `PATIENT.reference_image_path`를 조회한 뒤 파일 스토리지에서 기존 기준 이미지를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
-> GPU 서버가 반환한 일치도와 판정이 성공일 때만 WebRTC 토큰을 발급한다.
 > GPU 서버 내부 응답 필수 필드: `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`
 > Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
+> 검증 성공 시 서버는 별도 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 차량 태블릿은 활력징후 단계로 이동한다.
 
 **Request Body** (`multipart/form-data`)
 
@@ -1101,9 +1102,11 @@
 **Response** `200 OK`
 ```json
 {
-  "sessionId": "ses_L6pQr1",
-  "patientToken": "eyJhbGci...",
-  "expiresIn": 7200,
+  "missionId": "mis_K9pQr1",
+  "patientId": "pat_T7nLp4",
+  "status": "VERIFIED",
+  "verifiedAt": "2026-03-11T09:58:00+09:00",
+  "expiresInSeconds": 600,
   "identityCheck": {
     "matched": true,
     "faceSimilarityScore": 0.94,
@@ -1115,10 +1118,7 @@
       "address": "경북 울릉군 울릉읍..."
     }
   },
-  "room": {
-    "roomId": "room_ses_L6pQr1",
-    "livekitUrl": "wss://<DOMAIN>/livekit"
-  }
+  "nextStep": "VITALS"
 }
 ```
 
@@ -1141,16 +1141,58 @@
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
-| 403 | `MISSION_NOT_READY` | 미션이 환자 참가 가능한 준비 상태가 아님 |
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+| 403 | `MISSION_NOT_READY` | 미션이 본인 확인 가능한 준비 상태가 아님 |
 | 403 | `IDENTITY_CHECK_FAILED` | GPU 본인 확인 실패 |
-| 404 | `SESSION_NOT_FOUND` | 세션 없음 |
-| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
+| 403 | `PATIENT_MISMATCH` | 미션의 케이스 환자 ID와 불일치 |
 | 409 | `REFERENCE_IMAGE_MISSING` | 환자 기준 이미지가 등록되지 않음 |
 | 502 | `AI_IDV_REQUEST_FAILED` | 본인 확인 AI 서버 호출 실패 |
 
 ---
 
-### 10.3 세션 토큰 재발급
+### 10.3 환자 토큰 발급 (차량 태블릿 — 관리자 인증)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/sessions/{sessionId}/participants/patient/token` |
+| Auth | Bearer Token (ADMIN) |
+
+> 차량 태블릿은 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청한다.
+> 이 API는 이미 성공한 본인 확인 상태를 검증한 뒤, 환자용 LiveKit 토큰만 발급한다.
+
+**Request Body**
+```json
+{
+  "patientId": "pat_T7nLp4"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "sessionId": "ses_L6pQr1",
+  "patientToken": "eyJhbGci...",
+  "expiresIn": 7200,
+  "room": {
+    "roomId": "room_ses_L6pQr1",
+    "livekitUrl": "wss://<DOMAIN>/livekit"
+  }
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `MISSION_NOT_READY` | 미션이 환자 참가 가능한 준비 상태가 아님 |
+| 404 | `SESSION_NOT_FOUND` | 세션 없음 |
+| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
+| 403 | `IDENTITY_CHECK_NOT_CONFIRMED` | 최근 본인 확인 성공 상태가 없거나 만료됨 |
+
+---
+
+### 10.4 세션 토큰 재발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1195,7 +1237,7 @@
 
 ---
 
-### 10.4 세션 상태 조회
+### 10.5 세션 상태 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1232,7 +1274,7 @@
 
 ---
 
-### 10.5 진료 종료 및 요약 기록
+### 10.6 진료 종료 및 요약 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1269,7 +1311,7 @@
 
 ---
 
-### 10.6 LiveKit Webhook 수신 (서버 간)
+### 10.7 LiveKit Webhook 수신 (서버 간)
 
 | 항목 | 값 |
 |------|-----|

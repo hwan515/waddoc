@@ -133,6 +133,10 @@ docker compose -f docker-compose.prod.yml up -d --build --scale spring-api=3
   - `triage-ai` 프로세스는 내부 포트 `8001`
   - `systemd`, `supervisor`, `pm2`, 또는 전용 ML serving runtime으로 서비스 관리
 - 메인 서버는 `https://<GPU_HOST>/idv/...`, `https://<GPU_HOST>/triage/...`만 호출한다.
+- `idv-ai`는 최소 다음 경로를 제공해야 한다:
+  - `GET https://<GPU_HOST>/idv/api/v1/health`
+  - `POST https://<GPU_HOST>/idv/api/v1/verify`
+- `POST /idv/api/v1/verify`는 `referenceImage`, `faceImage`, `idCardImage` multipart 업로드를 받아야 한다.
 
 ## SSL 인증서 배치
 
