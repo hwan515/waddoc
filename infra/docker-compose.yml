@@ -34,6 +34,8 @@ services:
       - AI_TRIAGE_URL=https://${DEV_GPU_SERVER_HOST}/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
+      - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
+      - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
