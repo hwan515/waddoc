@@ -5,7 +5,6 @@ import '@livekit/components-styles';
 import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import { generateECGData, mockConsultationDetails, mockVitals } from '../../mockdata/consultations';
-import { useWebRTC } from '../../hooks/useWebRTC';
 import apiClient from '../../utils/api';
 
 const VideoConference = () => {
@@ -18,11 +17,11 @@ const VideoConference = () => {
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [ecgData, setEcgData] = useState(generateECGData(50));
     
-    // API Data
+    // API 데이터 상태
     const [consultationDetails, setConsultationDetails] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Fetch case details
+    // 진료 내역 데이터 조회
     useEffect(() => {
         const fetchCaseDetails = async () => {
             if (!id || id === 'test-room' || id.startsWith('RV_')) {
@@ -61,7 +60,7 @@ const VideoConference = () => {
                 });
             } catch (error) {
                 console.error("Failed to fetch case details:", error);
-                setConsultationDetails(mockConsultationDetails); // Fallback
+                setConsultationDetails(mockConsultationDetails); // 에러 시 더미 데이터 폴백 추가
             } finally {
                 setIsLoading(false);
             }
@@ -70,9 +69,6 @@ const VideoConference = () => {
         fetchCaseDetails();
     }, [id]);
 
-    // WebRTC Hook 로드 (의사는 방을 여는 Initiator 역할) - LiveKit으로 인해 더 이상 사용하지 않음
-    // const { localVideoRef, remoteVideoRef, localStream, initCamera, joinRoom, toggleMedia, cleanupMedia } = useWebRTC(id || 'test-room', true);
-    
     // 강제 화면 송출을 위해 임시 Ref 유지 (PreJoin용)
     const localVideoRef = null;
 
