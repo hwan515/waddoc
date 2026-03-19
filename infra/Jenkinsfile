@@ -88,7 +88,8 @@ pipeline {
                         env.BE_CHANGED    = changedFiles.any { it.startsWith('src/BE/') } ? 'true' : 'false'
                         env.FE_CHANGED    = changedFiles.any { it.startsWith('src/FE/') && !it.startsWith('src/FE-phone/') } ? 'true' : 'false'
                         env.FP_CHANGED    = changedFiles.any { it.startsWith('src/FE-phone/') } ? 'true' : 'false'
-                        env.INFRA_CHANGED = changedFiles.any { it.startsWith('infra/') || it == 'Jenkinsfile' } ? 'true' : 'false'
+                        // Jenkinsfile 변경만으로 운영 스택 전체 재기동이 일어나지 않도록 제외한다.
+                        env.INFRA_CHANGED = changedFiles.any { it.startsWith('infra/') && it != 'infra/Jenkinsfile' } ? 'true' : 'false'
                     }
 
                     echo "BE_CHANGED: ${env.BE_CHANGED}"
@@ -225,6 +226,8 @@ pipeline {
                         if (env.INFRA_CHANGED == 'true') {
                             echo '=== Deploying (infra change - full restart) ==='
                             sh '''
+                                docker buildx use ${BUILDX_BUILDER} 2>/dev/null || \
+                                docker buildx create --name ${BUILDX_BUILDER} --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/infra && \
                                 docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull && \
                                 docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d
