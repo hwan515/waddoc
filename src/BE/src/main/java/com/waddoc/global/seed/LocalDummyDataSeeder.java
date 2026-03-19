@@ -145,7 +145,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         User adminUser = ensureUser("seed_admin", "로컬 관리자", Role.ADMIN, null, ApprovalStatus.APPROVED);
         DoctorSeedBundle doctorBundle = seedDoctors(adminUser);
         GuardianSeedBundle guardianBundle = seedGuardians(adminUser);
-        List<Patient> patients = seedPatients(adminUser, PATIENT_COUNT);
+        List<Patient> patients = seedPatients(adminUser);
 
         seedGuardianLinks(patients, guardianBundle, adminUser);
         seedDepartmentSlots(doctorBundle.approvedDoctors(), historyStart, scheduleEnd);
@@ -203,13 +203,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return new GuardianSeedBundle(approved, pending, rejected);
     }
 
-    private List<Patient> seedPatients(User adminUser, int count) {
+    private List<Patient> seedPatients(User adminUser) {
         List<Patient> patients = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < PATIENT_COUNT; i++) {
             patients.add(ensurePatient(
                     buildPatientName(i),
                     buildPatientBirthDate(i),
-                    REGION_GIMCHEON_JEUNGSAN,
                     buildPatientAddress(i),
                     buildPatientPhone(i),
                     String.format("seed/patients/patient-%02d-reference.jpg", i + 1),
@@ -303,7 +302,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     SLOT_START_TIMES.get(i % SLOT_START_TIMES.size()),
                     BookingStatus.COMPLETED,
                     CaseStatus.COMPLETED,
-                    CompletionReason.BOOKING_CREATED,
                     MissionPhase.COMPLETED,
                     ConsultationSessionStatus.COMPLETED,
                     true,
@@ -342,7 +340,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     plan.startTime(),
                     plan.bookingStatus(),
                     plan.caseStatus(),
-                    CompletionReason.BOOKING_CREATED,
                     plan.missionPhase(),
                     plan.sessionStatus(),
                     true,
@@ -376,7 +373,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     SLOT_START_TIMES.get((i + 4) % SLOT_START_TIMES.size()),
                     BookingStatus.CONFIRMED,
                     CaseStatus.CREATED,
-                    CompletionReason.BOOKING_CREATED,
                     null,
                     null,
                     false,
@@ -407,7 +403,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     SLOT_START_TIMES.get((i + 2) % SLOT_START_TIMES.size()),
                     BookingStatus.CANCELLED,
                     CaseStatus.CANCELLED,
-                    CompletionReason.BOOKING_CREATED,
                     null,
                     null,
                     false,
@@ -457,7 +452,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                              LocalTime startTime,
                              BookingStatus bookingStatus,
                              CaseStatus caseStatus,
-                             CompletionReason completionReason,
                              MissionPhase missionPhase,
                              ConsultationSessionStatus sessionStatus,
                              boolean createMission,
@@ -473,11 +467,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 doctor.getDepartmentName(),
                 buildSelectionReason(doctor.getDepartment(), seedIndex),
                 List.of(slot.getPublicId()),
-                completionReason
+                CompletionReason.BOOKING_CREATED
         );
 
         LocalDateTime intakeBaseTime = LocalDateTime.of(appointmentDate, startTime.minusMinutes(25));
-        syncIntakeSessionTimeline(intakeSession, intakeBaseTime, intakeBaseTime.plusMinutes(5), completionReason);
+        syncIntakeSessionTimeline(intakeSession, intakeBaseTime, intakeBaseTime.plusMinutes(5), CompletionReason.BOOKING_CREATED);
 
         Booking booking = ensureBooking(patient, slot, bookingStatus, intakeSession, cancelReason);
         CareCase careCase = ensureCareCase(booking, intakeSession);
@@ -507,7 +501,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             ConsultationSession session = ensureConsultationSession(
                     careCase,
                     String.format("seed-room-%03d", sequence.nextRoom()),
-                    LIVEKIT_URL,
                     sessionStatus,
                     resolveDurationMinutes(sessionStatus, seedIndex)
             );
@@ -634,7 +627,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return doctorProfile;
     }
 
-    private Patient ensurePatient(String name, LocalDate birthDate, String regionCode, String address, String phone,
+    private Patient ensurePatient(String name, LocalDate birthDate, String address, String phone,
                                   String referenceImagePath, User uploadedBy) {
         String birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
         Patient patient = patientRepository.findByPhone(phone)
@@ -643,7 +636,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         Patient.builder()
                                 .name(name)
                                 .birthDate(birthDate)
-                                .regionCode(regionCode)
+                                .regionCode(REGION_GIMCHEON_JEUNGSAN)
                                 .address(address)
                                 .phone(phone)
                                 .build()
@@ -651,10 +644,10 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         if (!name.equals(patient.getName())
                 || !birthDate.equals(patient.getBirthDate())
-                || !regionCode.equals(patient.getRegionCode())
+                || !REGION_GIMCHEON_JEUNGSAN.equals(patient.getRegionCode())
                 || !address.equals(patient.getAddress())
                 || !phone.equals(patient.getPhone())) {
-            patient.updateProfile(name, birthDate, regionCode, address, phone);
+            patient.updateProfile(name, birthDate, REGION_GIMCHEON_JEUNGSAN, address, phone);
         }
 
         if (referenceImagePath != null
@@ -665,8 +658,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return patient;
     }
 
-    private PatientGuardianLink ensureGuardianLink(Patient patient, User guardianUser, String relation,
-                                                   GuardianLinkStatus targetStatus, User approver) {
+    private void ensureGuardianLink(Patient patient, User guardianUser, String relation,
+                                    GuardianLinkStatus targetStatus, User approver) {
         PatientGuardianLink link = patientGuardianLinkRepository.findByPatientAndGuardianUser(patient, guardianUser)
                 .orElseGet(() -> patientGuardianLinkRepository.save(
                         PatientGuardianLink.builder()
@@ -708,7 +701,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             entityManager.refresh(link);
         }
 
-        return link;
     }
 
     private IntakeSession ensureIntakeSession(Patient patient, String callerNumber,
@@ -939,14 +931,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.refresh(mission);
     }
 
-    private ConsultationSession ensureConsultationSession(CareCase careCase, String roomId, String livekitUrl,
+    private ConsultationSession ensureConsultationSession(CareCase careCase, String roomId,
                                                           ConsultationSessionStatus targetStatus, Integer durationMinutes) {
         ConsultationSession session = consultationSessionRepository.findByCareCase(careCase).orElseGet(() ->
                 consultationSessionRepository.save(
                         ConsultationSession.builder()
                                 .careCase(careCase)
                                 .roomId(roomId)
-                                .livekitUrl(livekitUrl)
+                                .livekitUrl(LIVEKIT_URL)
                                 .build()
                 )
         );
@@ -1014,9 +1006,9 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.refresh(session);
     }
 
-    private ConsultationSummary ensureConsultationSummary(ConsultationSession session, String summaryNote,
-                                                          boolean prescriptionIssued, String prescriptionNote,
-                                                          boolean needsFollowUp) {
+    private void ensureConsultationSummary(ConsultationSession session, String summaryNote,
+                                           boolean prescriptionIssued, String prescriptionNote,
+                                           boolean needsFollowUp) {
         ConsultationSummary summary = consultationSummaryRepository.findBySession(session).orElseGet(() ->
                 consultationSummaryRepository.save(
                         ConsultationSummary.builder()
@@ -1029,7 +1021,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 )
         );
         summary.update(summaryNote, prescriptionIssued, prescriptionNote, needsFollowUp);
-        return summary;
     }
 
     private DoctorProfile nextDoctor(Map<String, List<DoctorProfile>> doctorsByDepartment,
