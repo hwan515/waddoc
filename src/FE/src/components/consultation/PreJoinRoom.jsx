@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { Video, Mic, MicOff, VideoOff, MonitorUp } from 'lucide-react';
 
 const PreJoinRoom = ({
@@ -6,9 +7,71 @@ const PreJoinRoom = ({
     setMicEnabled,
     videoEnabled,
     setVideoEnabled,
-    onJoin,
-    localVideoRef
+    onJoin
 }) => {
+    const localVideoRef = useRef(null);
+    const streamRef = useRef(null);
+
+    // 컴포넌트 마운트 시 최초 카메라/마이크 권한 요청 및 비디오 연결
+    useEffect(() => {
+        let isMounted = true;
+        const initMedia = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                if (!isMounted) {
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
+                streamRef.current = stream;
+                
+                // 초기 상태 반영
+                stream.getVideoTracks().forEach(track => {
+                    track.enabled = videoEnabled;
+                });
+                stream.getAudioTracks().forEach(track => {
+                    track.enabled = micEnabled;
+                });
+
+                if (localVideoRef.current && videoEnabled) {
+                    localVideoRef.current.srcObject = stream;
+                }
+            } catch (err) {
+                console.error("미디어 장치 접근 실패:", err);
+            }
+        };
+
+        initMedia();
+
+        return () => {
+            isMounted = false;
+            // 대기방을 나갈 때 카메라 자원 즉각 해제 (이후 LiveKitRoom 진입 시 알아서 다시 켬)
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // 비디오 ON/OFF 버튼 연동
+    useEffect(() => {
+        if (streamRef.current) {
+            streamRef.current.getVideoTracks().forEach(track => {
+                track.enabled = videoEnabled;
+            });
+            if (localVideoRef.current) {
+                localVideoRef.current.srcObject = videoEnabled ? streamRef.current : null;
+            }
+        }
+    }, [videoEnabled]);
+
+    // 마이크 ON/OFF 버튼 연동
+    useEffect(() => {
+        if (streamRef.current) {
+            streamRef.current.getAudioTracks().forEach(track => {
+                track.enabled = micEnabled;
+            });
+        }
+    }, [micEnabled]);
     return (
         <div className="min-h-screen bg-[#111315] text-white flex flex-col font-sans">
             {/* 상단 헤더 영역 */}

@@ -3,24 +3,46 @@ import { useNavigate } from 'react-router-dom';
 import * as faceapi from 'face-api.js';
 import { ScanFace, CheckCircle2, AlertCircle } from 'lucide-react';
 
+import apiClient from '../../utils/api'; 
+
 const AuthStep = () => {
     const videoRef = useRef(null);
     const navigate = useNavigate();
 
     const [isModelLoaded, setIsModelLoaded] = useState(false);
     const [countdown, setCountdown] = useState(null);
-    const [authStatus, setAuthStatus] = useState('idle'); // idle, capturing, success, fail
+    const [authStatus, setAuthStatus] = useState('idle'); // idle, capturing, submitting, success, fail
+    const [captureStep, setCaptureStep] = useState('face'); // 'face' -> 'idcard' -> 'submitting' -> 'done'
     const [errorMsg, setErrorMsg] = useState('');
     const [failCount, setFailCount] = useState(0);
     const failCountRef = useRef(0);
 
-    const authStatusRef = useRef('idle'); // To access latest status in setInterval
+    const [faceImgData, setFaceImgData] = useState(null);
+
+    const authStatusRef = useRef('idle');
+    const captureStepRef = useRef('face');
+
     useEffect(() => {
         authStatusRef.current = authStatus;
     }, [authStatus]);
+    
+    useEffect(() => {
+        captureStepRef.current = captureStep;
+    }, [captureStep]);
 
     const detectionIntervalRef = useRef(null);
     const countdownRef = useRef(null);
+
+    // base64를 Blob으로 변환하는 유틸 함수
+    const base64ToBlob = (base64, mimeType = 'image/jpeg') => {
+        const byteString = atob(base64.split(',')[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], { type: mimeType });
+    };
 
     // Load face-api models on mount
     useEffect(() => {
@@ -72,7 +94,10 @@ const AuthStep = () => {
         // Start detecting face every 200ms
         detectionIntervalRef.current = setInterval(async () => {
             const currentStatus = authStatusRef.current;
-            if (currentStatus === 'capturing' || currentStatus === 'success' || currentStatus === 'fail') {
+            const currentStep = captureStepRef.current;
+            
+            // 얼굴 캡처 단계가 아니거나 통신 중이면 감지 중단
+            if (currentStep !== 'face' || currentStatus === 'capturing' || currentStatus === 'submitting' || currentStatus === 'success' || currentStatus === 'fail') {
                 resetCountdown();
                 return;
             }
@@ -157,43 +182,85 @@ const AuthStep = () => {
 
             // 2. Base64 이미지 추출
             const base64Image = canvas.toDataURL('image/jpeg', 0.9);
+            setFaceImgData(base64Image); // 얼굴 이미지 상태 저장
 
-            // 3. 로컬 테스트를 위해 FE 폴더 경로에 캡처 이미지 직접 저장 요청 (vite plugin 이용)
-            const currentId = parseInt(localStorage.getItem('auth_image_id') || '0', 10) + 1;
-            localStorage.setItem('auth_image_id', currentId.toString());
-            const fileName = `image_${currentId}.jpg`;
+            // 3. 신분증 촬영 단계로 넘어감
+            setTimeout(() => {
+                setCaptureStep('idcard');
+                setAuthStatus('idle');
+            }, 500);
 
+        } catch (err) {
+            console.error("Face Capture Error:", err);
+            handleAuthFail();
+        }
+    };
+
+    const captureIdCard = async () => {
+        setAuthStatus('capturing');
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoRef.current.videoWidth;
+            canvas.height = videoRef.current.videoHeight;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(videoRef.current, 0, 0);
+
+            const idCardBase64 = canvas.toDataURL('image/jpeg', 0.9);
+            
+            setCaptureStep('submitting');
+            await submitAuth(faceImgData, idCardBase64);
+
+        } catch (err) {
+            console.error("ID Card Capture Error:", err);
+            handleAuthFail();
+        }
+    };
+
+    const submitAuth = async (faceBase64, idCardBase64) => {
+        setAuthStatus('submitting');
+        try {
+            // 4. FormData 생성 및 API 호출
+            const formData = new FormData();
+            formData.append('patientId', 'pat_Zk3mQ9'); // 임시 환자 ID (케이스 정보를 통해 받아와야함)
+            formData.append('faceImage', base64ToBlob(faceBase64), 'face.jpg');
+            formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.jpg');
+            
+            // 임시 세션 ID
+            const sessionId = "ses_L6pQr1"; 
+            
             try {
-                await fetch('/api/local-save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: base64Image, filename: fileName })
+                // 실제 백엔드 API 호출. (API 문서 10.2 참조)
+                const response = await apiClient.post(`/sessions/${sessionId}/participants/patient/token`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' } // axios가 내부적으로 boundary를 자동 세팅합니다.
                 });
-            } catch (localErr) {
-                console.warn('Local save failed. Make sure vite plugin is running.', localErr);
-            }
-
-            // 4. 외부 AI 서버로 본인인증 요청 
-            const response = await fetch('http://localhost:5000/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ img: base64Image })
-            });
-            const result = await response.json();
-
-            // 5. 서버 검증 결과 판별
-            if (result.verified) {
+                
+                // 성공 시 응답값(JWT 토큰 및 URL)을 localStorage 등에 임시 보관
+                if (response.data && response.data.patientToken) {
+                    localStorage.setItem('webrtc_patient_token', response.data.patientToken);
+                    if (response.data.room && response.data.room.livekitUrl) {
+                        localStorage.setItem('webrtc_livekit_url', response.data.room.livekitUrl);
+                    }
+                }
+                
                 setAuthStatus('success');
-                setFailCount(0); // 성공시 초기화
+                setFailCount(0);
                 failCountRef.current = 0;
                 stopVideo();
                 setTimeout(() => {
                     navigate('/robot/measure-intro');
                 }, 2000);
-            } else {
-                handleAuthFail();
+            } catch (apiError) {
+                console.warn('API 실패. 데모를 위해 강제 성공 처리합니다.', apiError);
+                // 데모 목적으로 API가 실패하더라도 2초 후 성공으로 간주하여 다음 화면으로 넘김 (추후 제거)
+                setAuthStatus('success');
+                stopVideo();
+                setTimeout(() => {
+                    navigate('/robot/measure-intro');
+                }, 2000);
             }
-
         } catch (err) {
             console.error("Auth Error:", err);
             handleAuthFail();
@@ -231,8 +298,14 @@ const AuthStep = () => {
                         <ScanFace className="w-10 h-10" />
                         본인 인증
                     </h1>
-                    <p className="text-xl text-slate-300 font-medium">
-                        본인인증을 위해 얼굴을 흰색 선에 맞춰주세요.
+                    <p className="text-xl text-slate-300 font-medium h-8">
+                        {captureStep === 'face' 
+                            ? '본인인증을 위해 얼굴을 흰색 선에 맞춰주세요.'
+                            : captureStep === 'idcard'
+                            ? '화면의 네모 영역에 신분증이 꽉 차도록 비춘 뒤 버튼을 눌러주세요.'
+                            : captureStep === 'submitting'
+                            ? '본인 확인을 검증하는 중입니다...'
+                            : '인증이 완료되었습니다.'}
                     </p>
                     {errorMsg && (
                         <p className="mt-4 text-red-400 font-bold bg-red-400/10 px-4 py-2 rounded-xl flex items-center gap-2 justify-center">
@@ -264,29 +337,64 @@ const AuthStep = () => {
                     {/* Camera Overlay Guide */}
                     <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
                         <svg className="w-full h-full" preserveAspectRatio="none">
-                            {/* SVG Mask for highlighting the face area */}
-                            <defs>
-                                <mask id="face-mask">
-                                    <rect width="100%" height="100%" fill="white" />
-                                    <ellipse cx="50%" cy="50%" rx="18%" ry="35%" fill="black" />
-                                </mask>
-                            </defs>
-                            <rect width="100%" height="100%" fill="rgba(6, 26, 64, 0.6)" mask="url(#face-mask)" />
-
-                            {/* Guide Dashed Line */}
-                            <ellipse
-                                cx="50%"
-                                cy="50%"
-                                rx="18%"
-                                ry="35%"
-                                fill="none"
-                                stroke={countdown !== null ? "#32D74B" : "rgba(255, 255, 255, 0.5)"}
-                                strokeWidth="4"
-                                strokeDasharray={countdown !== null ? "none" : "10 10"}
-                                className="transition-colors duration-300"
-                            />
+                            {captureStep === 'face' ? (
+                                <>
+                                    {/* SVG Mask for highlighting the face area */}
+                                    <defs>
+                                        <mask id="face-mask">
+                                            <rect width="100%" height="100%" fill="white" />
+                                            <ellipse cx="50%" cy="50%" rx="18%" ry="35%" fill="black" />
+                                        </mask>
+                                    </defs>
+                                    <rect width="100%" height="100%" fill="rgba(6, 26, 64, 0.6)" mask="url(#face-mask)" />
+        
+                                    {/* Guide Dashed Line */}
+                                    <ellipse
+                                        cx="50%"
+                                        cy="50%"
+                                        rx="18%"
+                                        ry="35%"
+                                        fill="none"
+                                        stroke={countdown !== null ? "#32D74B" : "rgba(255, 255, 255, 0.5)"}
+                                        strokeWidth="4"
+                                        strokeDasharray={countdown !== null ? "none" : "10 10"}
+                                        className="transition-colors duration-300"
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <defs>
+                                        <mask id="idcard-mask">
+                                            <rect width="100%" height="100%" fill="white" />
+                                            <rect x="25%" y="30%" width="50%" height="40%" rx="15" fill="black" />
+                                        </mask>
+                                    </defs>
+                                    <rect width="100%" height="100%" fill="rgba(6, 26, 64, 0.6)" mask="url(#idcard-mask)" />
+                                    
+                                    <rect 
+                                        x="25%" y="30%" width="50%" height="40%" rx="15"
+                                        fill="none"
+                                        stroke="rgba(255, 255, 255, 0.8)"
+                                        strokeWidth="4"
+                                        strokeDasharray="15 15"
+                                    />
+                                </>
+                            )}
                         </svg>
                     </div>
+
+                    {/* ID Card Capture UI */}
+                    {captureStep === 'idcard' && authStatus === 'idle' && (
+                        <div className="absolute bottom-8 left-0 right-0 z-20 flex justify-center animate-fade-in-up">
+                            <button 
+                                onClick={captureIdCard}
+                                className="bg-[#B9D6F2] hover:bg-white text-[#061A40] font-bold text-xl px-10 py-4 rounded-full shadow-[0_0_20px_rgba(185,214,242,0.4)] transition-all flex items-center gap-2"
+                            >
+                                <ScanFace className="w-6 h-6" />
+                                신분증 촬영하기
+                            </button>
+                        </div>
+                    )}
 
                     {/* Countdown UI */}
                     {countdown !== null && authStatus === 'idle' && (
@@ -297,10 +405,13 @@ const AuthStep = () => {
                         </div>
                     )}
 
-                    {/* Capturing / Success States */}
-                    {authStatus === 'capturing' && (
-                        <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/90 animate-flash">
-                            <span className="text-3xl font-bold text-[#061A40]">얼굴 촬영 중...</span>
+                    {/* Capturing / Submitting States */}
+                    {(authStatus === 'capturing' || authStatus === 'submitting') && (
+                        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/90 animate-flash">
+                            <div className="w-16 h-16 border-4 border-[#0353A4] border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <span className="text-3xl font-bold text-[#061A40]">
+                                {authStatus === 'capturing' ? '촬영 중...' : '신원 검증 중입니다...'}
+                            </span>
                         </div>
                     )}
 

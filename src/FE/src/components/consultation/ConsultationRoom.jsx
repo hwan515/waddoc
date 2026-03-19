@@ -3,6 +3,8 @@ import {
     Mic, MicOff, Video, VideoOff, Settings, LogOut,
     Eye, EyeOff
 } from 'lucide-react';
+import { useTracks, useLocalParticipant, VideoTrack } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 
 const ConsultationRoom = ({
     details,
@@ -55,14 +57,11 @@ const ConsultationRoom = ({
         return `${m}:${s}`;
     };
 
-    // 로컬 스트림 명시적 연결
-    useEffect(() => {
-        if (localVideoRef && localVideoRef.current && localStream) {
-            if (localVideoRef.current.srcObject !== localStream) {
-                localVideoRef.current.srcObject = localStream;
-            }
-        }
-    }, [localStream, localVideoRef]);
+    // LiveKit Hooks: 로컬 참가자와 원격 참가자의 비디오 트랙을 가져옴
+    const { localParticipant } = useLocalParticipant();
+    const localVideoTrack = useTracks([Track.Source.Camera]).find((t) => t.participant.identity === localParticipant.identity);
+    const remoteVideoTracks = useTracks([Track.Source.Camera]).filter((t) => t.participant.identity !== localParticipant.identity);
+    const remoteTrack = remoteVideoTracks.length > 0 ? remoteVideoTracks[0] : null;
 
     const handleSearchChange = (e) => setSearchQuery(e.target.value);
     
@@ -99,14 +98,14 @@ const ConsultationRoom = ({
                     <div className="flex space-x-2">
                         <button 
                             onClick={() => setMicEnabled(!micEnabled)}
-                            className={`px-3 py-1 text-xs border border-slate-400 shadow-sm flex items-center space-x-1 ${micEnabled ? 'bg-white' : 'bg-red-100 text-red-700'}`}
+                            className={`px-3 py-1 text-xs border border-slate-400 shadow-sm flex items-center space-x-1 ${micEnabled ? 'bg-white text-slate-800' : 'bg-red-100 text-red-700'}`}
                         >
                             {micEnabled ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
                             <span>{micEnabled ? '마이크 ON' : '마이크 OFF'}</span>
                         </button>
                         <button 
                             onClick={() => setVideoEnabled(!videoEnabled)}
-                            className={`px-3 py-1 text-xs border border-slate-400 shadow-sm flex items-center space-x-1 ${videoEnabled ? 'bg-white' : 'bg-red-100 text-red-700'}`}
+                            className={`px-3 py-1 text-xs border border-slate-400 shadow-sm flex items-center space-x-1 ${videoEnabled ? 'bg-white text-slate-800' : 'bg-red-100 text-red-700'}`}
                         >
                             {videoEnabled ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5" />}
                             <span>{videoEnabled ? '카메라 ON' : '카메라 OFF'}</span>
@@ -152,12 +151,17 @@ const ConsultationRoom = ({
 
                     {/* 메인 비디오 (상대방) */}
                     <div className="flex-1 w-full h-full relative z-0">
-                        <video
-                            ref={remoteVideoRef}
-                            autoPlay
-                            playsInline
-                            className="w-full h-full object-cover"
-                        />
+                        {remoteTrack ? (
+                            <VideoTrack 
+                                trackRef={remoteTrack} 
+                                className="w-full h-full object-cover" 
+                            />
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full bg-slate-800 text-slate-400">
+                                <div className="w-12 h-12 border-4 border-slate-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                <span className="font-bold">상대방 영상을 대기 중입니다...</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* 우측 상단 오버레이: 생체 정보 (Vitals) */}
@@ -193,18 +197,14 @@ const ConsultationRoom = ({
                     {showLocalVideo && (
                         <div className="absolute bottom-2 left-2 w-52 h-36 bg-slate-900 border-2 border-slate-400 shadow-xl z-20 overflow-hidden">
                             <div className="absolute top-1 left-1 bg-black/50 px-1 text-white text-[10px] z-30">내 화면 (의사)</div>
-                            {videoEnabled ? (
-                                <video
-                                    ref={localVideoRef}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    style={{ transform: 'scaleX(-1)' }}
-                                    className="w-full h-full object-cover relative z-10"
+                            {videoEnabled && localVideoTrack ? (
+                                <VideoTrack
+                                    trackRef={localVideoTrack}
+                                    className="absolute inset-0 w-full h-full object-cover custom-video-mirror"
                                 />
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">
-                                    카메라 꺼짐
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-800 text-slate-500">
+                                    <VideoOff className="w-8 h-8" />
                                 </div>
                             )}
                         </div>
@@ -254,8 +254,8 @@ const ConsultationRoom = ({
                                             />
                                         </div>
                                         <div className="w-16 py-1 text-center border-r border-slate-200 text-slate-500">{med.code}</div>
-                                        <div className="w-32 py-1 px-2 text-left border-r border-slate-200 truncate" title={med.name}>{med.name}</div>
-                                        <div className="flex-1 py-1 px-2 text-left truncate">{med.dosage}</div>
+                                        <div className="w-32 py-1 px-2 text-left border-r border-slate-200 truncate text-slate-800" title={med.name}>{med.name}</div>
+                                        <div className="flex-1 py-1 px-2 text-left truncate text-slate-600">{med.dosage}</div>
                                     </div>
                                 );
                             })}
