@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, Mail, Lock, CheckCircle2 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
+import Input from '../../components/common/Input';
+import Button from '../../components/common/Button';
 
 const AdminSignup = () => {
     const navigate = useNavigate();
@@ -12,7 +14,7 @@ const AdminSignup = () => {
         email: '',
         password: '',
         passwordConfirm: '',
-        role: 'operator', // Fixed role for admin
+        role: 'operator',
     });
 
     const [isSuccess, setIsSuccess] = useState(false);
@@ -75,7 +77,7 @@ const AdminSignup = () => {
 
     return (
         <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-            {/* Background Decor */}
+            {/* 배경 */}
             <div className="absolute top-0 right-0 -mr-20 -mt-20 w-72 h-72 bg-blue-100 rounded-full blur-3xl opacity-50" />
 
             <div className="max-w-md w-full space-y-6 bg-white p-10 rounded-3xl shadow-xl border border-slate-100 relative z-10">
@@ -88,93 +90,60 @@ const AdminSignup = () => {
 
                 <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
                     <div className="space-y-4">
-                        {/* Name */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">이름</label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <User className="h-4 w-4 text-slate-400" />
-                                </div>
-                                <input
-                                    name="name"
-                                    type="text"
-                                    required
-                                    value={formData.name}
-                                    onChange={handleChange}
-                                    className="appearance-none relative block w-full px-3 py-3 pl-10 border border-slate-300 placeholder-slate-400 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0353A4] sm:text-sm"
-                                    placeholder="관리자 이름"
-                                />
-                            </div>
-                        </div>
+                        {/* 이름 */}
+                        <Input
+                            label="이름"
+                            name="name"
+                            type="text"
+                            required
+                            value={formData.name}
+                            onChange={handleChange}
+                            placeholder="관리자 이름"
+                            iconLeft={<User className="h-4 w-4" />}
+                        />
 
-                        {/* Email */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">이메일 (사번)</label>
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Mail className="h-4 w-4 text-slate-400" />
-                                </div>
-                                <input
-                                    name="email"
-                                    type="email"
-                                    required
-                                    value={formData.email}
-                                    onChange={handleChange}
-                                    className="appearance-none relative block w-full px-3 py-3 pl-10 border border-slate-300 placeholder-slate-400 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0353A4] sm:text-sm"
-                                    placeholder="admin@vitalconnect.co.kr"
-                                />
-                            </div>
-                        </div>
+                        {/* 이메일 */}
+                        <Input
+                            label="이메일 (사번)"
+                            name="email"
+                            type="email"
+                            required
+                            value={formData.email}
+                            onChange={handleChange}
+                            placeholder="admin@vitalconnect.co.kr"
+                            iconLeft={<Mail className="h-4 w-4" />}
+                        />
 
-                        {/* Password */}
+                        {/* 비밀번호 */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Lock className="h-4 w-4 text-slate-400" />
-                                    </div>
-                                    <input
-                                        name="password"
-                                        type="password"
-                                        required
-                                        value={formData.password}
-                                        onChange={handleChange}
-                                        className="appearance-none relative block w-full px-3 py-3 pl-10 border border-slate-300 placeholder-slate-400 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0353A4] sm:text-sm"
-                                        placeholder="••••••••"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호 확인</label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Lock className="h-4 w-4 text-slate-400" />
-                                    </div>
-                                    <input
-                                        name="passwordConfirm"
-                                        type="password"
-                                        required
-                                        value={formData.passwordConfirm}
-                                        onChange={handleChange}
-                                        className={`appearance-none relative block w-full px-3 py-3 pl-10 border placeholder-slate-400 text-slate-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0353A4] sm:text-sm ${formData.passwordConfirm && formData.password !== formData.passwordConfirm
-                                            ? 'border-red-500 focus:ring-red-500'
-                                            : 'border-slate-300'
-                                            }`}
-                                        placeholder="••••••••"
-                                    />
-                                </div>
-                            </div>
+                            <Input
+                                label="비밀번호"
+                                name="password"
+                                type="password"
+                                required
+                                value={formData.password}
+                                onChange={handleChange}
+                                placeholder="••••••••"
+                                iconLeft={<Lock className="h-4 w-4" />}
+                            />
+                            <Input
+                                label="비밀번호 확인"
+                                name="passwordConfirm"
+                                type="password"
+                                required
+                                value={formData.passwordConfirm}
+                                onChange={handleChange}
+                                placeholder="••••••••"
+                                iconLeft={<Lock className="h-4 w-4" />}
+                                errorMessage={formData.passwordConfirm && formData.password !== formData.passwordConfirm ? '비밀번호가 일치하지 않습니다.' : ''}
+                            />
                         </div>
                     </div>
 
-                    <div>
-                        <button
-                            type="submit"
-                            className="w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-[#0353A4] hover:bg-[#061A40] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0353A4] shadow-md hover:shadow-lg transition-all"
-                        >
+                    <div className="mt-6">
+                        <Button type="submit" fullWidth>
                             사내망 계정 등록
-                        </button>
+                        </Button>
                     </div>
                 </form>
 

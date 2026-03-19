@@ -49,9 +49,6 @@ const ControlCenter = () => {
                     fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })) // 전체 달력 일정
                 ]);
 
-                console.log("[운영 대시보드] 금일 미션(Missions) API 응답:", missionsRes.data);
-                console.log("[운영 대시보드] 예약(Bookings) API 응답:", bookingsRes.data);
-
                 // 1. 차량(Missions) 매핑
                 // 상태 변환 (CREATED/DISPATCHED... -> 운행 중 / 대기 중 등)
                 const rawMissions = missionsRes.data.missions || [];
