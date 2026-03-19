@@ -180,7 +180,7 @@ const AdminSignup = () => {
 
                 <div className="mt-4 text-center text-sm">
                     <span className="text-slate-500">이미 등록된 관리자이신가요? </span>
-                    <Link to="/admin/login" className="font-semibold text-[#0353A4] hover:underline">
+                    <Link to="/operator/login" className="font-semibold text-[#0353A4] hover:underline">
                         로그인
                     </Link>
                 </div>
