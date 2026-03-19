@@ -12,7 +12,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
-      - ./certs:/etc/nginx/certs:ro        # SSL 인증서 (Let's Encrypt 또는 자체 서명)
+      - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro  # SSL 인증서는 repo 밖 경로를 사용
     depends_on:
       - spring-api
       - frontend
