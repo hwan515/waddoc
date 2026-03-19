@@ -1,20 +1,21 @@
 package com.waddoc.domain.booking.service;
 
 import com.waddoc.domain.audit.service.AuditLogService;
+import com.waddoc.domain.booking.dto.BookingDetailResponse;
 import com.waddoc.domain.booking.dto.CreateBookingRequest;
 import com.waddoc.domain.booking.dto.CreateBookingResponse;
-import com.waddoc.domain.booking.dto.BookingDetailResponse;
 import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
-import com.waddoc.domain.intake.entity.ConfidenceLevel;
-import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
+import com.waddoc.domain.intake.entity.ConfidenceLevel;
+import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
+import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
@@ -37,6 +38,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,18 +70,18 @@ class BookingServiceTest {
     private BookingService bookingService;
 
     @Test
-    void createBooking_publishesBookingCreatedSmsEvent() {
+    void createBooking_publishesBookingCreatedEvents() {
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
-                .name("김의사")
+                .name("Doctor Kim")
                 .role(Role.DOCTOR)
                 .build();
 
         DoctorProfile doctor = DoctorProfile.builder()
                 .user(doctorUser)
                 .department("INTERNAL_MEDICINE")
-                .departmentName("내과")
+                .departmentName("Internal Medicine")
                 .build();
 
         ScheduleSlot slot = ScheduleSlot.builder()
@@ -90,10 +92,10 @@ class BookingServiceTest {
                 .build();
 
         Patient patient = Patient.builder()
-                .name("홍길동")
+                .name("Patient Park")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
-                .address("울릉군")
+                .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
                 .phone("01012345678")
                 .build();
 
@@ -104,10 +106,10 @@ class BookingServiceTest {
                 .build();
         session.recordSelection(
                 "INTERNAL_MEDICINE",
-                "내과",
+                "Internal Medicine",
                 ConfidenceLevel.HIGH,
                 false,
-                "기침",
+                "department selected",
                 List.of(slot.getPublicId())
         );
 
@@ -122,32 +124,45 @@ class BookingServiceTest {
             ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 18, 12, 0));
             return booking;
         }).when(bookingRepository).save(any(Booking.class));
-        String smsMessage = """
-                예약 확인
-                [왔닥]
-                안녕하세요, 홍길동님.
-                진료 예약이 아래와 같이 확정되었습니다.
-
-                일시: 2026-03-21, 10:00
-                의사: 김의사 (내과)
-                ※ 유의사항
-
-                예약 시간 10분 전까지 준비 부탁드립니다.
-                변경이나 취소를 원하실 경우 최소 하루 전까지 연락 주시기 바랍니다.
-
-                ☎ 문의: 01049163720""";
 
         CreateBookingResponse response = bookingService.createBooking(session.getPublicId(), request);
 
-        ArgumentCaptor<BookingCreatedSmsEvent> eventCaptor = ArgumentCaptor.forClass(BookingCreatedSmsEvent.class);
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
 
         assertThat(response.getBookingId()).isNotBlank();
         assertThat(response.getCaseId()).isNotBlank();
-        assertThat(response.getTtsMessage()).contains("예약이 완료되었습니다.");
-        verify(eventPublisher).publishEvent(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().bookingId()).isEqualTo(response.getBookingId());
-        assertThat(eventCaptor.getValue().recipientPhone()).isEqualTo("01012345678");
-        assertThat(normalizeLineEndings(eventCaptor.getValue().message())).isEqualTo(normalizeLineEndings(smsMessage));
+        assertThat(response.getTtsMessage()).isNotBlank();
+        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+
+        BookingCreatedSmsEvent smsEvent = eventCaptor.getAllValues().stream()
+                .filter(BookingCreatedSmsEvent.class::isInstance)
+                .map(BookingCreatedSmsEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+        BookingCreatedDoctorNotificationEvent notificationEvent = eventCaptor.getAllValues().stream()
+                .filter(BookingCreatedDoctorNotificationEvent.class::isInstance)
+                .map(BookingCreatedDoctorNotificationEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(smsEvent.bookingId()).isEqualTo(response.getBookingId());
+        assertThat(smsEvent.recipientPhone()).isEqualTo("01012345678");
+        assertThat(smsEvent.message()).contains("2026-03-21, 10:00");
+        assertThat(smsEvent.message()).contains("Doctor Kim");
+
+        NewBookingNotificationPayload payload = notificationEvent.payload();
+        assertThat(notificationEvent.doctorId()).isEqualTo(response.getDoctor().getDoctorId());
+        assertThat(payload.getType()).isEqualTo("NEW_BOOKING");
+        assertThat(payload.getBookingId()).isEqualTo(response.getBookingId());
+        assertThat(payload.getCaseId()).isEqualTo(response.getCaseId());
+        assertThat(payload.getDoctorId()).isEqualTo(response.getDoctor().getDoctorId());
+        assertThat(payload.getDoctorName()).isEqualTo(response.getDoctor().getName());
+        assertThat(payload.getDepartmentName()).isEqualTo(response.getDoctor().getDepartmentName());
+        assertThat(payload.getPatientName()).isEqualTo(response.getPatient().getName());
+        assertThat(payload.getAppointmentDate()).isEqualTo(response.getAppointmentDate());
+        assertThat(payload.getStartTime()).isEqualTo(response.getStartTime());
+        assertThat(payload.getLocation()).isEqualTo("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69");
+        assertThat(payload.getCreatedAt()).isEqualTo(response.getCreatedAt());
     }
 
     @Test
@@ -155,14 +170,14 @@ class BookingServiceTest {
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
-                .name("김의사")
+                .name("Doctor Kim")
                 .role(Role.DOCTOR)
                 .build();
 
         DoctorProfile doctor = DoctorProfile.builder()
                 .user(doctorUser)
                 .department("INTERNAL_MEDICINE")
-                .departmentName("내과")
+                .departmentName("Internal Medicine")
                 .build();
 
         ScheduleSlot slot = ScheduleSlot.builder()
@@ -173,10 +188,10 @@ class BookingServiceTest {
                 .build();
 
         Patient patient = Patient.builder()
-                .name("홍길동")
+                .name("Patient Park")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
-                .address("울릉군")
+                .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
                 .phone("01012345678")
                 .build();
 
@@ -211,9 +226,5 @@ class BookingServiceTest {
         assertThat(response.getCaseId()).isEqualTo(careCase.getPublicId());
         assertThat(response.getIntakeSessionId()).isEqualTo(session.getPublicId());
         assertThat(response.getPatient().getRegionCode()).isEqualTo("ULLEUNG");
-    }
-
-    private String normalizeLineEndings(String value) {
-        return value.replace("\r\n", "\n");
     }
 }

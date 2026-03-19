@@ -11,6 +11,7 @@ import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
+import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -107,8 +108,10 @@ public class BookingService {
                 "%s %s 선생님, %d월 %d일 %s %d시 예약이 완료되었습니다.",
                 departmentName, doctorName, month, day, amPm, displayHour);
         String smsMessage = buildBookingCreatedSms(patient, slot, doctorName, departmentName);
+        NewBookingNotificationPayload notificationPayload = NewBookingNotificationPayload.from(booking, careCase);
 
         publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
+        publishBookingCreatedDoctorNotification(slot.getDoctor().getPublicId(), notificationPayload);
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -269,6 +272,10 @@ public class BookingService {
 
         // 예약 저장이 커밋된 뒤에만 비동기 발송되도록 이벤트로 분리한다.
         eventPublisher.publishEvent(new BookingCreatedSmsEvent(bookingId, recipientPhone, message));
+    }
+
+    private void publishBookingCreatedDoctorNotification(String doctorId, NewBookingNotificationPayload payload) {
+        eventPublisher.publishEvent(new BookingCreatedDoctorNotificationEvent(doctorId, payload));
     }
 
     private String buildBookingCreatedSms(Patient patient, ScheduleSlot slot, String doctorName, String departmentName) {
