@@ -57,6 +57,7 @@ public enum ErrorCode {
     PATIENT_NOT_RECONNECTABLE(HttpStatus.CONFLICT, "PATIENT_NOT_RECONNECTABLE", "현재 환자 연결 상태에서는 토큰을 재발급할 수 없습니다."),
     REFERENCE_IMAGE_MISSING(HttpStatus.CONFLICT, "REFERENCE_IMAGE_MISSING", "환자 기준 이미지가 등록되지 않았습니다."),
     IDENTITY_CHECK_FAILED(HttpStatus.FORBIDDEN, "IDENTITY_CHECK_FAILED", "본인 확인에 실패했습니다. 다시 촬영해주세요."),
+    IDENTITY_CHECK_NOT_CONFIRMED(HttpStatus.FORBIDDEN, "IDENTITY_CHECK_NOT_CONFIRMED", "최근 본인 확인 성공 상태가 없습니다. 다시 본인 확인을 진행해주세요."),
     LIVEKIT_ROOM_CREATE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "LIVEKIT_ROOM_CREATE_FAILED", "LiveKit 룸 생성에 실패했습니다."),
     AI_IDV_REQUEST_FAILED(HttpStatus.BAD_GATEWAY, "AI_IDV_REQUEST_FAILED", "본인 확인 AI 서버 호출에 실패했습니다."),
     CONSULTATION_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "CONSULTATION_SUMMARY_NOT_FOUND", "진료 요약을 찾을 수 없습니다."),
