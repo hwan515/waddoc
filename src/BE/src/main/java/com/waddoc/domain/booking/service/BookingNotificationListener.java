@@ -1,5 +1,6 @@
 package com.waddoc.domain.booking.service;
 
+import com.waddoc.domain.notification.service.DoctorNotificationSseService;
 import com.waddoc.global.sms.SmsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +14,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class BookingNotificationListener {
 
+    private static final String DOCTOR_NOTIFICATION_EVENT_NAME = "notification";
+
     private final SmsService smsService;
+    private final DoctorNotificationSseService doctorNotificationSseService;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -24,6 +28,21 @@ public class BookingNotificationListener {
         } catch (Exception e) {
             log.error("SMS send failed. eventType=BOOKING_CREATED, bookingId={}, recipientPhone={}",
                     event.bookingId(), event.recipientPhone(), e);
+        }
+    }
+
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleBookingCreatedDoctorNotificationEvent(BookingCreatedDoctorNotificationEvent event) {
+        try {
+            doctorNotificationSseService.sendToDoctor(
+                    event.doctorId(),
+                    DOCTOR_NOTIFICATION_EVENT_NAME,
+                    event.payload()
+            );
+        } catch (Exception e) {
+            log.error("SSE delivery failed. eventType=BOOKING_CREATED, bookingId={}, doctorId={}",
+                    event.payload().getBookingId(), event.doctorId(), e);
         }
     }
 }
