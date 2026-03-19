@@ -19,9 +19,14 @@ const ControlCenter = () => {
 
     // 상태 관리
     const [vehicles, setVehicles] = useState([]);
-    const [todayQueue, setTodayQueue] = useState([]);
+    const [missionsList, setMissionsList] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
-    const [statistics, setStatistics] = useState(mockStatistics); // 보류
+    const [statistics, setStatistics] = useState({
+        totalMissions: 0,
+        activeMissions: 0,
+        completedMissions: 0,
+        incidentCount: 0
+    });
 
     // 현재 선택된 차량 (카메라 뷰 연동)
     const [selectedVehicleId, setSelectedVehicleId] = useState(null);
@@ -33,15 +38,24 @@ const ControlCenter = () => {
                 // 오늘 날짜 구하기 (YYYY-MM-DD)
                 const today = new Date().toISOString().split('T')[0];
 
-                const [missionsRes, casesRes, bookingsRes] = await Promise.all([
-                    apiClient.get('/missions'),
-                    apiClient.get('/admin/cases', { params: { date: today, size: 50 } }),
-                    apiClient.get('/admin/bookings', { params: { size: 100 } }) // 전체 달력 일정
+                // 개별 API 실패 시 전체 화면이 멈추는 것을 방지하기 위한 안전 장치
+                const fetchSafe = (req) => req.catch(err => {
+                    console.error("API Error:", err);
+                    return { data: {} };
+                });
+
+                const [missionsRes, bookingsRes] = await Promise.all([
+                    fetchSafe(apiClient.get('/missions')),
+                    fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })) // 전체 달력 일정
                 ]);
+
+                console.log("[운영 대시보드] 금일 미션(Missions) API 응답:", missionsRes.data);
+                console.log("[운영 대시보드] 예약(Bookings) API 응답:", bookingsRes.data);
 
                 // 1. 차량(Missions) 매핑
                 // 상태 변환 (CREATED/DISPATCHED... -> 운행 중 / 대기 중 등)
-                const mappedVehicles = (missionsRes.data.missions || []).map(m => {
+                const rawMissions = missionsRes.data.missions || [];
+                const mappedVehicles = rawMissions.map(m => {
                     let statusLabel = '대기 중';
                     if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(m.phase)) statusLabel = '운행 중';
                     if (['VERIFYING', 'CONSULTING'].includes(m.phase)) statusLabel = '진료 중';
@@ -61,28 +75,38 @@ const ControlCenter = () => {
                 setVehicles(mappedVehicles);
                 if (mappedVehicles.length > 0) setSelectedVehicleId(mappedVehicles[0].id);
 
-                // 2. 금일 대기 현황(Cases) 매핑
-                const mappedQueue = (casesRes.data.cases || []).map(c => {
-                    let statusStr = '대기중';
-                    if (['VERIFYING', 'CONSULTING'].includes(c.missionPhase)) statusStr = '진료중';
-                    if (['COMPLETED', 'RETURNING'].includes(c.missionPhase)) statusStr = '진료완료';
+                // 2. 출동 목록 (금일) 및 통계 (전체) 매핑
+                const todayMissions = rawMissions.filter(m => {
+                    const dateStr = m.dispatchedAt || m.createdAt || m.updatedAt;
+                    if (!dateStr) return false;
+                    return new Date(dateStr).toISOString().split('T')[0] === today;
+                });
+
+                const mappedMissionsList = todayMissions.map(m => {
+                    let statusStr = '대기 중';
+                    if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(m.phase)) statusStr = '출동 중';
+                    if (['VERIFYING', 'CONSULTING'].includes(m.phase)) statusStr = '진료 중';
+                    if (m.phase === 'INCIDENT') statusStr = '장애 발생';
+                    if (['COMPLETED', 'RETURNING'].includes(m.phase)) statusStr = '종료/복귀';
 
                     return {
-                        id: c.caseId,
-                        name: c.patientName,
-                        address: '상세 주소 (로딩중)', // API 응답에 없음 임시 처리
-                        phone: '010-0000-0000', // API 응답에 없음 임시 처리
-                        doctorName: '의사 미정', // Cases list에 doctorName이 없는 경우 임시 처리
-                        status: statusStr
+                        id: m.missionId,
+                        patientName: m.patientName || '환자명 미상',
+                        destination: m.destination || '목적지 미상',
+                        vehicleId: m.vehicleId,
+                        status: statusStr,
+                        time: m.dispatchedAt ? new Date(m.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'
                     };
                 });
-                setTodayQueue(mappedQueue);
+                setMissionsList(mappedMissionsList);
 
-                // 통계 업데이트 (환자수만 임시)
-                setStatistics(prev => ({
-                    ...prev,
-                    totalPatients: casesRes.data.totalCount || mappedQueue.length,
-                }));
+                // 통계 업데이트 (전체 누적)
+                setStatistics({
+                    totalMissions: rawMissions.length,
+                    activeMissions: rawMissions.filter(m => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(m.phase)).length,
+                    completedMissions: rawMissions.filter(m => ['COMPLETED', 'RETURNING'].includes(m.phase)).length,
+                    incidentCount: rawMissions.filter(m => m.phase === 'INCIDENT').length
+                });
 
                 // 3. 캘린더 일정(Bookings) 매핑
                 // appointmentDate 기반으로 dayIdx 추출 (임시: 일~토 를 0~6으로 매핑)
@@ -96,7 +120,9 @@ const ControlCenter = () => {
                         type: b.departmentName || '진료', // API에 초진/재진 필드가 없으니 과 이름으로 대체
                         timeStr: b.startTime, // "10:00"
                         dayIdx: dayIdx,
-                        doctor: b.doctorName || '담당의'
+                        fullDate: b.appointmentDate,
+                        doctor: b.doctorName || '담당의',
+                        status: b.status || 'CONFIRMED'
                     };
                 });
                 setCalendarEvents(mappedEvents);
@@ -111,7 +137,7 @@ const ControlCenter = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/');
+        navigate('/operator/login');
     };
 
     return (
@@ -187,7 +213,7 @@ const ControlCenter = () => {
                         calendarMode={calendarMode}
                         setCalendarMode={setCalendarMode}
                         calendarEvents={calendarEvents}
-                        todayQueue={todayQueue}
+                        missionsList={missionsList}
                         statistics={statistics}
                     />
                 )}
