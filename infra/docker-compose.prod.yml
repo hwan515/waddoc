@@ -101,6 +101,7 @@ services:
   # === WebRTC (LiveKit) — 화상 진료 시그널링 서버 ===
   livekit:
     image: livekit/livekit-server:latest
+    command: ["--config", "/etc/livekit.yaml"]
     expose:
       - "7880"
     ports:
@@ -111,7 +112,6 @@ services:
       - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
     environment:
       - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
-      - LIVEKIT_CONFIG=/etc/livekit.yaml
     restart: unless-stopped
     networks:
       - waddoc-net
