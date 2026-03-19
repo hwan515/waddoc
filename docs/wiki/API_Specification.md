@@ -52,6 +52,7 @@
 5. [케이스 API](#5-케이스-api-apiv1cases)
 6. [미션(차량 출동) API](#6-미션차량-출동-api-apiv1missions)
 8. [동의 API (P1 별도 문서)](#8-동의-api-p1)
+9. [실시간 알림 API](#9-실시간-알림-api-apiv1doctorsmenotifications)
 10. [화상진료 세션 API](#10-화상진료-세션-api-apiv1sessions)
 11. [보호자 API](#11-보호자-api-apiv1guardians)
 12. [관리자 API](#12-관리자-api-apiv1admin)
@@ -1013,6 +1014,75 @@
 > 동의 UI 및 동의 기록은 MVP 제외 범위다.
 >
 > 상세 API 초안은 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
+
+---
+
+## 9. 실시간 알림 API (`/api/v1/doctors/me/notifications`)
+
+> 의사 EMR 화면에서 신규 예약 알림을 실시간으로 수신하기 위한 **Server-Sent Events (SSE)** API다.
+>
+> 단방향 서버 push 전용이며, 의사 로그인 후 대시보드 진입 시 연결한다.
+>
+> 동일 의사의 다중 탭 연결을 허용한다.
+
+### 9.1 의사 알림 스트림 구독
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/doctors/me/notifications/stream` |
+| Auth | Bearer Token (DOCTOR) |
+| Accept | `text/event-stream` |
+| Response Content-Type | `text/event-stream` |
+
+> 브라우저 기본 `EventSource`는 `Authorization` 헤더를 추가할 수 없으므로, 프론트엔드는 `fetch` 기반 SSE 클라이언트를 사용한다.
+>
+> 서버는 연결 성공 시 즉시 `connected` 이벤트를 1회 전송하고, 이후 신규 예약 등 의사 대상 알림을 같은 스트림으로 전달한다.
+>
+> 현재 연결 구조 구현 범위에서는 `connected` 이벤트를 우선 지원하며, 예약 생성 이벤트 연동 후 `notification` 이벤트를 발송한다.
+>
+> 서버 스트림 timeout은 1시간이고, `retry: 3000`을 내려 클라이언트 재연결 기준값을 안내한다.
+
+**연결 직후 이벤트 예시**
+```text
+id: 0d4f4a38-2e8a-4e2d-a7c1-32cf7c6d53f0
+event: connected
+retry: 3000
+data: {"connectedAt":"2026-03-19T17:20:00+09:00"}
+```
+
+**신규 예약 알림 이벤트 예시** (예약 생성 이벤트 연동 후)
+```text
+id: 73a8f5a7-8df7-4f08-b52e-0d0cb3e0a2f5
+event: notification
+data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientName":"박순자","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
+```
+
+> `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
+
+**`notification` payload**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `type` | string | O | 현재는 `NEW_BOOKING` |
+| `bookingId` | string | O | 예약 ID (`bk_...`) |
+| `caseId` | string | O | 생성된 케이스 ID (`case_...`) |
+| `doctorId` | string | O | 담당 의사 ID (`doc_...`) |
+| `doctorName` | string | O | 담당 의사명 |
+| `departmentName` | string | O | 진료과명 |
+| `patientName` | string | O | 환자명 |
+| `appointmentDate` | string | O | 예약 날짜 (`YYYY-MM-DD`) |
+| `startTime` | string | O | 예약 시작 시간 (`HH:mm:ss`) |
+| `location` | string | O | 환자 주소 |
+| `createdAt` | string | O | 알림 생성 시각 (`OffsetDateTime`) |
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 401 | `AUTH_UNAUTHORIZED` | Bearer Token 누락 또는 인증 실패 |
+| 403 | `AUTH_FORBIDDEN` | DOCTOR 권한이 아님 |
+| 403 | `AUTH_DOCTOR_PROFILE_REQUIRED` | 의사 프로필이 연결되지 않은 계정 |
 
 ---
 
