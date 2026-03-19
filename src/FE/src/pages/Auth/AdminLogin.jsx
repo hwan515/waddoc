@@ -120,7 +120,7 @@ const AdminLogin = () => {
                     <div className="mt-8 mb-2 text-center text-sm font-medium flex flex-col gap-2">
                         <span className="text-slate-500">
                             계정이 없으신가요?{' '}
-                            <Link to="/admin/signup" className="font-bold text-[#0353A4] hover:underline underline-offset-4">
+                            <Link to="/operator/signup" className="font-bold text-[#0353A4] hover:underline underline-offset-4">
                                 관리자 등록
                             </Link>
                         </span>

@@ -30,8 +30,8 @@ function App() {
         <Route path="/signup" element={<Signup />} />
 
         {/* 관리자 전용 인증 페이지 */}
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/signup" element={<AdminSignup />} />
+        <Route path="/operator/login" element={<AdminLogin />} />
+        <Route path="/operator/signup" element={<AdminSignup />} />
 
         {/* 화상 진료 페이지 (사이드바 없이 전체화면) */}
         <Route path="/doctor/consultation/:id" element={<VideoConference />} />
