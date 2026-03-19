@@ -30,6 +30,7 @@ pipeline {
         DOCKER_IMAGE_FE = 'hwan515/waddoc-frontend'
         DOCKER_IMAGE_FP = 'hwan515/waddoc-phone'
         PROJECT_PATH = '/home/ubuntu/S14P21A603'   // EC2 내 프로젝트 경로
+        PROD_ENV_FILE = '/home/ubuntu/.waddoc/prod.env'
         DOCKER_BUILDKIT = '1'
         BUILDX_BUILDER = 'waddoc-builder'          // buildx 빌더 이름 접두사
     }
@@ -193,7 +194,7 @@ pipeline {
                         def imageRef = sh(
                             script: """
                                 cd ${PROJECT_PATH}/infra
-                                CID=\$(docker compose -f docker-compose.prod.yml ps -q ${service} || true)
+                                CID=\$(docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml ps -q ${service} || true)
                                 if [ -n "\$CID" ]; then
                                   docker inspect --format='{{.Config.Image}}' "\$CID" 2>/dev/null || true
                                 fi
@@ -225,8 +226,8 @@ pipeline {
                             echo '=== Deploying (infra change - full restart) ==='
                             sh '''
                                 cd ${PROJECT_PATH}/infra && \
-                                docker compose -f docker-compose.prod.yml pull && \
-                                docker compose -f docker-compose.prod.yml up -d
+                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull && \
+                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d
                             '''
                         } else {
                             def services = []
@@ -239,8 +240,8 @@ pipeline {
                                 echo "=== Deploying services: ${svc} ==="
                                 sh """
                                     cd ${PROJECT_PATH}/infra && \
-                                    docker compose -f docker-compose.prod.yml pull ${svc} && \
-                                    docker compose -f docker-compose.prod.yml up -d --no-deps ${svc}
+                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${svc} && \
+                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --no-deps ${svc}
                                 """
                             } else {
                                 echo 'No services to deploy.'
@@ -251,7 +252,7 @@ pipeline {
                     echo '=== Checking Container Status ==='
                     sh '''
                         cd ${PROJECT_PATH}/infra && \
-                        docker compose -f docker-compose.prod.yml ps
+                        docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml ps
                     '''
                 }
             }
@@ -274,7 +275,7 @@ pipeline {
             echo '=== Recent Logs (on failure) ==='
             sh '''
                 cd ${PROJECT_PATH}/infra && \
-                docker compose -f docker-compose.prod.yml logs --tail=200 || true
+                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml logs --tail=200 || true
             '''
         }
         always {
