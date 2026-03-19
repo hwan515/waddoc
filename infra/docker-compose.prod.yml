@@ -12,7 +12,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
-      - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro  # SSL 인증서는 repo 밖 경로를 사용
+      - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro # SSL 인증서는 repo 밖 경로를 사용
     depends_on:
       - spring-api
       - frontend
@@ -24,7 +24,7 @@ services:
 
   # === Frontend (Web) — 의사/관리자용 웹 앱 ===
   frontend:
-    image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest}   # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "3000"
     restart: unless-stopped
@@ -33,7 +33,7 @@ services:
 
   # === Frontend (Phone) — 환자용 모바일 웹 앱 ===
   frontend-phone:
-    image: ${DOCKER_IMAGE_FP:-waddoc-phone}:${FP_IMAGE_TAG:-latest}     # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_FP:-waddoc-phone}:${FP_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "3001"
     restart: unless-stopped
@@ -42,7 +42,7 @@ services:
 
   # === Backend (Spring Boot) ===
   spring-api:
-    image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest}   # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "8080"
     environment:
@@ -105,17 +105,17 @@ services:
   # === WebRTC (LiveKit) — 화상 진료 시그널링 서버 ===
   livekit:
     image: livekit/livekit-server:latest
-    command: ["--config", "/etc/livekit.yaml"]
+    command: [ "--config", "/etc/livekit.yaml" ]
     expose:
       - "7880"
     ports:
-      - "8881:7881"       # TCP (클라이언트 시그널링)
-      - "8882:7882/udp"   # UDP (미디어 스트림)
-      - "8478:3478/udp"   # TURN 서버
+      - "8881:7881" # TCP (클라이언트 시그널링)
+      - "8882:7882/udp" # UDP (미디어 스트림)
+      - "8478:3478/udp" # TURN 서버
     volumes:
       - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
     environment:
-      - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -123,11 +123,12 @@ services:
   # === Zenoh (ROS2 메시지 라우터) — 로봇 통신 브릿지 ===
   zenoh:
     image: eclipse/zenoh:1.7.2
+    profiles: [ "zenoh" ] # 수동 운영 중일 때는 기본 배포 대상에서 제외 (Todo: 합치면 삭제)
     ports:
-      - "8081:8081"       # Zenoh REST/WebSocket 포트
+      - "8081:8081" # Zenoh REST/WebSocket 포트
     volumes:
       - ../src/BE/zenoh-server/router/zenoh.json5:/zenoh.json5:ro
-    command: ["-c", "/zenoh.json5"]
+    command: [ "-c", "/zenoh.json5" ]
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -139,7 +140,8 @@ services:
 
   # === Zenoh Subscriber — Zenoh 메시지를 수신하여 처리하는 앱 ===
   zenoh-subscriber:
-    build: ../src/BE/zenoh-server/router_app    # 로컬 빌드 (DockerHub X)
+    build: ../src/BE/zenoh-server/router_app # 로컬 빌드 (DockerHub X)
+    profiles: [ "zenoh" ] # zenoh profile을 명시적으로 켤 때만 함께 기동 (Todo: 합치면 삭제)
     depends_on:
       - zenoh
     restart: unless-stopped
@@ -155,6 +157,7 @@ volumes:
   pg_data:
   redis_data:
   uploads:
+
 
 networks:
   waddoc-net:

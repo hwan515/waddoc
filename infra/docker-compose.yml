@@ -79,7 +79,7 @@ services:
       - "7882:7882/udp"
       - "3478:3478/udp"
     environment:
-      - LIVEKIT_KEYS=devkey:devsecret
+      LIVEKIT_KEYS: "devkey: devsecret"
     networks:
       - waddoc-net
 
