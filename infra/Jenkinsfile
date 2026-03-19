@@ -43,7 +43,7 @@ pipeline {
                         $class: 'GitSCM',
                         branches: [[name: "*/${BRANCH}"]],
                         userRemoteConfigs: [[
-                            url: 'https://lab.ssafy.com/s14-webmobile3-sub2/S14P21A603.git',
+                            url: 'https://lab.ssafy.com/s14-mobility-smarthome-sub1/S14P21A603.git',
                             credentialsId: 'gitlab-deploy-token'
                         ]],
                         extensions: [
