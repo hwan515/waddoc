@@ -7,6 +7,7 @@ import com.waddoc.domain.user.entity.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,10 +16,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "spring.kafka.listener.auto-startup=false",
+                "spring.kafka.admin.auto-create=false"
+        }
+)
 class JwtSecurityIntegrationTest {
 
     @Autowired
@@ -29,6 +37,9 @@ class JwtSecurityIntegrationTest {
 
     @Autowired
     private MissionRepository missionRepository;
+
+    @MockBean
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${telemetry.api-key}")
     private String telemetryApiKey;
