@@ -13,10 +13,14 @@ const VideoConference = () => {
     const navigate = useNavigate();
 
     const [isJoined, setIsJoined] = useState(false);
+    const [livekitToken, setLivekitToken] = useState('');
+    const [livekitUrl, setLivekitUrl] = useState('');
+    const [sessionId, setSessionId] = useState(null);
+
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [ecgData, setEcgData] = useState(generateECGData(50));
-    
+
     // API 데이터 상태
     const [consultationDetails, setConsultationDetails] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -102,7 +106,15 @@ const VideoConference = () => {
         return () => clearInterval(ecgInterval);
     }, [isJoined]);
 
-    const handleEndCall = () => {
+    const handleEndCall = async (summaryData) => {
+        if (sessionId && summaryData) {
+            try {
+                await apiClient.put(`/sessions/${sessionId}/summary`, summaryData);
+                console.log("✅ 진료 종료 및 요약 기록 완료");
+            } catch (error) {
+                console.error("❌ 진료 종료 기록 실패:", error);
+            }
+        }
         navigate('/emr/dashboard');
     };
 
@@ -110,30 +122,35 @@ const VideoConference = () => {
         try {
             if (!id || id === 'test-room' || id.startsWith('RV_')) {
                 console.warn('임시(데모) 예약건이므로 방 생성 API를 건너뛰고 데모 모드로 전환합니다.');
+                setLivekitToken('test-token');
+                setLivekitUrl('wss://test.livekit.cloud');
                 setIsJoined(true);
                 return;
             }
 
             // [API 연동] 의사의 진료 세션 생성 및 LiveKit 토큰 발급 요청
             // POST /api/v1/cases/{caseId}/sessions
+            console.log(`🚀 [API 호출 준비] 전달받은 URL 파라미터(Case ID): ${id}`);
+            console.log(`➜ 호출될 엔드포인트: /api/v1/cases/${id}/sessions`);
+
             const response = await apiClient.post(`/cases/${id}/sessions`);
-            
+
             if (response.data && response.data.doctorToken) {
-                // 발급받은 토큰과 LiveKit URL을 로컬 스토리지에 보관 (추후 LiveKitRoom 컴포넌트에 주입 용도)
-                localStorage.setItem('webrtc_doctor_token', response.data.doctorToken);
-                if (response.data.room && response.data.room.livekitUrl) {
-                    localStorage.setItem('webrtc_livekit_url', response.data.room.livekitUrl);
-                }
-                
+                setLivekitToken(response.data.doctorToken);
+                setLivekitUrl(response.data.room?.livekitUrl || 'wss://test.livekit.cloud');
+                setSessionId(response.data.sessionId);
+
                 console.log("✅ 의사 세션(LiveKit) 생성 완료:", response.data);
             }
-            
+
             // 현재 단계(LiveKit 적용)에서는 발급받은 토큰으로 방에 입장
             setIsJoined(true);
-            
+
         } catch (error) {
             console.error("❌ 세션 생성 API 호출 실패:", error);
             console.warn("백엔드 세션 생성 API 호출에 실패했습니다.\n데모 진행을 위해 가짜 토큰으로 임시 입장합니다.");
+            setLivekitToken('test-token');
+            setLivekitUrl('wss://test.livekit.cloud');
             setIsJoined(true);
         }
     };
@@ -157,20 +174,17 @@ const VideoConference = () => {
         );
     }
 
-    const livekitToken = localStorage.getItem('webrtc_doctor_token') || 'test-token';
-    const livekitUrl = localStorage.getItem('webrtc_livekit_url') || 'wss://test.livekit.cloud';
-
     // 메인 화상 진료실 (의사 권한으로 접속)
     return (
         <LiveKitRoom
-            connect={livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
+            connect={!!livekitToken && livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
             video={videoEnabled}
             audio={micEnabled}
             token={livekitToken}
             serverUrl={livekitUrl}
             data-lk-theme="default"
             className="w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
-            onDisconnected={handleEndCall}
+            onDisconnected={() => handleEndCall(null)}
         >
             <ConsultationRoom
                 details={consultationDetails}

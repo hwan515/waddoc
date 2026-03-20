@@ -68,7 +68,8 @@ const LegacyEMRDashboard = () => {
 
     const handleAcceptNotification = (notif) => {
         setReservations(prev => [...prev, {
-            id: notif.bookingId,
+            id: notif.caseId,
+            bookingId: notif.bookingId,
             ptNo: notif.patientId,
             name: notif.patientName,
             gender: notif.patientGender,
@@ -183,7 +184,7 @@ const LegacyEMRDashboard = () => {
                                         </button>
                                     ) : (
                                         <span className={`${res.status === '진료대기' ? 'text-red-600 font-bold' :
-                                                res.status === '수납대기' ? 'text-orange-600' : 'text-slate-600'
+                                            res.status === '수납대기' ? 'text-orange-600' : 'text-slate-600'
                                             }`}>{res.status}</span>
                                     )}
                                 </div>

@@ -17,7 +17,8 @@ const ConsultationRoom = ({
     onEndCall,
     localVideoRef,
     remoteVideoRef,
-    localStream
+    localStream,
+    role = 'DOCTOR'
 }) => {
     // 1. 상태 변수 설정
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -77,6 +78,20 @@ const ConsultationRoom = ({
         m.name.includes(searchQuery) || m.code.includes(searchQuery)
     );
 
+    const handleEndCallClick = () => {
+        if (role === 'DOCTOR') {
+            const summaryData = {
+                summaryNote: consultationNote,
+                isPrescriptionIssued: selectedMeds.length > 0,
+                prescriptionNote: selectedMeds.map(code => mockMedicines.find(m => m.code === code)?.name).join(', '),
+                needsFollowUp: false 
+            };
+            onEndCall(summaryData);
+        } else {
+            onEndCall();
+        }
+    };
+
     return (
         <div className="flex flex-col h-screen bg-[#F0F0F0] font-sans text-sm select-none">
             {/* 1. 클래식 상단 네비게이션 바 (대시보드와 동일한 테마) */}
@@ -114,7 +129,7 @@ const ConsultationRoom = ({
                     <div className="text-slate-600 bg-white px-2 py-0.5 border border-slate-300 shadow-inner text-xs">
                         {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
-                    <button onClick={onEndCall} className="px-4 py-1 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
+                    <button onClick={handleEndCallClick} className="px-4 py-1 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
                         <span className="text-red-700 font-bold text-xs">진료완료</span>
                     </button>
                 </div>

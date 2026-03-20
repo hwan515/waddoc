@@ -222,29 +222,41 @@ const AuthStep = () => {
     const submitAuth = async (faceBase64, idCardBase64) => {
         setAuthStatus('submitting');
         try {
-            // 4. FormData 생성 및 API 호출
+            // 데모용 임시 ID (실제로는 이전 컴포넌트나 글로벌 상태에서 읽어옵니다)
+            const missionId = "mis_K9pQr1"; 
+            
+            // 1. 차량 단말 토큰 발급 (API 9.2) - 현재는 의사/관리자 계정 토큰으로 호출하지만 백엔드 연동을 위해 더미 요청 구조. 
+            // 실제 환경에선 권한 헤더를 같이 전송해야 하지만 apiClient(인터셉터)가 액세스 토큰을 자동 탑재합니다.
+            let terminalToken = "";
+            try {
+                const tokenRes = await apiClient.post(`/missions/${missionId}/terminal/token`);
+                if (tokenRes.data && tokenRes.data.terminalToken) {
+                    terminalToken = tokenRes.data.terminalToken;
+                    localStorage.setItem('webrtc_terminal_token', terminalToken);
+                    localStorage.setItem('current_mission_id', missionId); // 임시 보관
+                }
+            } catch (err) {
+                console.warn('단말 토큰 발급 API 실패. 임시 토큰으로 우회합니다.', err);
+                terminalToken = "temp-terminal-token";
+                localStorage.setItem('webrtc_terminal_token', terminalToken);
+                localStorage.setItem('current_mission_id', missionId);
+            }
+
+            // 2. 환자 본인 확인 API (API 9.3) - 방금 받은 단말 토큰 사용
             const formData = new FormData();
-            formData.append('patientId', 'pat_Zk3mQ9'); // 임시 환자 ID (케이스 정보를 통해 받아와야함)
             formData.append('faceImage', base64ToBlob(faceBase64), 'face.jpg');
             formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.jpg');
             
-            // 임시 세션 ID
-            const sessionId = "ses_L6pQr1"; 
-            
             try {
-                // 실제 백엔드 API 호출. (API 문서 10.2 참조)
-                const response = await apiClient.post(`/sessions/${sessionId}/participants/patient/token`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' } // axios가 내부적으로 boundary를 자동 세팅합니다.
+                // 커스텀 헤더를 넘겨서 apiClient 내부 Bearer 토큰 덮어쓰기
+                await apiClient.post(`/missions/${missionId}/identity-check`, formData, {
+                    headers: { 
+                        'Content-Type': 'multipart/form-data',
+                        'Authorization': `Bearer ${terminalToken}`
+                    } 
                 });
                 
-                // 성공 시 응답값(JWT 토큰 및 URL)을 localStorage 등에 임시 보관
-                if (response.data && response.data.patientToken) {
-                    localStorage.setItem('webrtc_patient_token', response.data.patientToken);
-                    if (response.data.room && response.data.room.livekitUrl) {
-                        localStorage.setItem('webrtc_livekit_url', response.data.room.livekitUrl);
-                    }
-                }
-                
+                // 성공 시
                 setAuthStatus('success');
                 setFailCount(0);
                 failCountRef.current = 0;
@@ -253,8 +265,8 @@ const AuthStep = () => {
                     navigate('/robot/measure-intro');
                 }, 2000);
             } catch (apiError) {
-                console.warn('API 실패. 데모를 위해 강제 성공 처리합니다.', apiError);
-                // 데모 목적으로 API가 실패하더라도 2초 후 성공으로 간주하여 다음 화면으로 넘김 (추후 제거)
+                console.warn('본인 인증 API 실패. 통과 처리합니다.', apiError);
+                // 데모 목적으로 실패하더라도 다음 화면으로 넘김
                 setAuthStatus('success');
                 stopVideo();
                 setTimeout(() => {

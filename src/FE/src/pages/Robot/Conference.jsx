@@ -57,18 +57,70 @@ const ConferenceUI = () => {
 const Conference = () => {
     const navigate = useNavigate();
     
-    // 로컬 스토리지에서 환자용 토큰 및 URL 가져오기 (없으면 테스트 토큰 임시 할당)
-    const livekitToken = localStorage.getItem('webrtc_patient_token') || 'test-token';
-    const livekitUrl = localStorage.getItem('webrtc_livekit_url') || 'wss://test.livekit.cloud';
+    // 컴포넌트 마운트 시 로컬 상태 초기화
+    const [livekitToken, setLivekitToken] = useState('test-token');
+    const [livekitUrl, setLivekitUrl] = useState('wss://test.livekit.cloud');
+    const [isWaiting, setIsWaiting] = useState(true);
+
+    useEffect(() => {
+        let isPolling = true;
+
+        const terminalToken = localStorage.getItem('webrtc_terminal_token');
+        const sessionId = "ses_L6pQr1"; // 하드코딩된 세션 임시 ID. (실제론 case나 mission을 통해 받아옴)
+        
+        // 의사 세션이 생성될 때까지 폴링하여 환자 토큰을 요청
+        const pollForToken = async () => {
+            if (!isPolling) return;
+
+            try {
+                if (!terminalToken) throw new Error("단말 토큰이 없습니다.");
+
+                const response = await apiClient.post(`/sessions/${sessionId}/participants/patient/token`, {}, {
+                    headers: { 'Authorization': `Bearer ${terminalToken}` }
+                });
+
+                if (response.data && response.data.patientToken) {
+                    setLivekitToken(response.data.patientToken);
+                    setLivekitUrl(response.data.room?.livekitUrl || 'wss://test.livekit.cloud');
+                    setIsWaiting(false);
+                    return; // 성공 시 폴링 중단
+                }
+            } catch (err) {
+                // 아직 준비 안된(403, 404 등) 경우 1초 뒤 재시도
+                console.warn("세션 접속 대기 중...", err?.response?.data || err.message);
+                if (isPolling) {
+                    setTimeout(pollForToken, 3000);
+                }
+            }
+        };
+
+        pollForToken();
+
+        return () => {
+            isPolling = false;
+        };
+    }, []);
 
     const handleDisconnected = () => {
         // 통화 종료 시 완료 화면으로 이동
         navigate('/robot/finish');
     };
 
+    if (isWaiting) {
+        return (
+            <div className="w-screen h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center text-white font-sans">
+                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+                <h2 className="text-3xl font-bold mb-3 tracking-widest text-[#B9D6F2]">
+                    의사 선생님을 기다리고 있습니다
+                </h2>
+                <p className="text-xl text-slate-400 font-medium">연결 시 잠시 화면이 깜빡일 수 있습니다...</p>
+            </div>
+        );
+    }
+
     return (
         <LiveKitRoom
-            connect={livekitToken !== 'test-token'} // 가짜 토큰이면 실제 웹소켓 접속 시도 안함
+            connect={livekitToken !== 'test-token'} // 실제로는 !!livekitToken 으로 체크
             video={true}
             audio={true}
             token={livekitToken}
