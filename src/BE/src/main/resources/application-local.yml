@@ -37,7 +37,7 @@ sms:
   sender-number: "01000000000"
 
 livekit:
-  host: ${LIVEKIT_HOST:http://livekit:7880}
+  host: ${LIVEKIT_HOST:http://localhost:7880}
   api-key: devkey
   api-secret: devsecret
   url: ${LIVEKIT_URL:ws://localhost:7880}
