@@ -46,12 +46,20 @@ public class CaseDetailResponse {
         private String patientId;
         private String name;
         private String birthDate6;
+        private String birthDate;
+        private String gender;
+        private String phone;
+        private String address;
 
         static PatientInfo from(Patient patient) {
             return PatientInfo.builder()
                     .patientId(patient.getPublicId())
                     .name(patient.getName())
                     .birthDate6(patient.getBirthDate6())
+                    .birthDate(patient.getBirthDate() != null ? patient.getBirthDate().toString() : null)
+                    .gender(patient.getGender() != null ? patient.getGender().name() : null)
+                    .phone(patient.getPhone())
+                    .address(patient.getAddress())
                     .build();
         }
     }

@@ -15,7 +15,9 @@ public class DoctorCaseSummaryResponse {
 
     private String caseId;
     private CaseStatus status;
+    private String patientId;
     private String patientName;
+    private String patientGender;
     private String departmentName;
     private LocalDate appointmentDate;
     private LocalTime startTime;
@@ -25,7 +27,9 @@ public class DoctorCaseSummaryResponse {
         return DoctorCaseSummaryResponse.builder()
                 .caseId(careCase.getPublicId())
                 .status(careCase.getStatus())
+                .patientId(careCase.getPatient().getPublicId())
                 .patientName(careCase.getPatient().getName())
+                .patientGender(careCase.getPatient().getGender().name())
                 .departmentName(careCase.getDoctor().getDepartmentName())
                 .appointmentDate(careCase.getBooking().getAppointmentDate())
                 .startTime(careCase.getBooking().getStartTime())

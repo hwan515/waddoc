@@ -30,6 +30,8 @@ public class NewBookingNotificationPayload {
     private String patientId;
     private String patientName;
     private PatientGender patientGender;
+    private String patientBirthDate;
+    private String patientPhone;
     private LocalDate appointmentDate;
     private LocalTime startTime;
     private String location;
@@ -46,6 +48,8 @@ public class NewBookingNotificationPayload {
                 .patientId(booking.getPatient().getPublicId())
                 .patientName(booking.getPatient().getName())
                 .patientGender(booking.getPatient().getGender())
+                .patientBirthDate(booking.getPatient().getBirthDate().toString())
+                .patientPhone(booking.getPatient().getPhone())
                 .appointmentDate(booking.getAppointmentDate())
                 .startTime(booking.getStartTime())
                 .location(booking.getPatient().getAddress())
