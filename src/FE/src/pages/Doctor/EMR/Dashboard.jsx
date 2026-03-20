@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bell, X } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
+import { useSSE } from '../../../hooks/useSSE';
 
 const LegacyEMRDashboard = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
 
+    // SSE 알림 연동
+    const { isConnected, notifications, removeNotification } = useSSE();
+    
     // Initial Mock Data Context
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -17,10 +22,7 @@ const LegacyEMRDashboard = () => {
         { id: 'RV004', ptNo: 'P1004', name: '최수아', gender: '여', symptom: '정기 검진', date: '2026-03-13', time: '10:30', status: '완료', type: '외래' },
     ]);
 
-    // 신규 비대면 진료 요청 (팝업 처리용)
-    const [incomingRequests, setIncomingRequests] = useState([
-        { id: 'REQ001', ptNo: 'P2001', name: '홍길동', gender: '남', symptom: '가벼운 두통 (비대면)', date: '2026-03-13', time: '14:00', type: '비대면' }
-    ]);
+
 
     // 현재 선택된 환자 (우측 패널에 정보 표시)
     const [selectedPatientId, setSelectedPatientId] = useState('P1001');
@@ -62,32 +64,25 @@ const LegacyEMRDashboard = () => {
         setSelectedPatientId(ptNo);
     };
 
-    const handleAcceptRequest = (req) => {
-        // 예약 목록에 추가
+
+
+    const handleAcceptNotification = (notif) => {
         setReservations(prev => [...prev, {
-            id: `RV_${req.id}`,
-            ptNo: req.ptNo,
-            name: req.name,
-            gender: req.gender,
-            symptom: req.symptom,
-            date: req.date,
-            time: req.time,
-            status: '예약', // 비대면은 수락 시 예약 상태로
-            type: req.type
+            id: notif.caseId || notif.bookingId,
+            ptNo: `NEW_${Math.floor(Math.random() * 10000)}`, // 임시 환자번호
+            name: notif.patientName,
+            gender: '확인불가', // 알림 payload에 성별이 없다면
+            symptom: '비대면 화상진료',
+            date: notif.appointmentDate,
+            time: notif.startTime?.substring(0, 5) || '00:00', // 14:30:00 -> 14:30
+            status: '예약',
+            type: '비대면'
         }].sort((a, b) => a.time.localeCompare(b.time)));
         
-        // 요청 목록에서 제거
-        setIncomingRequests(incomingRequests.filter(r => r.id !== req.id));
-        
-        // 수락한 환자를 자동 선택
-        setSelectedPatientId(req.ptNo);
+        removeNotification(notif.createdAt);
     };
 
-    const handleRejectRequest = (reqId) => {
-        if(window.confirm('비대면 진료 요청을 거절하시겠습니까?')) {
-            setIncomingRequests(incomingRequests.filter(r => r.id !== reqId));
-        }
-    };
+
 
     const handleLogout = () => {
         logout();
@@ -198,38 +193,7 @@ const LegacyEMRDashboard = () => {
                         ))}
                     </div>
 
-                    {/* 비대면 진료 요청 팝업 (우측 하단 오버레이 느낌 반영) */}
-                    {incomingRequests.length > 0 && (
-                        <div className="bg-[#FFF8DC] border-t-2 border-orange-300 p-2 flex flex-col shrink-0 shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-10">
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-orange-800 font-bold text-xs">🔔 신규 비대면 진료 요청 ({incomingRequests.length}건)</span>
-                            </div>
-                            <div className="space-y-1">
-                                {incomingRequests.map(req => (
-                                    <div key={req.id} className="flex items-center justify-between bg-white border border-orange-200 p-1.5">
-                                        <div className="text-xs">
-                                            <span className="font-bold">{req.name}</span> ({req.gender}) - {req.time} <br/>
-                                            <span className="text-slate-500 truncate inline-block w-40">{req.symptom}</span>
-                                        </div>
-                                        <div className="flex space-x-1">
-                                            <button 
-                                                onClick={() => handleAcceptRequest(req)}
-                                                className="px-2 py-1 bg-green-600 text-white border border-green-800 text-xs shadow-sm active:translate-y-[1px]"
-                                            >
-                                                수락
-                                            </button>
-                                            <button 
-                                                onClick={() => handleRejectRequest(req.id)}
-                                                className="px-2 py-1 bg-slate-200 text-slate-700 border border-slate-400 text-xs shadow-sm active:translate-y-[1px]"
-                                            >
-                                                거절
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+
                 </div>
 
                 {/* 우측 패널들 (상/하 분할) */}
@@ -317,6 +281,58 @@ const LegacyEMRDashboard = () => {
 
             </div>
             
+            {/* SSE 알림 토스트 (우측 하단) */}
+            <div className="fixed bottom-12 right-4 z-50 flex flex-col gap-3 pointer-events-none">
+                {notifications.map((notif, index) => (
+                    <div 
+                        key={notif.createdAt || index} 
+                        className="bg-white border-l-4 border-[#0353A4] shadow-2xl rounded-lg w-80 overflow-hidden pointer-events-auto"
+                    >
+                        <div className="p-4">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="bg-blue-100 p-1.5 rounded-full">
+                                        <Bell className="w-4 h-4 text-[#0353A4] animate-pulse" />
+                                    </div>
+                                    <h3 className="font-bold text-slate-800">신규 예약 접수</h3>
+                                </div>
+                                <button 
+                                    onClick={() => removeNotification(notif.createdAt)}
+                                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="text-sm text-slate-700 font-medium mb-1">
+                                {notif.patientName}님 / {notif.appointmentDate} {notif.startTime?.substring(0, 5)}
+                            </div>
+                            <div className="text-xs text-slate-500 truncate mb-3">
+                                {notif.location}
+                            </div>
+                            <div className="flex items-center justify-between mt-2">
+                                <div className="text-xs font-semibold text-[#0353A4] bg-blue-50 py-1 px-2 rounded inline-block">
+                                    {notif.departmentName} · {notif.doctorName}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handleAcceptNotification(notif)}
+                                        className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded shadow-sm hover:bg-green-700 transition"
+                                    >
+                                        수락
+                                    </button>
+                                    <button 
+                                        onClick={() => removeNotification(notif.createdAt)}
+                                        className="px-3 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded shadow-sm hover:bg-slate-300 transition"
+                                    >
+                                        거절
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             {/* 상태 표시줄 (Bottom Bar) */}
             <div className="bg-[#E0E0E0] border-t border-slate-400 px-2 py-0.5 flex justify-between text-[11px] text-slate-600 shrink-0">
                 <div className="flex space-x-4">

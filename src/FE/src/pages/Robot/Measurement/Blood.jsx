@@ -58,37 +58,39 @@ const Blood = () => {
                 </h1>
 
                 {/* 사용 방법 가이드 영역 */}
-                <div className="flex flex-row items-stretch justify-center gap-6 w-full max-w-6xl flex-1 mt-8 mb-8">
+                <div className="w-full max-w-6xl flex-1 mt-8 mb-8 flex flex-col justify-center">
+                    <div className="flex flex-row items-stretch justify-center gap-6 w-full">
 
-                    {/* 1단계 (각 카드의 너비를 동일하게 하기 위해 flex-1 추가) */}
-                    <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
-                        <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
-                            <img src={blood1} alt="혈압계 전원 작동" className="w-full h-full object-contain p-2" />
+                        {/* 1단계 (각 카드의 너비를 동일하게 하기 위해 flex-1 추가) */}
+                        <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
+                            <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
+                                <img src={blood1} alt="혈압계 전원 작동" className="w-full h-full object-contain p-2" />
+                            </div>
+                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
+                                커프 부분에 팔을 넣고<br /><span className="text-[#B9D6F2]">검정색 시작 버튼을 누릅니다</span>
+                            </p>
                         </div>
-                        <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                            커프 부분에 팔을 넣고<br /><span className="text-[#B9D6F2]">검정색 시작 버튼을 누릅니다</span>
-                        </p>
-                    </div>
 
-                    {/* 2단계 */}
-                    <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
-                        <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
-                            <img src={blood2} alt="체온 측정" className="w-full h-full object-contain p-2" />
+                        {/* 2단계 */}
+                        <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
+                            <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
+                                <img src={blood2} alt="체온 측정" className="w-full h-full object-contain p-2" />
+                            </div>
+                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
+                                측정이 완료될 때까지<br /><span className="text-[#B9D6F2]">움직이거나 말하지 않습니다</span>
+                            </p>
                         </div>
-                        <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                            측정이 완료될 때까지<br /><span className="text-[#B9D6F2]">움직이거나 말하지 않습니다</span>
-                        </p>
-                    </div>
 
-                    {/* 3단계 */}
-                    <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
-                        <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
-                            <img src={blood3} alt="체온 결과 확인" className="w-full h-full object-contain p-2" />
+                        {/* 3단계 */}
+                        <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
+                            <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
+                                <img src={blood3} alt="체온 결과 확인" className="w-full h-full object-contain p-2" />
+                            </div>
+                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
+                                액정화면에 측정된<br /><span className="text-[#B9D6F2]">혈압을 확인</span>합니다
+                                <span className="block mt-2 text-[#B9D6F2] text-sm opacity-80">(자동 저장됩니다)</span>
+                            </p>
                         </div>
-                        <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                            액정화면에 측정된<br /><span className="text-[#B9D6F2]">체온 값을 확인</span>합니다
-                            <span className="block mt-2 text-[#B9D6F2] text-sm opacity-80">(자동 저장됩니다)</span>
-                        </p>
                     </div>
                 </div>
 
