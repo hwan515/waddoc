@@ -7,20 +7,26 @@ import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
+import com.waddoc.domain.dispatch.entity.DispatchOutbox;
+import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
+import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,9 +44,10 @@ public class BookingService {
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final BookingRepository bookingRepository;
     private final CareCaseRepository careCaseRepository;
+    private final DispatchOutboxRepository dispatchOutboxRepository;
     private final AuditLogService auditLogService;
     private final SmsService smsService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -93,6 +100,12 @@ public class BookingService {
                 .intakeSession(session)
                 .build();
         careCaseRepository.save(careCase);
+        // 배차 요청은 DB에 먼저 적재하고, 별도 relay가 Kafka로 내보낸다.
+        dispatchOutboxRepository.save(DispatchOutbox.builder()
+                .careCase(careCase)
+                .regionCode(patient.getRegionCode())
+                .destination(patient.getAddress())
+                .build());
 
         session.touch();
 
@@ -110,8 +123,14 @@ public class BookingService {
         String smsMessage = buildBookingCreatedSms(patient, slot, doctorName, departmentName);
         NewBookingNotificationPayload notificationPayload = NewBookingNotificationPayload.from(booking, careCase);
 
-        publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
-        publishBookingCreatedDoctorNotification(slot.getDoctor().getPublicId(), notificationPayload);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                // 예약 생성 트랜잭션이 확정된 뒤에만 외부 알림을 발행한다.
+                publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
+                publishBookingCreatedDoctorNotification(slot.getDoctor().getPublicId(), notificationPayload);
+            }
+        });
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
@@ -270,12 +289,14 @@ public class BookingService {
             return;
         }
 
-        // 예약 저장이 커밋된 뒤에만 비동기 발송되도록 이벤트로 분리한다.
-        eventPublisher.publishEvent(new BookingCreatedSmsEvent(bookingId, recipientPhone, message));
+        kafkaTemplate.send(
+                KafkaTopics.SMS_REQUESTS_TOPIC,
+                new SmsRequestMessage(recipientPhone, message, bookingId)
+        );
     }
 
     private void publishBookingCreatedDoctorNotification(String doctorId, NewBookingNotificationPayload payload) {
-        eventPublisher.publishEvent(new BookingCreatedDoctorNotificationEvent(doctorId, payload));
+        kafkaTemplate.send(KafkaTopics.DOCTOR_NOTIFICATIONS_TOPIC, doctorId, payload);
     }
 
     private String buildBookingCreatedSms(Patient patient, ScheduleSlot slot, String doctorName, String departmentName) {
