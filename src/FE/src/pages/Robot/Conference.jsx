@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../../utils/api';
 import { 
     LiveKitRoom, 
     RoomAudioRenderer, 
@@ -66,7 +68,8 @@ const Conference = () => {
         let isPolling = true;
 
         const terminalToken = localStorage.getItem('webrtc_terminal_token');
-        const sessionId = "ses_L6pQr1"; // 하드코딩된 세션 임시 ID. (실제론 case나 mission을 통해 받아옴)
+        const sessionId = localStorage.getItem('robot_session_id') || "ses_L6pQr1";
+        console.log("📡 [대기방] 접속 대기 중인 세션 ID:", sessionId);
         
         // 의사 세션이 생성될 때까지 폴링하여 환자 토큰을 요청
         const pollForToken = async () => {

@@ -7,7 +7,7 @@ const Home = () => {
     const patientName = '홍길동';
 
     const handleStart = () => {
-        navigate('/robot/auth');
+        navigate('/robot/setup');
     };
 
     return (

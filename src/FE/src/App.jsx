@@ -8,6 +8,7 @@ import AdminSignup from './pages/Auth/AdminSignup';
 import PatientPortal from './pages/Patient/Portal';
 import PatientMyPage from './pages/Patient/MyPage';
 import RobotHome from './pages/Robot/Home';
+import Setup from './pages/Robot/Setup';
 import AuthStep from './pages/Robot/AuthStep';
 import MeasureIntro from './pages/Robot/Measurement/MeasureIntro';
 import Temperature from './pages/Robot/Measurement/Temperature';
@@ -49,6 +50,7 @@ function App() {
 
         {/* 로봇 (환자) 전용 화면 */}
         <Route path="/robot" element={<RobotHome />} />
+        <Route path="/robot/setup" element={<Setup />} />
         <Route path="/robot/auth" element={<AuthStep />} />
         <Route path="/robot/measure-intro" element={<MeasureIntro />} />
         <Route path="/robot/measure/temperature" element={<Temperature />} />

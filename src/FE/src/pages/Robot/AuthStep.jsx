@@ -222,8 +222,9 @@ const AuthStep = () => {
     const submitAuth = async (faceBase64, idCardBase64) => {
         setAuthStatus('submitting');
         try {
-            // 데모용 임시 ID (실제로는 이전 컴포넌트나 글로벌 상태에서 읽어옵니다)
-            const missionId = "mis_K9pQr1"; 
+            // Setup.jsx 에서 주입받은 Mission ID 우선 사용 (없을 시 폴백)
+            const missionId = localStorage.getItem('robot_mission_id') || "mis_K9pQr1";
+            console.log("🚀 [인증 시작] 대상 미션 ID:", missionId);
             
             // 1. 차량 단말 토큰 발급 (API 9.2) - 현재는 의사/관리자 계정 토큰으로 호출하지만 백엔드 연동을 위해 더미 요청 구조. 
             // 실제 환경에선 권한 헤더를 같이 전송해야 하지만 apiClient(인터셉터)가 액세스 토큰을 자동 탑재합니다.
