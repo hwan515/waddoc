@@ -83,17 +83,16 @@
 - 목적: 얼굴 촬영 + 신분증 촬영 결과를 사용해 본인확인만 수행
 - 전제 조건:
   - `MISSION.phase == ARRIVED` 또는 `MISSION.phase == VERIFYING`
-  - 요청 `patientId`가 미션의 케이스 환자와 일치
+  - `missionId`로 연결된 케이스 환자가 존재
 
 Request parts:
 
-- `patientId`: string
 - `faceImage`: file
 - `idCardImage`: file
 
 Spring 내부 처리:
 
-1. 미션과 환자 정합성 검증
+1. `missionId -> case -> patient`로 대상 환자 조회
 2. `MISSION.phase`를 `VERIFYING`으로 전환
 3. `PATIENT.reference_image_path` 조회
 4. `referenceImage + faceImage + idCardImage`를 FastAPI `/idv/api/v1/verify`로 전달
@@ -162,14 +161,12 @@ Response `200 OK` 예시:
 검증 규칙:
 
 1. `sessionId` 유효
-2. `patientId`가 세션 케이스 환자와 일치
+2. `sessionId -> case -> patient`로 대상 환자 조회
 3. `MISSION.phase`가 `VERIFYING` 또는 `CONSULTING`
 4. `identity-check:{missionId}:{patientId}` 가 `VERIFIED`
 5. 필요 시 verified TTL이 유효
 
-Request body는 다음처럼 단순화한다.
-
-- `patientId`: string
+Request body는 사용하지 않는다.
 
 주의:
 
@@ -264,7 +261,7 @@ Spring 책임:
 MVP 기준:
 
 - 차량 태블릿은 본인확인 성공 후 `VITALS_PENDING` 화면으로 이동
-- 체온/혈압/산소포화도/심전도는 장비 연동 또는 더미 표시 가능
+- 체온/혈압/산소포화도/심전도는 더미 표시 가능
 - 측정값 저장은 필수 범위가 아님
 - 의사 화면 반영도 1차 범위에서는 선택 구현 가능
 

@@ -871,7 +871,7 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 | 참가자 | 발급 시점 | API | Auth | 발급 조건 |
 |--------|-----------|-----|------|-----------|
 | 의사 | 세션 생성 시 | `POST /cases/{caseId}/sessions` | Bearer Token (DOCTOR) | 로그인 + 케이스 배정 확인 |
-| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 환자 일치, 기준 이미지 존재 |
+| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 미션의 케이스 환자 조회, 기준 이미지 존재 |
 | 환자 | 세션 입장 시 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | 최근 본인 확인 성공 상태 + 세션 준비 완료 |
 
 | 항목 | 정책 |
@@ -892,7 +892,7 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 1. 차량 도착 → 환자 탑승 → "진료 시작" 클릭
 2. 서버: MISSION.phase = VERIFYING
 3. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/missions/{missionId}/identity-check (ADMIN Bearer)
-4. 서버: 기준 이미지 조회 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
+4. 서버: `missionId -> case -> patient` 조회 → 기준 이미지 조회 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
 5. 차량 태블릿: 활력징후 단계 진행
 6. 의사 세션 준비 후 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
 7. 서버: 최근 본인 확인 성공 상태 검증 → patientToken 발급
