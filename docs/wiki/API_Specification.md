@@ -311,6 +311,7 @@
 | `name` | string | O | 환자명 |
 | `birthDate` | string | O | 생년월일 (YYYY-MM-DD) |
 | `phone` | string | O | 전화번호 |
+| `gender` | string | O | 환자 성별 (`MALE` | `FEMALE` | `UNKNOWN`) |
 | `regionCode` | string | O | 지역 코드 |
 | `address` | string | X | 주소 |
 | `referenceImage` | file | X | 환자 기준 얼굴 이미지 (JPEG/PNG). 환자별 1건 관리 |
@@ -322,6 +323,7 @@
   "name": "홍길동",
   "birthDate6": "580315",
   "phone": "01012345678",
+  "gender": "MALE",
   "referenceImageRegistered": true
 }
 ```
@@ -1053,7 +1055,7 @@ data: {"connectedAt":"2026-03-19T17:20:00+09:00"}
 ```text
 id: 73a8f5a7-8df7-4f08-b52e-0d0cb3e0a2f5
 event: notification
-data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientName":"박순자","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
+data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientId":"pat_Zk3mQ9","patientName":"박순자","patientGender":"FEMALE","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
 ```
 
 > `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
@@ -1070,7 +1072,9 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | `doctorId` | string | O | 담당 의사 ID (`doc_...`) |
 | `doctorName` | string | O | 담당 의사명 |
 | `departmentName` | string | O | 진료과명 |
+| `patientId` | string | O | 환자 ID (`pat_...`) |
 | `patientName` | string | O | 환자명 |
+| `patientGender` | string | O | 환자 성별 (`MALE` | `FEMALE` | `UNKNOWN`) |
 | `appointmentDate` | string | O | 예약 날짜 (`YYYY-MM-DD`) |
 | `startTime` | string | O | 예약 시작 시간 (`HH:mm:ss`) |
 | `location` | string | O | 환자 주소 |
@@ -1672,6 +1676,11 @@ HIGH | MEDIUM | LOW
 ### USER.role
 ```
 ADMIN | DOCTOR | GUARDIAN
+```
+
+### PATIENT.gender
+```
+MALE | FEMALE | UNKNOWN
 ```
 
 ### PATIENT_GUARDIAN_LINK.status
