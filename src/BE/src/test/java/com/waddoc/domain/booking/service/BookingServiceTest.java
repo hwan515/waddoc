@@ -33,6 +33,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -134,7 +136,19 @@ class BookingServiceTest {
             return booking;
         }).when(bookingRepository).save(any(Booking.class));
 
-        CreateBookingResponse response = bookingService.createBooking(session.getPublicId(), request);
+        TransactionSynchronizationManager.initSynchronization();
+
+        CreateBookingResponse response;
+        try {
+            response = bookingService.createBooking(session.getPublicId(), request);
+
+            List<TransactionSynchronization> synchronizations =
+                    TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
 
         ArgumentCaptor<SmsRequestMessage> smsCaptor = ArgumentCaptor.forClass(SmsRequestMessage.class);
         ArgumentCaptor<NewBookingNotificationPayload> notificationCaptor =
