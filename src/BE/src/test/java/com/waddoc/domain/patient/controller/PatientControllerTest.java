@@ -1,6 +1,7 @@
 package com.waddoc.domain.patient.controller;
 
 import com.waddoc.domain.patient.dto.CreatePatientResponse;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.patient.service.PatientCommandService;
 import com.waddoc.global.error.GlobalExceptionHandler;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
@@ -50,6 +51,7 @@ class PatientControllerTest {
                         .name("Hong Gil-dong")
                         .birthDate6("580315")
                         .phone("01012345678")
+                        .gender(PatientGender.MALE)
                         .referenceImageRegistered(true)
                         .build());
 
@@ -58,6 +60,7 @@ class PatientControllerTest {
                         .param("name", "Hong Gil-dong")
                         .param("birthDate", "1958-03-15")
                         .param("phone", "01012345678")
+                        .param("gender", "MALE")
                         .param("regionCode", "ULLEUNG")
                         .param("address", "Ulleung-eup"))
                 .andExpect(status().isCreated())
@@ -66,6 +69,7 @@ class PatientControllerTest {
                 .andExpect(jsonPath("$.name").value("Hong Gil-dong"))
                 .andExpect(jsonPath("$.birthDate6").value("580315"))
                 .andExpect(jsonPath("$.phone").value("01012345678"))
+                .andExpect(jsonPath("$.gender").value("MALE"))
                 .andExpect(jsonPath("$.referenceImageRegistered").value(true));
     }
 
@@ -74,6 +78,7 @@ class PatientControllerTest {
         mockMvc.perform(multipart("/api/v1/patients")
                         .param("birthDate", "1958-03-15")
                         .param("phone", "01012345678")
+                        .param("gender", "MALE")
                         .param("regionCode", "ULLEUNG"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT"));

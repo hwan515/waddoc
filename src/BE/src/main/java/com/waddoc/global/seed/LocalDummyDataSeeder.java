@@ -27,6 +27,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.GuardianLinkStatus;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.patient.entity.PatientGuardianLink;
 import com.waddoc.domain.patient.repository.PatientGuardianLinkRepository;
 import com.waddoc.domain.patient.repository.PatientRepository;
@@ -225,6 +226,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             patients.add(ensurePatient(
                     buildPatientName(i),
                     buildPatientBirthDate(i),
+                    buildPatientGender(i),
                     buildPatientAddress(i),
                     buildPatientPhone(i),
                     String.format("seed/patients/patient-%02d-reference.jpg", i + 1),
@@ -640,7 +642,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return doctorProfile;
     }
 
-    private Patient ensurePatient(String name, LocalDate birthDate, String address, String phone,
+    private Patient ensurePatient(String name, LocalDate birthDate, PatientGender gender, String address, String phone,
             String referenceImagePath, User uploadedBy) {
         String birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
         Patient patient = patientRepository.findByPhone(phone)
@@ -649,6 +651,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         Patient.builder()
                                 .name(name)
                                 .birthDate(birthDate)
+                                .gender(gender)
                                 .regionCode(REGION_GIMCHEON_JEUNGSAN)
                                 .address(address)
                                 .phone(phone)
@@ -656,10 +659,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         if (!name.equals(patient.getName())
                 || !birthDate.equals(patient.getBirthDate())
+                || gender != patient.getGender()
                 || !REGION_GIMCHEON_JEUNGSAN.equals(patient.getRegionCode())
                 || !address.equals(patient.getAddress())
                 || !phone.equals(patient.getPhone())) {
-            patient.updateProfile(name, birthDate, REGION_GIMCHEON_JEUNGSAN, address, phone);
+            patient.updateProfile(name, birthDate, gender, REGION_GIMCHEON_JEUNGSAN, address, phone);
         }
 
         if (referenceImagePath != null
@@ -1069,6 +1073,10 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         String surname = PATIENT_SURNAMES.get(index % PATIENT_SURNAMES.size());
         List<String> givenNames = index % 2 == 0 ? FEMALE_PATIENT_GIVEN_NAMES : MALE_PATIENT_GIVEN_NAMES;
         return surname + givenNames.get((index / PATIENT_SURNAMES.size()) % givenNames.size());
+    }
+
+    private PatientGender buildPatientGender(int index) {
+        return index % 2 == 0 ? PatientGender.FEMALE : PatientGender.MALE;
     }
 
     private String buildGuardianName(int index) {

@@ -3,6 +3,7 @@ package com.waddoc.domain.patient.service;
 import com.waddoc.domain.patient.dto.CreatePatientRequest;
 import com.waddoc.domain.patient.dto.CreatePatientResponse;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
@@ -62,6 +63,7 @@ class PatientCommandServiceTest {
         assertThat(response.getName()).isEqualTo("Hong Gil-dong");
         assertThat(response.getBirthDate6()).isEqualTo("580315");
         assertThat(response.getPhone()).isEqualTo("01012345678");
+        assertThat(response.getGender()).isEqualTo(PatientGender.MALE);
         assertThat(response.isReferenceImageRegistered()).isFalse();
         verify(accessControlService).assertAdmin(admin);
     }
@@ -101,6 +103,7 @@ class PatientCommandServiceTest {
                 .thenReturn(Optional.of(Patient.builder()
                         .name("Existing")
                         .birthDate(LocalDate.of(1950, 1, 1))
+                        .gender(PatientGender.UNKNOWN)
                         .regionCode("ULLEUNG")
                         .address("Existing address")
                         .phone("01012345678")
@@ -120,6 +123,7 @@ class PatientCommandServiceTest {
         request.setName("Hong Gil-dong");
         request.setBirthDate(LocalDate.of(1958, 3, 15));
         request.setPhone("01012345678");
+        request.setGender(PatientGender.MALE);
         request.setRegionCode("ULLEUNG");
         request.setAddress("Ulleung-eup");
         return request;

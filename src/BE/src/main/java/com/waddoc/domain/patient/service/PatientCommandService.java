@@ -37,6 +37,7 @@ public class PatientCommandService {
                 Patient.builder()
                         .name(request.getName().trim())
                         .birthDate(request.getBirthDate())
+                        .gender(request.getGender())
                         .regionCode(request.getRegionCode().trim())
                         .address(normalizeNullable(request.getAddress()))
                         .phone(phone)

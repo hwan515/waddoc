@@ -17,6 +17,7 @@ import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.sms.SmsService;
@@ -94,6 +95,7 @@ class BookingServiceTest {
         Patient patient = Patient.builder()
                 .name("Patient Park")
                 .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
                 .regionCode("ULLEUNG")
                 .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
                 .phone("01012345678")
@@ -158,7 +160,9 @@ class BookingServiceTest {
         assertThat(payload.getDoctorId()).isEqualTo(response.getDoctor().getDoctorId());
         assertThat(payload.getDoctorName()).isEqualTo(response.getDoctor().getName());
         assertThat(payload.getDepartmentName()).isEqualTo(response.getDoctor().getDepartmentName());
+        assertThat(payload.getPatientId()).isEqualTo(response.getPatient().getPatientId());
         assertThat(payload.getPatientName()).isEqualTo(response.getPatient().getName());
+        assertThat(payload.getPatientGender()).isEqualTo(PatientGender.FEMALE);
         assertThat(payload.getAppointmentDate()).isEqualTo(response.getAppointmentDate());
         assertThat(payload.getStartTime()).isEqualTo(response.getStartTime());
         assertThat(payload.getLocation()).isEqualTo("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69");
@@ -190,6 +194,7 @@ class BookingServiceTest {
         Patient patient = Patient.builder()
                 .name("Patient Park")
                 .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.UNKNOWN)
                 .regionCode("ULLEUNG")
                 .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
                 .phone("01012345678")
