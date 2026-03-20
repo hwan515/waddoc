@@ -123,14 +123,20 @@ public class BookingService {
         String smsMessage = buildBookingCreatedSms(patient, slot, doctorName, departmentName);
         NewBookingNotificationPayload notificationPayload = NewBookingNotificationPayload.from(booking, careCase);
 
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                // 예약 생성 트랜잭션이 확정된 뒤에만 외부 알림을 발행한다.
-                publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
-                publishBookingCreatedDoctorNotification(slot.getDoctor().getPublicId(), notificationPayload);
-            }
-        });
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    // 예약 생성 트랜잭션이 확정된 뒤에만 외부 알림을 발행한다.
+                    publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
+                    publishBookingCreatedDoctorNotification(slot.getDoctor().getPublicId(), notificationPayload);
+                }
+            });
+        } else {
+            // Mockito 단위 테스트나 직접 호출 경로에서는 트랜잭션 동기화가 없을 수 있다.
+            publishBookingCreatedSms(session.getCallerNumber(), smsMessage, booking.getPublicId());
+            publishBookingCreatedDoctorNotification(slot.getDoctor().getPublicId(), notificationPayload);
+        }
 
         // 감사 로그
         String correlationId = "corr_bk_" + booking.getPublicId();
