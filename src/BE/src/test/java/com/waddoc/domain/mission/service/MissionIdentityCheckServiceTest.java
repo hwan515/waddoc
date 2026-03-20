@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -197,6 +198,38 @@ class MissionIdentityCheckServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.IDENTITY_CHECK_FAILED);
+    }
+
+    @Test
+    void verify_bypassesWhenFlagEnabled() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
+        mission.updatePhase(MissionPhase.ARRIVED);
+        setField(missionIdentityCheckService, "identityCheckBypassEnabled", true);
+
+        when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
+        when(missionIdentityCheckCacheService.saveVerified("ms_test123", "pat_test123"))
+                .thenReturn(new MissionIdentityCheckCacheService.VerifiedIdentityCheck(
+                        OffsetDateTime.parse("2026-03-18T10:05:00+09:00"),
+                        600
+                ));
+
+        MissionIdentityCheckResponse response = missionIdentityCheckService.verify(
+                "ms_test123",
+                "pat_test123",
+                new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1, 2, 3}),
+                new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{4, 5, 6}),
+                admin
+        );
+
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.VERIFYING);
+        assertThat(response.getStatus()).isEqualTo("VERIFIED");
+        assertThat(response.getIdentityCheck().isMatched()).isTrue();
+        assertThat(response.getIdentityCheck().getReasonCodes()).containsExactly("BYPASSED");
+        verify(missionRepository).save(mission);
+        verify(missionIdentityCheckCacheService).saveVerified("ms_test123", "pat_test123");
+        verify(accessControlService).assertAdmin(admin);
+        verifyNoInteractions(consultationIdentityVerificationClient);
     }
 
     private IdentityVerificationResult successResult() {

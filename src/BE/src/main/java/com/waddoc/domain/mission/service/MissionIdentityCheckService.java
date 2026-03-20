@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -40,6 +41,9 @@ public class MissionIdentityCheckService {
 
     @Value("${file.storage-root}")
     private String fileStorageRoot;
+
+    @Value("${consultation.identity-check-bypass-enabled:false}")
+    private boolean identityCheckBypassEnabled;
 
     public MissionIdentityCheckResponse verify(
             String missionId,
@@ -65,6 +69,10 @@ public class MissionIdentityCheckService {
         if (mission.getPhase() == MissionPhase.ARRIVED) {
             mission.updatePhase(MissionPhase.VERIFYING);
             missionRepository.save(mission);
+        }
+
+        if (identityCheckBypassEnabled) {
+            return bypassIdentityCheck(mission, patient, authenticatedUser);
         }
 
         byte[] referenceImage = readReferenceImage(patient);
@@ -103,6 +111,55 @@ public class MissionIdentityCheckService {
                 verifiedIdentityCheck.verifiedAt(),
                 verifiedIdentityCheck.expiresInSeconds(),
                 identityVerificationResult
+        );
+    }
+
+    private MissionIdentityCheckResponse bypassIdentityCheck(
+            Mission mission,
+            Patient patient,
+            AuthenticatedUser authenticatedUser
+    ) {
+        // TODO: Remove this bypass once the AI IDV server is stable and all environments use the real verification flow.
+        log.warn(
+                "Identity check bypass enabled. missionId={}, patientId={}",
+                mission.getPublicId(),
+                patient.getPublicId()
+        );
+
+        MissionIdentityCheckCacheService.VerifiedIdentityCheck verifiedIdentityCheck =
+                missionIdentityCheckCacheService.saveVerified(mission.getPublicId(), patient.getPublicId());
+
+        auditLogService.log(
+                "MISSION_IDENTITY_CHECK_BYPASSED",
+                "MISSION",
+                mission.getPublicId(),
+                "corr_mis_" + mission.getPublicId(),
+                authenticatedUser.userId(),
+                authenticatedUser.role().name(),
+                Map.of(
+                        "patientId", patient.getPublicId(),
+                        "missionPhase", mission.getPhase().name()
+                )
+        );
+
+        IdentityVerificationResult bypassResult = IdentityVerificationResult.builder()
+                .matched(true)
+                .faceSimilarityScore(1.0)
+                .idCardFaceSimilarityScore(1.0)
+                .reasonCodes(List.of("BYPASSED"))
+                .ocr(IdentityVerificationResult.OcrData.builder()
+                        .name(patient.getName())
+                        .birthDate6(patient.getBirthDate6())
+                        .address(patient.getAddress())
+                        .build())
+                .build();
+
+        return MissionIdentityCheckResponse.of(
+                mission,
+                patient.getPublicId(),
+                verifiedIdentityCheck.verifiedAt(),
+                verifiedIdentityCheck.expiresInSeconds(),
+                bypassResult
         );
     }
 
