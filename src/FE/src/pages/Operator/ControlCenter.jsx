@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { LogOut, Activity, Map as MapIcon, LayoutDashboard } from 'lucide-react';
+import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
 import { mockStatistics } from '../../mockdata/operator';
 import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
+import PatientManagement from '../../components/operator/PatientManagement';
+import GuardianApprovals from '../../components/operator/GuardianApprovals';
 
 const ControlCenter = () => {
     const navigate = useNavigate();
@@ -157,7 +159,7 @@ const ControlCenter = () => {
                     <div className="flex items-center gap-1 bg-[#003559] p-1 rounded-lg">
                         <button
                             onClick={() => setActiveTab('map')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
+                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
                                 ? 'bg-white text-[#0353A4] shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
@@ -167,13 +169,33 @@ const ControlCenter = () => {
                         </button>
                         <button
                             onClick={() => setActiveTab('dashboard')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
+                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
                                 ? 'bg-white text-[#0353A4] shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
                         >
                             <LayoutDashboard className="w-4 h-4" />
                             운영 대시보드
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('patients')}
+                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
+                                ? 'bg-white text-[#0353A4] shadow-sm'
+                                : 'text-slate-300 hover:text-white hover:bg-white/10'
+                                }`}
+                        >
+                            <Users className="w-4 h-4" />
+                            환자 관리
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('approvals')}
+                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
+                                ? 'bg-white text-[#0353A4] shadow-sm'
+                                : 'text-slate-300 hover:text-white hover:bg-white/10'
+                                }`}
+                        >
+                            <UserCheck className="w-4 h-4" />
+                            가입 승인
                         </button>
                     </div>
                 </div>
@@ -199,13 +221,14 @@ const ControlCenter = () => {
 
             {/* 메인 뷰 영역 (탭에 따라 변경) */}
             <main className="flex-1 overflow-hidden relative">
-                {activeTab === 'map' ? (
+                {activeTab === 'map' && (
                     <MapMonitoring
                         vehicles={vehicles}
                         selectedVehicleId={selectedVehicleId}
                         setSelectedVehicleId={setSelectedVehicleId}
                     />
-                ) : (
+                )}
+                {activeTab === 'dashboard' && (
                     <DashboardView
                         calendarMode={calendarMode}
                         setCalendarMode={setCalendarMode}
@@ -214,6 +237,8 @@ const ControlCenter = () => {
                         statistics={statistics}
                     />
                 )}
+                {activeTab === 'patients' && <PatientManagement />}
+                {activeTab === 'approvals' && <GuardianApprovals />}
             </main>
         </div>
     );
