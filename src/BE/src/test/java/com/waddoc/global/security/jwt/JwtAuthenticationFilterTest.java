@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -29,16 +30,21 @@ class JwtAuthenticationFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
         request.addHeader("Authorization", "Bearer valid-token");
+        AuthenticatedUser principal = new AuthenticatedUser("usr_test01", Role.DOCTOR);
+        Authentication expectedAuthentication = new UsernamePasswordAuthenticationToken(
+                principal,
+                "valid-token",
+                principal.getAuthorities()
+        );
 
         when(jwtTokenProvider.validateToken("valid-token")).thenReturn(true);
-        when(jwtTokenProvider.getAuthenticatedUser("valid-token"))
-                .thenReturn(new AuthenticatedUser("usr_test01", Role.DOCTOR));
+        when(jwtTokenProvider.getAuthentication("valid-token")).thenReturn(expectedAuthentication);
 
         filter.doFilter(request, response, new MockFilterChain());
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication).isNotNull();
-        assertThat(authentication.getPrincipal()).isEqualTo(new AuthenticatedUser("usr_test01", Role.DOCTOR));
+        assertThat(authentication.getPrincipal()).isEqualTo(principal);
         assertThat(authentication.getAuthorities())
                 .extracting("authority")
                 .containsExactly("ROLE_DOCTOR");
