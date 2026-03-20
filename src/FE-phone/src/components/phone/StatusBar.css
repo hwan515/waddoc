@@ -1,0 +1,28 @@
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #2d2d2d;
+  color: #ccc;
+  font-size: 11px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.status-bar-center {
+  font-weight: 700;
+  color: #fff;
+  font-size: 12px;
+}
+
+.status-label {
+  color: #8bc34a;
+  font-size: 10px;
+}
+
+.status-timer {
+  font-family: 'Courier New', monospace;
+  color: #8bc34a;
+  font-size: 11px;
+}

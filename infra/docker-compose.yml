@@ -1,0 +1,93 @@
+services:
+  # === Reverse Proxy ===
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - spring-api
+      - frontend
+      - livekit
+    networks:
+      - waddoc-net
+
+  # === Frontend ===
+  frontend:
+    build: ../src/FE
+    expose:
+      - "3000"
+    networks:
+      - waddoc-net
+
+  # === Backend ===
+  spring-api:
+    build: ../src/BE
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
+      - AI_TRIAGE_URL=https://${DEV_GPU_SERVER_HOST}/triage/api/v1/recommend
+      - FILE_STORAGE_ROOT=/data/uploads
+      - AI_IDV_TRANSFER_MODE=multipart
+      - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
+      - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
+    volumes:
+      - ./local-storage/uploads:/data/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - waddoc-net
+
+  # === Database ===
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: waddoc
+      POSTGRES_USER: waddoc
+      POSTGRES_PASSWORD: waddoc_dev
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      # 추후 배포할떄는 expose로 변경
+      - "5432:5432"
+    networks:
+      - waddoc-net
+
+  # === Cache ===
+  redis:
+    image: redis:7-alpine
+    command: redis-server --notify-keyspace-events Ex
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - waddoc-net
+
+  # === WebRTC ===
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "3478:3478/udp"
+    environment:
+      LIVEKIT_KEYS: "devkey: devsecret"
+    networks:
+      - waddoc-net
+
+volumes:
+  pg_data:
+  redis_data:
+
+
+networks:
+  waddoc-net:
+    driver: bridge

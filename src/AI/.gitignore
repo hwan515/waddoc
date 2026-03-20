@@ -1,0 +1,11 @@
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+main-server/.gradle/
+main-server/build/
+ai-server/.venv/
+ai-server/__pycache__/
+ai-server/.pytest_cache/
+*.log
+.env
+.DS_Store
