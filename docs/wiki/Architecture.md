@@ -16,6 +16,7 @@
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
 | JWT 분리 저장 | Access Token = 메모리(JS 변수), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
 | 이중 ID | 내부 PK는 bigint 자동 증가, 외부 API에는 `public_id`(접두사 + nanoid) 노출. PK 추론 방지, API 가독성 향상 |
+| 이벤트 버스 분리 | SMS, 의사 SSE 알림, 미션 텔레메트리, 배차 재시도는 Kafka 토픽으로 비동기 분리 |
 | 환자 SMS 알림 | 환자는 계정이 없으므로 예약 결과/취소 알림은 SOLAPI SMS 게이트웨이로 발송. 개발환경은 Mock |
 
 ---
@@ -50,9 +51,9 @@
 │  │ - 파일 관리 │                                       │
 │  └──────┬──────┘                                       │
 │         │                                              │
-│   ┌─────┴─────┐ ┌───────┐                              │
-│   │ PostgreSQL │ │ Redis │                              │
-│   └────────────┘ └───────┘                              │
+│   ┌─────┴─────┐ ┌───────┐ ┌─────────────┐              │
+│   │ PostgreSQL │ │ Redis │ │ Kafka + ZK │              │
+│   └────────────┘ └───────┘ └─────────────┘              │
 └───────────────────────────┬─────────────────────────────┘
                             │ REST multipart / WebSocket / REST JSON
 ┌───────────────────────────┴─────────────────────────────┐
@@ -67,7 +68,19 @@
 - `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
 - `Spring Boot <-> STT AI` 는 WebSocket 스트리밍으로 partial/final transcript를 주고받는다.
 - `Spring Boot -> Recommendation/Triage API` 는 REST JSON으로 최종 분류/추천 결과를 요청한다.
+- `Spring Boot -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
 - React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
+
+---
+
+### 2.1 Kafka 이벤트 흐름
+
+- `sms.requests` → `SmsConsumer` → `SmsService`
+- `doctor.notifications` → `DoctorNotificationConsumer` → 활성 SSE 연결에만 전달
+- `mission.telemetry` → `MissionTelemetryConsumer` → `MISSION` 위치/단계 반영
+- `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 `MISSION` 자동 생성
+- `dispatch.retry` → `DispatchRetryConsumer` → 동일 권역 배차 재평가 트리거
+- `dispatch_outbox` 테이블은 예약 확정과 Kafka publish 사이를 느슨하게 연결하는 outbox 역할을 담당한다.
 
 ---
 
@@ -113,6 +126,8 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - DB_HOST=postgres
       - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - LIVEKIT_HOST=http://livekit:7880
       - AI_IDV_URL=https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
       - AI_TRIAGE_URL=https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
@@ -122,6 +137,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - kafka
 
   # === Database ===
   postgres:
@@ -142,6 +158,23 @@ services:
       - "6379"
     volumes:
       - redis_data:/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
 
   # === WebRTC ===
   livekit:
@@ -166,6 +199,7 @@ docker network: waddoc-net (bridge, 메인 스택 컨테이너 연결)
 
 외부 공개 포트:
   - 80        → nginx (HTTP)
+  - 9092      → kafka (host access / 로컬 JVM 연동)
   - 7880      → livekit (API + signaling WebSocket)
   - 7881      → livekit (ICE/TCP)
   - 7882/udp  → livekit (ICE/UDP mux)
@@ -180,8 +214,11 @@ Nginx 내부 라우팅:
   - 3000  → frontend
   - 5432  → postgres
   - 6379  → redis
+  - 2181  → zookeeper
+  - 29092 → kafka (container 간 통신)
 
 원격 의존성:
+  - spring-api → kafka:29092 (SMS / 알림 / 텔레메트리 / 배차 이벤트)
   - spring-api → https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (IDV AI REST)
   - spring-api ↔ wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe (STT AI WebSocket)
   - spring-api → https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend (추천 AI REST)
@@ -254,7 +291,7 @@ Content-Type: application/json
 
 ### 4.1 구성 원칙
 
-- **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, LiveKit
+- **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, Kafka, Zookeeper, LiveKit
 - **AI 서버 (별도)**: IDV AI, STT/추천 AI
 - 서버 간 통신: **REST + WebSocket**
 - 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
@@ -283,8 +320,8 @@ Content-Type: application/json
 │  │  └─────┬────┘              └──────────┘        │  │
 │  │        │                                        │  │
 │  │  ┌─────┴──────┐  ┌──────────┐  ┌───────────┐  │  │
-│  │  │ PostgreSQL │  │  Redis   │  │           │  │  │
-│  │  │ :5432      │  │  :6379   │  │           │  │  │
+│  │  │ PostgreSQL │  │  Redis   │  │ Kafka+ZK  │  │  │
+│  │  │ :5432      │  │  :6379   │  │ :29092    │  │  │
 │  │  └────────────┘  └──────────┘  └───────────┘  │  │
 │  │        │                                       │  │
 │  └────────┼───────────────────────────────────────┘  │
@@ -344,12 +381,17 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       - DB_HOST=postgres
       - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       - AI_IDV_URL=https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
       - AI_TRIAGE_URL=https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
     volumes:
       - uploads:/data/uploads
+    depends_on:
+      - postgres
+      - redis
+      - kafka
     deploy:
       resources:
         limits:
@@ -379,6 +421,27 @@ services:
       resources:
         limits:
           memory: 256M
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT:-2181}
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "${KAFKA_PORT:-8092}:9092"
+    environment:
+      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID:-1}
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:${ZOOKEEPER_CLIENT_PORT:-2181}
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_PORT:-8092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:-1}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-false}"
+    depends_on:
+      - zookeeper
 
   livekit:
     image: livekit/livekit-server:latest
@@ -1077,7 +1140,7 @@ React에서 `fetch` 기반 SSE 라이브러리를 사용하여 커스텀 헤더 
 ```javascript
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
-fetchEventSource('/api/v1/notifications/subscribe', {
+fetchEventSource('/api/v1/doctors/me/notifications/stream', {
   method: 'GET',
   headers: {
     'Authorization': `Bearer ${accessToken}`,
@@ -1104,6 +1167,8 @@ fetchEventSource('/api/v1/notifications/subscribe', {
 | 재연결 | 네트워크 오류 시 exponential backoff |
 | 표준 EventSource | 사용 금지 (커스텀 헤더 불가) |
 
+> 신규 예약 알림은 예약/케이스 생성 트랜잭션 커밋 후 `doctor.notifications` Kafka 토픽으로 발행되고, `DoctorNotificationConsumer`가 활성 SSE 연결이 있는 의사에게만 전달한다.
+
 ---
 
 ## 8.11 SMS 게이트웨이 (SOLAPI)
@@ -1111,7 +1176,7 @@ fetchEventSource('/api/v1/notifications/subscribe', {
 환자는 시스템 계정이 없으므로 웹 내 알림 수신이 불가능하다. **예약 생성/취소 결과는 SOLAPI SMS 게이트웨이를 통해 환자 휴대전화로 발송**한다.
 
 ```
-Spring Boot → SOLAPI SDK → 환자 SMS 발송
+Spring Boot → Kafka(sms.requests) → SmsConsumer → SOLAPI SDK → 환자 SMS 발송
 
 발송 대상:
   - 예약 확정 시: 예약 일시/의사/진료과 안내 SMS
@@ -1120,6 +1185,7 @@ Spring Boot → SOLAPI SDK → 환자 SMS 발송
 환경별 처리:
   - 개발 (local): SMS를 실제 발송하지 않고 로그로 기록 (MockSmsService)
   - 배포 (prod):  SOLAPI API로 실제 발송 (SolapiSmsService)
+  - 발송 실패: Kafka 재시도 후 `sms.requests.DLT`에 적재
 ```
 
 ```
@@ -1170,8 +1236,8 @@ GPU 서버 내부 서비스 포트 8000, 8001은 외부 직접 공개하지 않�
 ```
 메인 서버:
   외부 공개: 80, 443 (Nginx — API, 프론트, LiveKit WS SSL termination),
-            8881 (ICE/TCP), 8882/udp (ICE/UDP), 8478/udp (TURN)
-  내부 전용: 8080 (Spring), 7880 (LiveKit WS), 5432 (PostgreSQL), 6379 (Redis)
+            8092 (Kafka host access), 8881 (ICE/TCP), 8882/udp (ICE/UDP), 8478/udp (TURN)
+  내부 전용: 8080 (Spring), 7880 (LiveKit WS), 5432 (PostgreSQL), 6379 (Redis), 2181 (Zookeeper), 29092 (Kafka broker)
 
 AI 서버:
   외부 공개: 443 (TLS reverse proxy)

@@ -122,16 +122,45 @@ erDiagram
         timestamp updated_at
     }
 
+    VEHICLE {
+        bigint vehicle_id PK
+        varchar public_id UK "외부 노출 ID (veh_xxxx)"
+        varchar code UK "차량 코드"
+        varchar region_code "권역 코드"
+        varchar display_name "차량 표시명"
+        boolean is_active "활성 여부"
+        enum operational_status "OPERATIONAL | OUT_OF_SERVICE | MAINTENANCE"
+        timestamp status_changed_at
+        varchar status_reason
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    DISPATCH_OUTBOX {
+        bigint outbox_id PK
+        bigint case_id FK
+        varchar region_code "권역 코드"
+        text destination "목적지 주소"
+        enum status "PENDING | PUBLISHED | RETRY_PENDING | COMPLETED"
+        timestamp created_at
+    }
+
     %% ============ 미션 (차량 출동) ============
     MISSION {
         bigint mission_id PK
         varchar public_id UK "외부 노출 ID (ms_xxxx)"
         bigint case_id FK
-        varchar vehicle_id "차량 ID"
+        varchar vehicle_id "차량 public_id (논리 참조)"
         text destination "목적지 주소"
+        timestamp dispatched_at
+        timestamp estimated_arrival_time
         enum phase "CREATED | DISPATCHED | EN_ROUTE | ARRIVED | VERIFYING | CONSULTING | RETURNING | COMPLETED | FAILED | INCIDENT(임시)"
+        enum previous_phase "이전 단계"
         decimal latitude "현재 위도"
         decimal longitude "현재 경도"
+        varchar last_telemetry_source_event_id "최근 telemetry sourceEventId"
+        bigint last_telemetry_seq_no "최근 telemetry seqNo"
+        timestamp last_telemetry_at "최근 telemetry timestamp"
         timestamp completed_at
         timestamp created_at
         timestamp updated_at
@@ -186,8 +215,10 @@ erDiagram
 
     BOOKING ||--|| CARE_CASE : "creates case 1:1"
 
+    CARE_CASE ||--o{ DISPATCH_OUTBOX : "enqueues dispatch"
     CARE_CASE ||--o| MISSION : "has mission"
     CARE_CASE ||--o| CONSULTATION_SESSION : "has session"
+    VEHICLE ||--o{ MISSION : "serves (logical)"
 
     CONSULTATION_SESSION ||--o| CONSULTATION_SUMMARY : "produces summary"
 ```
@@ -230,7 +261,9 @@ erDiagram
 |--------|------|
 | `BOOKING` | 예약 정보. 상태: `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
 | `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED` |
-| `MISSION` | 차량 출동. 현재 위치(latitude/longitude)와 단계(phase)를 직접 관리. 단계: `CREATED → DISPATCHED → EN_ROUTE → ARRIVED → … → COMPLETED` |
+| `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
+| `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
+| `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조한다 |
 
 ### 2.6 화상진료 세션 도메인
 
@@ -248,6 +281,8 @@ erDiagram
 | `BOOKING.status` | `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
 | `CARE_CASE.status` | `CREATED → PREPARING → IN_PROGRESS → COMPLETED \| FAILED \| CANCELLED` |
 | `MISSION.phase` | `CREATED → DISPATCHED → EN_ROUTE → ARRIVED → VERIFYING → CONSULTING → RETURNING → COMPLETED \| FAILED` ※ `INCIDENT`는 임시 상태 (복구 후 이전 단계 복귀) |
+| `VEHICLE.operational_status` | `OPERATIONAL \| OUT_OF_SERVICE \| MAINTENANCE` |
+| `DISPATCH_OUTBOX.status` | `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
 | `CONSULTATION_SESSION.status` | `CREATED → READY → IN_PROGRESS → COMPLETED \| FAILED \| ABANDONED` |
 | `CONNECTION_STATE` | `CONNECTED \| RECONNECTING \| DISCONNECTED` |
 | `INTAKE_SESSION.status` | `STARTED → IN_PROGRESS → COMPLETED \| ABANDONED \| FAILED` |
@@ -274,9 +309,10 @@ USER    ←1:N→ USER                      (의사/보호자 계정 승인)
 
 PATIENT → INTAKE_SESSION (과 선택·슬롯 스냅샷 포함)    (기본 전화 예약 흐름)
 
-PATIENT → BOOKING → CARE_CASE → MISSION                     (진료 라이프사이클)
+PATIENT → BOOKING → CARE_CASE → DISPATCH_OUTBOX → MISSION   (예약 확정 → 자동 배차)
                                → CONSULTATION_SESSION → CONSULTATION_SUMMARY
 
+VEHICLE → MISSION                                           (권역 차량 배정)
 USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정 흐름)
 ```
 
@@ -293,5 +329,9 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `PATIENT_GUARDIAN_LINK` | `UNIQUE (patient_id, guardian_user_id)` | 동일 보호자-환자 조합의 중복 가입 이력 방지 |
 | `BOOKING` | `UNIQUE (slot_id)` WHERE `status != 'CANCELLED'` | 동일 슬롯 이중 예약 방지 (부분 unique) |
 | `CARE_CASE` | `UNIQUE (booking_id)` | 예약-케이스 1:1 보장 |
+| `VEHICLE` | `UNIQUE (public_id)`, `UNIQUE (code)` | 외부 노출 ID와 운영 코드 유일성 보장 |
+| `VEHICLE` | `UNIQUE (region_code)` WHERE `is_active = true` | 동일 권역의 활성 차량 1대 보장 |
+| `DISPATCH_OUTBOX` | `INDEX (status, created_at)` WHERE `status = 'PENDING'` | 최초 배차 relay 스캔 최적화 |
+| `DISPATCH_OUTBOX` | `INDEX (region_code, status, created_at)` WHERE `status = 'RETRY_PENDING'` | 권역별 재배차 스캔 최적화 |
 | `CONSULTATION_SUMMARY` | `UNIQUE (session_id)` | 세션당 요약 1건 보장 |
 | 모든 테이블 `public_id` | `UNIQUE` | 외부 노출 ID 유일성 보장 |

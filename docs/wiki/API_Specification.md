@@ -871,7 +871,7 @@
       "caseId": "case_T7nLp4",
       "patientName": "홍길동",
       "phase": "DISPATCHED",
-      "vehicleId": "v-001",
+      "vehicleId": "veh_00000001",
       "destination": "경북 울릉군 울릉읍...",
       "dispatchedAt": "2026-03-11T08:30:00+09:00",
       "estimatedArrivalTime": "2026-03-11T09:45:00+09:00"
@@ -897,7 +897,7 @@
   "missionId": "ms_F2gHn6",
   "caseId": "case_T7nLp4",
   "phase": "EN_ROUTE",
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "patientName": "홍길동",
   "destination": "경북 울릉군 울릉읍...",
   "dispatchedAt": "2026-03-11T08:30:00+09:00",
@@ -921,11 +921,13 @@
 | Path | `/api/v1/missions` |
 | Auth | Bearer Token (ADMIN) |
 
+> 이 API는 관리자 수동 생성/보정용이다. 일반 예약 확정 흐름에서는 `dispatch_outbox`와 Kafka 소비를 통해 미션이 자동 생성된다.
+
 **Request Body**
 ```json
 {
   "caseId": "case_T7nLp4",
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "destination": "경북 울릉군 울릉읍...",
   "scheduledTime": "2026-03-11T08:30:00+09:00"
 }
@@ -937,7 +939,7 @@
   "missionId": "ms_F2gHn6",
   "caseId": "case_T7nLp4",
   "phase": "CREATED",
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "createdAt": "2026-03-10T14:00:00+09:00"
 }
 ```
@@ -989,7 +991,7 @@
   "source": "ROS2",
   "sourceEventId": "ros2_msg_abc123",
   "seqNo": 42,
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "phase": "EN_ROUTE",
   "latitude": 37.4845,
   "longitude": 130.9057,
@@ -1000,7 +1002,9 @@
 }
 ```
 
-> 서버는 수신한 payload로 `MISSION.phase`, `MISSION.latitude`, `MISSION.longitude`를 직접 갱신한다. 별도 이벤트 리소스는 생성하지 않는다.
+> HTTP 진입점은 API Key 검증 후 `mission.telemetry` Kafka 토픽에 메시지를 적재하고 즉시 `202 Accepted`를 반환한다.
+>
+> 실제 `MISSION.phase`, `MISSION.latitude`, `MISSION.longitude` 갱신은 `MissionTelemetryConsumer`가 비동기로 처리한다. 별도 이벤트 리소스는 생성하지 않는다.
 >
 > **관리자 PATCH와의 충돌 방지 규칙**:
 > - `seqNo` 또는 `timestamp` 기준으로 마지막 반영값보다 오래된 이벤트는 무시한다.
@@ -1061,6 +1065,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 > `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
 >
 > `notification` 이벤트는 예약과 케이스 생성 트랜잭션이 정상 커밋된 뒤 발행된다. 활성 SSE 연결이 없더라도 예약 생성 자체는 실패하지 않는다.
+>
+> 내부적으로는 `doctor.notifications` Kafka 토픽을 통해 전달되며, 활성 SSE 연결이 없는 의사는 이벤트를 소비하더라도 push를 생략한다.
 
 **`notification` payload**
 
@@ -1742,6 +1748,78 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
+### 11.8 차량 상세 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/admin/vehicles/{vehicleId}` |
+| Auth | Bearer Token (ADMIN) |
+
+**Response** `200 OK`
+```json
+{
+  "vehicleId": "veh_00000001",
+  "code": "GIMCHEON-01",
+  "regionCode": "GIMCHEON_JEUNGSAN",
+  "displayName": "김천증산 1호차",
+  "active": true,
+  "operationalStatus": "OPERATIONAL",
+  "statusChangedAt": "2026-03-20T09:00:00+09:00",
+  "statusReason": null,
+  "createdAt": "2026-03-20T08:00:00+09:00",
+  "updatedAt": "2026-03-20T09:00:00+09:00"
+}
+```
+
+---
+
+### 11.9 차량 운영 상태 변경
+
+| 항목 | 값 |
+|------|-----|
+| Method | `PATCH` |
+| Path | `/api/v1/admin/vehicles/{vehicleId}` |
+| Auth | Bearer Token (ADMIN) |
+
+**Request Body**
+```json
+{
+  "operationalStatus": "OUT_OF_SERVICE",
+  "statusReason": "배터리 점검"
+}
+```
+
+**유효한 `operationalStatus` 값**: `OPERATIONAL` | `OUT_OF_SERVICE` | `MAINTENANCE`
+
+**Response** `200 OK`
+```json
+{
+  "vehicleId": "veh_00000001",
+  "code": "GIMCHEON-01",
+  "regionCode": "GIMCHEON_JEUNGSAN",
+  "displayName": "김천증산 1호차",
+  "active": true,
+  "operationalStatus": "OUT_OF_SERVICE",
+  "statusChangedAt": "2026-03-20T10:15:00+09:00",
+  "statusReason": "배터리 점검",
+  "createdAt": "2026-03-20T08:00:00+09:00",
+  "updatedAt": "2026-03-20T10:15:00+09:00"
+}
+```
+
+> `OUT_OF_SERVICE` 또는 `MAINTENANCE` 상태의 차량은 신규 배차 대상에서 제외된다.
+>
+> 차량 상태가 다시 `OPERATIONAL`로 전환되면 같은 권역(`regionCode`)의 `RETRY_PENDING` 배차를 Kafka 재평가 흐름으로 다시 깨운다.
+
+**Errors** (`11.8`, `11.9` 공통)
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 404 | `VEHICLE_NOT_FOUND` | 차량을 찾을 수 없음 |
+
+---
+
 ## 12. 상태 Enum 정의
 
 > **`doctorId` 참조 규칙**: API의 `doctorId`는 `DOCTOR_PROFILE.public_id` 값을 의미한다. 내부 저장은 `doctor_profile_id`(`bigint` PK)를 사용한다. 사용자 식별이 필요할 때는 별도로 `userId`를 사용한다.
@@ -1780,8 +1858,13 @@ STARTED → IN_PROGRESS → COMPLETED | ABANDONED | FAILED
 ```
 
 ### INTAKE_SESSION.completionReason
-```
+``` 
 BOOKING_CREATED | NO_INPUT_TIMEOUT | USER_HANGUP | EXISTING_BOOKING_CHECKED
+```
+
+### VEHICLE.operationalStatus
+```
+OPERATIONAL | OUT_OF_SERVICE | MAINTENANCE
 ```
 
 ### INTAKE_SESSION.selectionConfidenceLevel

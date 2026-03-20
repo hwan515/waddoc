@@ -5,8 +5,8 @@
 ```
 infra/
 ├── .env.example              # 환경 변수 템플릿
-├── docker-compose.yml        # 개발 메인 스택 (6 서비스, AI 제외)
-├── docker-compose.prod.yml   # 배포 메인 서버 (6 서비스)
+├── docker-compose.yml        # 개발 메인 스택 (8 서비스, AI 제외)
+├── docker-compose.prod.yml   # 배포 메인 서버 (8 서비스)
 ├── nginx/
 │   ├── dev.conf              # 개발 Nginx (HTTP)
 │   └── prod.conf             # 배포 Nginx (SSL + WSS 프록시)
@@ -45,18 +45,19 @@ docker compose down                # 종료
 - 개발 환경의 `spring-api` 는 GPU 서버의 `443` 포트만 사용한다.
 - 호출 경로는 `https://<DEV_GPU_SERVER_HOST>/idv/...`, `https://<DEV_GPU_SERVER_HOST>/triage/...` 기준이다.
 
-### 개발 환경 (DB/Redis만 Docker + Backend는 로컬 JVM)
+### 개발 환경 (DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
 
 ```bash
 cd infra
-docker compose up -d postgres redis
+docker compose up -d postgres redis zookeeper kafka
 ```
 
 - Backend는 `src/BE/src/main/resources/application.yml`에서 기본 프로파일이 `local`로 설정되어 있으므로 IntelliJ 실행 시 별도 `SPRING_PROFILES_ACTIVE` 지정이 없어도 된다.
-- `application-local.yml`의 기본값으로 Postgres/Redis는 `localhost`에 연결된다.
+- `application-local.yml`과 `application.yml` 기본값으로 Postgres/Redis/Kafka는 각각 `localhost:5432`, `localhost:6379`, `localhost:9092`에 연결된다.
 - 이 방식은 Backend만 로컬 JVM으로 띄우는 용도다. `spring-api` 컨테이너와 동시에 실행하지 않는다.
 - AI 연동까지 확인하려면 `AI_IDV_URL`, `AI_TRIAGE_URL` 환경변수로 GPU 서버의 `443` 경로 기반 주소를 맞춰야 한다.
-- LiveKit 연동까지 확인하려면 별도로 LiveKit 컨테이너를 올리거나 `LIVEKIT_HOST`, `LIVEKIT_URL` 환경변수를 지정해야 한다.
+- LiveKit 연동까지 확인하려면 `docker compose up -d livekit`로 컨테이너를 추가로 올리면 된다. 이 경우 `application-local.yml` 기본값으로 `localhost:7880`에 연결되므로 별도 환경변수 지정은 필요 없다.
+- Kafka listener가 활성화된 상태로 Backend를 띄우므로, `zookeeper`/`kafka` 없이 로컬 JVM을 실행하면 이벤트 소비 기능이 비정상 동작한다.
 - 로컬 더미데이터가 필요하면 `APP_SEED_ENABLED=true`로 Backend를 실행한다. 기본 로그인 비밀번호는 `APP_SEED_DEFAULT_PASSWORD` 또는 기본값 `Passw0rd!`를 사용한다.
 - 시드 계정: `seed_admin`
 - 시드 의사 계정: `seed_doc_im_kim`, `seed_doc_im_park`, `seed_doc_derm_lee`, `seed_doc_ortho_choi`, `seed_doc_neuro_jung`, `seed_doc_eye_han`
@@ -162,12 +163,14 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 | 외부 포트 | 서비스 | 용도 |
 |-----------|--------|------|
 | 80 | nginx | HTTP (API + 프론트엔드) |
+| 9092 | kafka | Kafka host access / 로컬 JVM 연동 |
 | 7880 | livekit | API + signaling WebSocket |
 | 7881 | livekit | ICE/TCP |
 | 7882/udp | livekit | ICE/UDP mux |
 | 3478/udp | livekit | TURN UDP |
 
 > AI 외부 접근 포트는 `443` 하나만 사용한다. `8000`, `8001` 은 GPU 서버 내부 서비스 포트다.
+> `zookeeper`는 개발/배포 모두 내부 네트워크 전용이며 호스트 포트를 노출하지 않는다.
 
 ### 배포 환경
 
@@ -175,6 +178,7 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 |-----------|-----------|--------|------|
 | 80 | 80 | nginx | HTTP → HTTPS 리다이렉트 |
 | 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS) |
+| 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
 | 8881 | 7881 | livekit | ICE/TCP |
 | 8882/udp | 7882/udp | livekit | ICE/UDP mux |
 | 8478/udp | 3478/udp | livekit | TURN UDP |
