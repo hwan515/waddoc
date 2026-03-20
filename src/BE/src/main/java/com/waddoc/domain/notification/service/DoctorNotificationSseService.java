@@ -92,6 +92,10 @@ public class DoctorNotificationSseService {
         return connections == null ? 0 : connections.size();
     }
 
+    public boolean hasConnections(String doctorProfileId) {
+        return countConnections(doctorProfileId) > 0;
+    }
+
     private void removeEmitter(String doctorProfileId, String connectionId) {
         ConcurrentMap<String, SseEmitter> connections = emittersByDoctorId.get(doctorProfileId);
         if (connections == null) {
