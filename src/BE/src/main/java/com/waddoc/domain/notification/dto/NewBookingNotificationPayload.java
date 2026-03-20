@@ -2,6 +2,7 @@ package com.waddoc.domain.notification.dto;
 
 import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.carecase.entity.CareCase;
+import com.waddoc.domain.patient.entity.PatientGender;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -22,7 +23,9 @@ public class NewBookingNotificationPayload {
     private String doctorId;
     private String doctorName;
     private String departmentName;
+    private String patientId;
     private String patientName;
+    private PatientGender patientGender;
     private LocalDate appointmentDate;
     private LocalTime startTime;
     private String location;
@@ -36,7 +39,9 @@ public class NewBookingNotificationPayload {
                 .doctorId(booking.getDoctor().getPublicId())
                 .doctorName(booking.getDoctor().getUser().getName())
                 .departmentName(booking.getDoctor().getDepartmentName())
+                .patientId(booking.getPatient().getPublicId())
                 .patientName(booking.getPatient().getName())
+                .patientGender(booking.getPatient().getGender())
                 .appointmentDate(booking.getAppointmentDate())
                 .startTime(booking.getStartTime())
                 .location(booking.getPatient().getAddress())

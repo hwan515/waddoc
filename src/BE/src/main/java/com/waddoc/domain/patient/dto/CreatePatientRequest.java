@@ -1,5 +1,6 @@
 package com.waddoc.domain.patient.dto;
 
+import com.waddoc.domain.patient.entity.PatientGender;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -24,6 +25,9 @@ public class CreatePatientRequest {
 
     @NotBlank(message = "phone is required")
     private String phone;
+
+    @NotNull(message = "gender is required")
+    private PatientGender gender;
 
     @NotBlank(message = "regionCode is required")
     private String regionCode;

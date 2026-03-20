@@ -1,6 +1,7 @@
 package com.waddoc.domain.booking.service;
 
 import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.notification.service.DoctorNotificationSseService;
 import com.waddoc.global.sms.SmsService;
 import org.junit.jupiter.api.Test;
@@ -52,7 +53,9 @@ class BookingNotificationListenerTest {
                 .doctorId("doc_test123")
                 .doctorName("Doctor Kim")
                 .departmentName("Internal Medicine")
+                .patientId("pat_test123")
                 .patientName("Patient Park")
+                .patientGender(PatientGender.FEMALE)
                 .location("Gyeongbuk Gimcheon-si Jeungsan-myeon")
                 .build();
         BookingCreatedDoctorNotificationEvent event =
@@ -70,6 +73,8 @@ class BookingNotificationListenerTest {
                 .bookingId("bk_test123")
                 .caseId("case_test123")
                 .doctorId("doc_test123")
+                .patientId("pat_test123")
+                .patientGender(PatientGender.UNKNOWN)
                 .build();
         BookingCreatedDoctorNotificationEvent event =
                 new BookingCreatedDoctorNotificationEvent("doc_test123", payload);

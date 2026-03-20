@@ -39,6 +39,10 @@ public class Patient extends BaseTimeEntity {
     @Column(name = "birth_date6", nullable = false, columnDefinition = "bpchar(6)")
     private String birthDate6;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", nullable = false, length = 20)
+    private PatientGender gender;
+
     @Column(name = "region_code", length = 30)
     private String regionCode;
 
@@ -59,20 +63,24 @@ public class Patient extends BaseTimeEntity {
     private LocalDateTime referenceImageUpdatedAt;
 
     @Builder
-    public Patient(String name, LocalDate birthDate, String regionCode, String address, String phone) {
+    public Patient(String name, LocalDate birthDate, PatientGender gender,
+            String regionCode, String address, String phone) {
         this.publicId = PublicIdGenerator.generate("pat_");
         this.name = name;
         this.birthDate = birthDate;
         this.birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
+        this.gender = gender != null ? gender : PatientGender.UNKNOWN;
         this.regionCode = regionCode;
         this.address = address;
         this.phone = phone;
     }
 
-    public void updateProfile(String name, LocalDate birthDate, String regionCode, String address, String phone) {
+    public void updateProfile(String name, LocalDate birthDate, PatientGender gender,
+            String regionCode, String address, String phone) {
         this.name = name;
         this.birthDate = birthDate;
         this.birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
+        this.gender = gender != null ? gender : PatientGender.UNKNOWN;
         this.regionCode = regionCode;
         this.address = address;
         this.phone = phone;

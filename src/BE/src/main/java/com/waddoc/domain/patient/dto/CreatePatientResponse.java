@@ -1,6 +1,7 @@
 package com.waddoc.domain.patient.dto;
 
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGender;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -12,6 +13,7 @@ public class CreatePatientResponse {
     private String name;
     private String birthDate6;
     private String phone;
+    private PatientGender gender;
     private boolean referenceImageRegistered;
 
     public static CreatePatientResponse from(Patient patient) {
@@ -20,6 +22,7 @@ public class CreatePatientResponse {
                 .name(patient.getName())
                 .birthDate6(patient.getBirthDate6())
                 .phone(patient.getPhone())
+                .gender(patient.getGender())
                 .referenceImageRegistered(patient.hasReferenceImage())
                 .build();
     }
