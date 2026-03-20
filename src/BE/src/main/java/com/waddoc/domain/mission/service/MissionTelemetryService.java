@@ -28,7 +28,16 @@ public class MissionTelemetryService {
 
     public void receiveTelemetry(String missionId, String apiKey, MissionTelemetryRequest request) {
         validateApiKey(apiKey);
+        processTelemetry(missionId, request);
+    }
 
+    public void validateApiKey(String apiKey) {
+        if (apiKey == null || apiKey.isBlank() || !telemetryApiKey.equals(apiKey)) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+    }
+
+    public void processTelemetry(String missionId, MissionTelemetryRequest request) {
         Mission mission = missionRepository.findByPublicId(missionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
 
@@ -49,12 +58,6 @@ public class MissionTelemetryService {
 
         mission.recordTelemetry(request.getSourceEventId(), request.getSeqNo(), telemetryTimestamp);
         missionRepository.save(mission);
-    }
-
-    private void validateApiKey(String apiKey) {
-        if (apiKey == null || apiKey.isBlank() || !telemetryApiKey.equals(apiKey)) {
-            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
-        }
     }
 
     private boolean isOutdated(Mission mission, Long seqNo, LocalDateTime timestamp) {
