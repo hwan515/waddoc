@@ -1,4 +1,10 @@
-const ListView = ({ records }) => {
+import React, { useState } from 'react';
+import PrescriptionModal from './PrescriptionModal';
+import OpinionModal from './OpinionModal';
+
+const ListView = ({ records, patientName }) => {
+    const [selectedPrescription, setSelectedPrescription] = useState(null);
+    const [selectedOpinion, setSelectedOpinion] = useState(null);
     return (
         <div className="flex-1 flex flex-col p-6 animate-fade-in w-full bg-white">
             <div className="w-full overflow-hidden border border-slate-200 rounded-2xl shadow-sm bg-white">
@@ -29,7 +35,10 @@ const ListView = ({ records }) => {
                                 </td>
                                 <td className="px-6 py-4 border-r border-slate-200 text-center">
                                     {r.hasPrescription ? (
-                                        <button className="text-sm font-bold text-[#0353A4] hover:bg-[#0353A4]/5 px-3 py-1.5 rounded-lg transition-colors mx-auto">
+                                        <button 
+                                            onClick={() => setSelectedPrescription(r)}
+                                            className="text-sm font-bold text-[#0353A4] hover:text-white hover:bg-[#0353A4] border border-[#0353A4] px-4 py-1.5 rounded-full transition-all mx-auto shadow-sm active:translate-y-[1px]"
+                                        >
                                             처방전 보기
                                         </button>
                                     ) : (
@@ -38,7 +47,10 @@ const ListView = ({ records }) => {
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     {r.hasNote ? (
-                                        <button className="text-sm font-bold text-[#0353A4] hover:bg-[#0353A4]/5 px-3 py-1.5 rounded-lg transition-colors mx-auto">
+                                        <button 
+                                            onClick={() => setSelectedOpinion(r)}
+                                            className="text-sm font-bold text-[#115E59] hover:text-white hover:bg-[#115E59] border border-[#115E59] px-4 py-1.5 rounded-full transition-all mx-auto shadow-sm active:translate-y-[1px]"
+                                        >
                                             소견서 보기
                                         </button>
                                     ) : (
@@ -56,6 +68,20 @@ const ListView = ({ records }) => {
                     </tbody>
                 </table>
             </div>
+
+            {/* Modals */}
+            <PrescriptionModal 
+                isOpen={!!selectedPrescription} 
+                onClose={() => setSelectedPrescription(null)} 
+                record={selectedPrescription} 
+                patientName={patientName}
+            />
+            <OpinionModal 
+                isOpen={!!selectedOpinion} 
+                onClose={() => setSelectedOpinion(null)} 
+                record={selectedOpinion} 
+                patientName={patientName}
+            />
         </div>
     );
 };

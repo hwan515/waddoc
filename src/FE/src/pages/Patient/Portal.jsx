@@ -152,9 +152,9 @@ const PatientPortal = () => {
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0353A4]/20 via-[#B9D6F2] to-[#B9D6F2]/30 z-10"></div>
 
                     {activeTab === 'calendar' ? (
-                        <CalendarView records={calendarEvents} />
+                        <CalendarView records={calendarEvents} patientName={user.name} />
                     ) : (
-                        <ListView records={medicalRecords} />
+                        <ListView records={medicalRecords} patientName={user.name} />
                     )}
                 </div>
             </main>

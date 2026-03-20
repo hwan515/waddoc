@@ -10,7 +10,7 @@ const LegacyEMRDashboard = () => {
 
     // SSE 알림 연동
     const { isConnected, notifications, removeNotification } = useSSE();
-    
+
     // Initial Mock Data Context
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -68,17 +68,17 @@ const LegacyEMRDashboard = () => {
 
     const handleAcceptNotification = (notif) => {
         setReservations(prev => [...prev, {
-            id: notif.caseId || notif.bookingId,
-            ptNo: `NEW_${Math.floor(Math.random() * 10000)}`, // 임시 환자번호
+            id: notif.bookingId,
+            ptNo: notif.patientId,
             name: notif.patientName,
-            gender: '확인불가', // 알림 payload에 성별이 없다면
-            symptom: '비대면 화상진료',
+            gender: notif.patientGender,
+            symptom: "진료시 확인 요청",
             date: notif.appointmentDate,
             time: notif.startTime?.substring(0, 5) || '00:00', // 14:30:00 -> 14:30
             status: '예약',
             type: '비대면'
         }].sort((a, b) => a.time.localeCompare(b.time)));
-        
+
         removeNotification(notif.createdAt);
     };
 
@@ -120,7 +120,7 @@ const LegacyEMRDashboard = () => {
                 </div>
                 <div className="flex items-center space-x-4 pr-2">
                     <div className="text-slate-600 bg-white px-2 py-0.5 border border-slate-300 shadow-inner text-xs">
-                        {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                     <button onClick={handleLogout} className="px-4 py-1 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
                         <span className="text-red-700 font-bold text-xs">종료</span>
@@ -130,7 +130,7 @@ const LegacyEMRDashboard = () => {
 
             {/* 2. 메인 3단 레이아웃 콘텐츠 구역 */}
             <div className="flex-1 flex overflow-hidden p-1 gap-1">
-                
+
                 {/* 좌측: 예약 관리 (대기자 리스트) */}
                 <div className="flex-[4] flex flex-col border border-slate-400 bg-white">
                     {/* 패널 타이틀바 */}
@@ -154,16 +154,15 @@ const LegacyEMRDashboard = () => {
                         <div className="w-24 border-r border-[#3B62A4] py-1">구분</div>
                         <div className="w-28 py-1">상태 (액션)</div>
                     </div>
-                    
+
                     {/* 데이터 테이블 Body 영역 */}
                     <div className="flex-1 overflow-y-auto bg-white">
                         {reservations.map((res, idx) => (
-                            <div 
-                                key={res.id} 
+                            <div
+                                key={res.id}
                                 onClick={() => handlePatientSelect(res.ptNo)}
-                                className={`flex text-xs border-b border-slate-200 cursor-pointer ${
-                                    selectedPatientId === res.ptNo ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
-                                }`}
+                                className={`flex text-xs border-b border-slate-200 cursor-pointer ${selectedPatientId === res.ptNo ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
+                                    }`}
                             >
                                 <div className="w-10 py-1.5 text-center border-r border-slate-200">{idx + 1}</div>
                                 <div className="w-20 py-1.5 text-center border-r border-slate-200">{res.name}</div>
@@ -176,17 +175,16 @@ const LegacyEMRDashboard = () => {
                                 </div>
                                 <div className="w-28 py-1 text-center flex justify-center items-center">
                                     {res.type === '비대면' && res.status === '예약' ? (
-                                        <button 
+                                        <button
                                             onClick={(e) => { e.stopPropagation(); handleStartConsultation(res.id); }}
                                             className="px-2 py-0.5 bg-blue-600 text-white text-xs border border-blue-800 shadow-sm hover:bg-blue-700"
                                         >
                                             진료 시작 🎬
                                         </button>
                                     ) : (
-                                        <span className={`${
-                                            res.status === '진료대기' ? 'text-red-600 font-bold' : 
-                                            res.status === '수납대기' ? 'text-orange-600' : 'text-slate-600'
-                                        }`}>{res.status}</span>
+                                        <span className={`${res.status === '진료대기' ? 'text-red-600 font-bold' :
+                                                res.status === '수납대기' ? 'text-orange-600' : 'text-slate-600'
+                                            }`}>{res.status}</span>
                                     )}
                                 </div>
                             </div>
@@ -198,7 +196,7 @@ const LegacyEMRDashboard = () => {
 
                 {/* 우측 패널들 (상/하 분할) */}
                 <div className="flex-[6] flex flex-col gap-1">
-                    
+
                     {/* 우측 상단: 환자 정보 창 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-[#EFEFEF]">
                         <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
@@ -206,34 +204,34 @@ const LegacyEMRDashboard = () => {
                         </div>
                         <div className="p-2 flex-1 flex flex-col pt-0">
                             {selectedPatientInfo ? (
-                           <div className="bg-white border border-slate-300 p-3 h-full overflow-hidden flex flex-col">
-                                <table className="w-full text-xs text-left border-collapse">
-                                    <tbody>
-                                        <tr>
-                                            <th className="w-24 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">환자번호</th>
-                                            <td className="w-32 border border-slate-300 px-2 py-1.5 font-bold text-blue-800">{selectedPatientInfo.ptNo}</td>
-                                            <th className="w-24 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">성명</th>
-                                            <td className="w-32 border border-slate-300 px-2 py-1.5 font-bold text-lg leading-none">{selectedPatientInfo.name}</td>
-                                            <th className="w-20 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">성별/나이</th>
-                                            <td className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.gender} / 만 {selectedPatientInfo.age}세</td>
-                                        </tr>
-                                        <tr>
-                                            <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">주민등록번호</th>
-                                            <td className="border border-slate-300 px-2 py-1.5 tracking-widest">{selectedPatientInfo.jumin}</td>
-                                            <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">연락처</th>
-                                            <td colSpan="3" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.phone}</td>
-                                        </tr>
-                                        <tr>
-                                            <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">자택주소</th>
-                                            <td colSpan="5" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.address}</td>
-                                        </tr>
-                                        <tr>
-                                            <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">특이사항 (알러지)</th>
-                                            <td colSpan="5" className="border border-slate-300 px-2 py-1.5 text-red-600 font-bold h-12 align-top">{selectedPatientInfo.note}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                           </div>
+                                <div className="bg-white border border-slate-300 p-3 h-full overflow-hidden flex flex-col">
+                                    <table className="w-full text-xs text-left border-collapse">
+                                        <tbody>
+                                            <tr>
+                                                <th className="w-24 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">환자번호</th>
+                                                <td className="w-32 border border-slate-300 px-2 py-1.5 font-bold text-blue-800">{selectedPatientInfo.ptNo}</td>
+                                                <th className="w-24 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">성명</th>
+                                                <td className="w-32 border border-slate-300 px-2 py-1.5 font-bold text-lg leading-none">{selectedPatientInfo.name}</td>
+                                                <th className="w-20 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">성별/나이</th>
+                                                <td className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.gender} / 만 {selectedPatientInfo.age}세</td>
+                                            </tr>
+                                            <tr>
+                                                <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">주민등록번호</th>
+                                                <td className="border border-slate-300 px-2 py-1.5 tracking-widest">{selectedPatientInfo.jumin}</td>
+                                                <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">연락처</th>
+                                                <td colSpan="3" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.phone}</td>
+                                            </tr>
+                                            <tr>
+                                                <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">자택주소</th>
+                                                <td colSpan="5" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.address}</td>
+                                            </tr>
+                                            <tr>
+                                                <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">특이사항 (알러지)</th>
+                                                <td colSpan="5" className="border border-slate-300 px-2 py-1.5 text-red-600 font-bold h-12 align-top">{selectedPatientInfo.note}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
                                 <div className="flex-1 flex items-center justify-center text-slate-400 bg-white border border-slate-300">
                                     선택된 환자가 없습니다.
@@ -247,7 +245,7 @@ const LegacyEMRDashboard = () => {
                         <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
                             <span className="font-bold text-slate-800 text-sm">📁 진료 및 처방 이력</span>
                         </div>
-                        
+
                         {/* 과거 내역 데이터 테이블 */}
                         <div className="bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
                             <div className="w-10 border-r border-[#3B62A4] py-1">순번</div>
@@ -280,12 +278,12 @@ const LegacyEMRDashboard = () => {
                 </div>
 
             </div>
-            
+
             {/* SSE 알림 토스트 (우측 하단) */}
             <div className="fixed bottom-12 right-4 z-50 flex flex-col gap-3 pointer-events-none">
                 {notifications.map((notif, index) => (
-                    <div 
-                        key={notif.createdAt || index} 
+                    <div
+                        key={notif.createdAt || index}
                         className="bg-white border-l-4 border-[#0353A4] shadow-2xl rounded-lg w-80 overflow-hidden pointer-events-auto"
                     >
                         <div className="p-4">
@@ -296,7 +294,7 @@ const LegacyEMRDashboard = () => {
                                     </div>
                                     <h3 className="font-bold text-slate-800">신규 예약 접수</h3>
                                 </div>
-                                <button 
+                                <button
                                     onClick={() => removeNotification(notif.createdAt)}
                                     className="text-slate-400 hover:text-slate-600 transition-colors"
                                 >
@@ -314,13 +312,13 @@ const LegacyEMRDashboard = () => {
                                     {notif.departmentName} · {notif.doctorName}
                                 </div>
                                 <div className="flex gap-2">
-                                    <button 
+                                    <button
                                         onClick={() => handleAcceptNotification(notif)}
                                         className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded shadow-sm hover:bg-green-700 transition"
                                     >
                                         수락
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => removeNotification(notif.createdAt)}
                                         className="px-3 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded shadow-sm hover:bg-slate-300 transition"
                                     >
