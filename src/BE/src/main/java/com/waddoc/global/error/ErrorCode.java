@@ -67,6 +67,7 @@ public enum ErrorCode {
     BOOKING_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "BOOKING_NOT_CANCELLABLE", "취소할 수 없는 상태의 예약입니다."),
     SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "SLOT_NOT_FOUND", "유효하지 않은 슬롯입니다."),
     SLOT_NOT_IN_RECOMMENDATION(HttpStatus.BAD_REQUEST, "SLOT_NOT_IN_RECOMMENDATION", "해당 세션의 추천 결과에 포함되지 않은 슬롯입니다."),
+    VEHICLE_NOT_FOUND(HttpStatus.NOT_FOUND, "VEHICLE_NOT_FOUND", "차량을 찾을 수 없습니다."),
 
     // Recommendation
     RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "RECOMMENDATION_NOT_FOUND", "추천 결과를 찾을 수 없습니다."),

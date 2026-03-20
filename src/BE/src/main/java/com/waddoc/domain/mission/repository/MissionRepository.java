@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,8 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
     Optional<Mission> findByPublicId(String publicId);
 
     Optional<Mission> findByCareCase(CareCase careCase);
+
+    boolean existsByVehicleIdAndPhaseIn(String vehicleId, Collection<MissionPhase> phases);
 
     List<Mission> findAllByCareCaseIn(List<CareCase> careCases);
 

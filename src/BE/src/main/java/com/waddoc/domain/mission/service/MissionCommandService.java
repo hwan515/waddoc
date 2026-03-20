@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 @Service
@@ -43,15 +44,30 @@ public class MissionCommandService {
             throw new BusinessException(ErrorCode.MISSION_ALREADY_EXISTS);
         }
 
-        Mission mission = Mission.builder()
-                .careCase(careCase)
-                .vehicleId(request.getVehicleId())
-                .destination(request.getDestination())
-                .dispatchedAt(request.getScheduledTime().atZoneSameInstant(KST).toLocalDateTime())
-                .build();
-
-        Mission savedMission = missionRepository.save(mission);
+        Mission savedMission = createMissionForDispatch(
+                careCase,
+                request.getVehicleId(),
+                request.getDestination(),
+                request.getScheduledTime().atZoneSameInstant(KST).toLocalDateTime()
+        );
         return CreateMissionResponse.from(savedMission);
+    }
+
+    public Mission createMissionForDispatch(
+            CareCase careCase,
+            String vehicleId,
+            String destination,
+            LocalDateTime dispatchedAt
+    ) {
+        return missionRepository.findByCareCase(careCase)
+                .orElseGet(() -> missionRepository.save(
+                        Mission.builder()
+                                .careCase(careCase)
+                                .vehicleId(vehicleId)
+                                .destination(destination)
+                                .dispatchedAt(dispatchedAt)
+                                .build()
+                ));
     }
 
     public UpdateMissionPhaseResponse updateMissionPhase(
