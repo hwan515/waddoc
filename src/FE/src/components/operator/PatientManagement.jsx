@@ -13,7 +13,7 @@ const PatientManagement = () => {
         name: '',
         birthDate: '',
         phone: '',
-        gender: '',
+        gender: 'UNKNOWN',
         regionCode: '',
         address: ''
     });
@@ -66,7 +66,7 @@ const PatientManagement = () => {
             
             alert('환자 등록이 완료되었습니다.');
             setIsModalOpen(false);
-            setFormData({ name: '', birthDate: '', phone: '', gender: '', regionCode: '', address: '' });
+            setFormData({ name: '', birthDate: '', phone: '', gender: 'UNKNOWN', regionCode: '', address: '' });
             setImageFile(null);
             fetchPatients(); // Refresh list
         } catch (error) {
