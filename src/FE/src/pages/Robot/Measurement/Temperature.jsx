@@ -58,7 +58,8 @@ const Temperature = () => {
                 </h1>
 
                 {/* 사용 방법 가이드 영역 */}
-                <div className="flex flex-row items-stretch justify-center gap-6 w-full max-w-6xl flex-1 mt-8 mb-8">
+                <div className="w-full max-w-6xl flex-1 mt-8 mb-8 flex flex-col justify-center">
+                    <div className="flex flex-row items-stretch justify-center gap-6 w-full">
 
                     {/* 1단계 (각 카드의 너비를 동일하게 하기 위해 flex-1 추가) */}
                     <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
@@ -89,6 +90,7 @@ const Temperature = () => {
                             액정화면에 측정된<br /><span className="text-[#B9D6F2]">체온 값을 확인</span>합니다
                             <span className="block mt-2 text-[#B9D6F2] text-sm opacity-80">(측정값은 자동 저장됩니다)</span>
                         </p>
+                    </div>
                     </div>
                 </div>
 

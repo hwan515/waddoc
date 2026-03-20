@@ -56,7 +56,8 @@ const Ecg = () => {
                 </h1>
 
                 {/* 사용 방법 가이드 영역 */}
-                <div className="flex flex-row items-stretch justify-center gap-6 w-full max-w-6xl flex-1 mt-8 mb-8">
+                <div className="w-full max-w-6xl flex-1 mt-8 mb-8 flex flex-col justify-center items-center">
+                    <div className="flex flex-row items-stretch justify-center gap-6 w-full max-w-3xl">
 
                     {/* 1단계 */}
                     <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 flex flex-col items-center text-center shadow-lg backdrop-blur-sm">
@@ -67,6 +68,7 @@ const Ecg = () => {
                         <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
                             화면에 보이는 것과 같이 손을 올려주세요
                         </p>
+                    </div>
                     </div>
                 </div>
 
