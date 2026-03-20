@@ -111,7 +111,7 @@ class ConsultationSessionControllerTest {
     void issuePatientToken_usesDocumentedJsonPath() throws Exception {
         String sessionId = "ses_test123";
 
-        when(consultationPatientTokenService.issuePatientToken(eq(sessionId), eq("pat_test123"), any()))
+        when(consultationPatientTokenService.issuePatientToken(eq(sessionId), any()))
                 .thenReturn(IssuePatientTokenResponse.builder()
                         .sessionId(sessionId)
                         .patientToken("patient-token")
@@ -122,13 +122,7 @@ class ConsultationSessionControllerTest {
                                 .build())
                         .build());
 
-        mockMvc.perform(post("/api/v1/sessions/{sessionId}/participants/patient/token", sessionId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "patientId": "pat_test123"
-                                }
-                                """))
+        mockMvc.perform(post("/api/v1/sessions/{sessionId}/participants/patient/token", sessionId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sessionId").value(sessionId))
                 .andExpect(jsonPath("$.patientToken").value("patient-token"))

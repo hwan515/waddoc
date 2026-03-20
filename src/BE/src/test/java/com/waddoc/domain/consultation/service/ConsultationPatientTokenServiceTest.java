@@ -18,16 +18,22 @@ import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.MissionTerminalPrincipal;
+import com.waddoc.global.security.authorization.AccessActor;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.security.jwt.MissionTerminalScopes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,14 +67,29 @@ class ConsultationPatientTokenServiceTest {
     private ConsultationPatientTokenService consultationPatientTokenService;
 
     @Test
-    void issuePatientToken_issuesTokenWhenRecentIdentityCheckExists() {
-        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+    void issuePatientToken_issuesTokenForMissionTerminalWhenRecentIdentityCheckExists() {
+        MissionTerminalPrincipal missionTerminalPrincipal = new MissionTerminalPrincipal(
+                "terminal:ms_test123",
+                "ms_test123",
+                "case_test123",
+                List.of(MissionTerminalScopes.ISSUE_PATIENT_TOKEN)
+        );
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                missionTerminalPrincipal,
+                "terminal-token",
+                missionTerminalPrincipal.getAuthorities()
+        );
         ConsultationSession session = buildSession("pat_test123");
         Mission mission = buildMission(session);
         mission.updatePhase(MissionPhase.VERIFYING);
 
         when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
         when(missionRepository.findByCareCase(session.getCareCase())).thenReturn(Optional.of(mission));
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+        )).thenReturn(new AccessActor("terminal:ms_test123", "MISSION_TERMINAL"));
         when(missionIdentityCheckCacheService.findVerified("ms_test123", "pat_test123"))
                 .thenReturn(Optional.of(new MissionIdentityCheckCacheService.VerifiedIdentityCheck(
                         OffsetDateTime.parse("2026-03-18T10:05:00+09:00"),
@@ -79,37 +100,24 @@ class ConsultationPatientTokenServiceTest {
 
         IssuePatientTokenResponse response = consultationPatientTokenService.issuePatientToken(
                 "ses_test123",
-                "pat_test123",
-                admin
+                authentication
         );
 
         assertThat(response.getSessionId()).isEqualTo("ses_test123");
         assertThat(response.getPatientToken()).isEqualTo("patient-token");
         assertThat(response.getExpiresIn()).isEqualTo(7200);
-        verify(accessControlService).assertAdmin(admin);
+        verify(accessControlService).assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+        );
+        verify(missionIdentityCheckCacheService).findVerified("ms_test123", "pat_test123");
         verify(auditLogService).log(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void issuePatientToken_rejectsPatientMismatch() {
-        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
-        ConsultationSession session = buildSession("pat_session");
-
-        when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
-
-        assertThatThrownBy(() -> consultationPatientTokenService.issuePatientToken(
-                "ses_test123",
-                "pat_other",
-                admin
-        ))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.PATIENT_MISMATCH);
-    }
-
-    @Test
     void issuePatientToken_rejectsWhenMissionNotReady() {
-        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication();
         ConsultationSession session = buildSession("pat_test123");
         Mission mission = buildMission(session);
         mission.updatePhase(MissionPhase.ARRIVED);
@@ -119,8 +127,7 @@ class ConsultationPatientTokenServiceTest {
 
         assertThatThrownBy(() -> consultationPatientTokenService.issuePatientToken(
                 "ses_test123",
-                "pat_test123",
-                admin
+                authentication
         ))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -129,19 +136,23 @@ class ConsultationPatientTokenServiceTest {
 
     @Test
     void issuePatientToken_rejectsWhenRecentIdentityCheckMissing() {
-        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication();
         ConsultationSession session = buildSession("pat_test123");
         Mission mission = buildMission(session);
         mission.updatePhase(MissionPhase.VERIFYING);
 
         when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
         when(missionRepository.findByCareCase(session.getCareCase())).thenReturn(Optional.of(mission));
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
         when(missionIdentityCheckCacheService.findVerified("ms_test123", "pat_test123")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> consultationPatientTokenService.issuePatientToken(
                 "ses_test123",
-                "pat_test123",
-                admin
+                authentication
         ))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -214,6 +225,15 @@ class ConsultationPatientTokenServiceTest {
                 .build();
         setField(session, "publicId", "ses_test123");
         return session;
+    }
+
+    private Authentication adminAuthentication() {
+        AuthenticatedUser authenticatedUser = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        return new UsernamePasswordAuthenticationToken(
+                authenticatedUser,
+                "access-token",
+                authenticatedUser.getAuthorities()
+        );
     }
 
     private void setField(Object target, String fieldName, Object value) {

@@ -2,6 +2,7 @@ package com.waddoc.domain.mission.controller;
 
 import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
+import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
 import com.waddoc.domain.mission.dto.MissionIdentityCheckResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
@@ -11,6 +12,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.mission.service.MissionIdentityCheckService;
 import com.waddoc.domain.mission.service.MissionQueryService;
+import com.waddoc.domain.mission.service.MissionTerminalTokenService;
 import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,14 +38,15 @@ import java.time.LocalDate;
 @RestController
 @RequestMapping("/api/v1/missions")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
 public class MissionController {
 
     private final MissionCommandService missionCommandService;
     private final MissionIdentityCheckService missionIdentityCheckService;
     private final MissionQueryService missionQueryService;
+    private final MissionTerminalTokenService missionTerminalTokenService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CreateMissionResponse> createMission(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @Valid @RequestBody CreateMissionRequest request
@@ -52,6 +56,7 @@ public class MissionController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MissionListResponse> getMissions(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -61,6 +66,7 @@ public class MissionController {
     }
 
     @GetMapping("/{missionId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<MissionDetailResponse> getMissionDetail(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @PathVariable String missionId
@@ -69,6 +75,7 @@ public class MissionController {
     }
 
     @PatchMapping("/{missionId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UpdateMissionPhaseResponse> updateMissionPhase(
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
             @PathVariable String missionId,
@@ -77,16 +84,25 @@ public class MissionController {
         return ResponseEntity.ok(missionCommandService.updateMissionPhase(authenticatedUser, missionId, request));
     }
 
-    @PostMapping("/{missionId}/identity-check")
-    public ResponseEntity<MissionIdentityCheckResponse> verifyMissionIdentity(
-            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+    @PostMapping("/{missionId}/terminal/token")
+    @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
+    public ResponseEntity<IssueMissionTerminalTokenResponse> issueMissionTerminalToken(
             @PathVariable String missionId,
-            @RequestPart("patientId") String patientId,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+    ) {
+        return ResponseEntity.ok(missionTerminalTokenService.issueToken(missionId, authenticatedUser));
+    }
+
+    @PostMapping("/{missionId}/identity-check")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MISSION_TERMINAL')")
+    public ResponseEntity<MissionIdentityCheckResponse> verifyMissionIdentity(
+            @PathVariable String missionId,
             @RequestPart("faceImage") MultipartFile faceImage,
-            @RequestPart("idCardImage") MultipartFile idCardImage
+            @RequestPart("idCardImage") MultipartFile idCardImage,
+            Authentication authentication
     ) {
         return ResponseEntity.ok(
-                missionIdentityCheckService.verify(missionId, patientId, faceImage, idCardImage, authenticatedUser)
+                missionIdentityCheckService.verify(missionId, faceImage, idCardImage, authentication)
         );
     }
 }

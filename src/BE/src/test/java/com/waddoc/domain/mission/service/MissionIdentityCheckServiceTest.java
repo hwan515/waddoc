@@ -17,7 +17,10 @@ import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.MissionTerminalPrincipal;
+import com.waddoc.global.security.authorization.AccessActor;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.security.jwt.MissionTerminalScopes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -25,6 +28,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,6 +75,7 @@ class MissionIdentityCheckServiceTest {
     @Test
     void verify_succeedsAndCachesRecentIdentityCheck() throws Exception {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication(admin);
         Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
         mission.updatePhase(MissionPhase.ARRIVED);
         Files.createDirectories(tempDir.resolve("patients/pat_test123"));
@@ -76,6 +83,11 @@ class MissionIdentityCheckServiceTest {
         setField(missionIdentityCheckService, "fileStorageRoot", tempDir.toString());
 
         when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
         when(consultationIdentityVerificationClient.verify(eq("pat_test123"), any(), eq("reference.jpg"), any(), eq("face.jpg"), any(), eq("id-card.jpg")))
                 .thenReturn(successResult());
         when(missionIdentityCheckCacheService.saveVerified("ms_test123", "pat_test123"))
@@ -86,10 +98,9 @@ class MissionIdentityCheckServiceTest {
 
         MissionIdentityCheckResponse response = missionIdentityCheckService.verify(
                 "ms_test123",
-                "pat_test123",
                 new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1, 2, 3}),
                 new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{4, 5, 6}),
-                admin
+                authentication
         );
 
         assertThat(mission.getPhase()).isEqualTo(MissionPhase.VERIFYING);
@@ -100,23 +111,32 @@ class MissionIdentityCheckServiceTest {
         assertThat(response.getIdentityCheck().isMatched()).isTrue();
         verify(missionRepository).save(mission);
         verify(missionIdentityCheckCacheService).saveVerified("ms_test123", "pat_test123");
-        verify(accessControlService).assertAdmin(admin);
+        verify(accessControlService).assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        );
     }
 
     @Test
     void verify_rejectsWhenMissionNotReady() {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication(admin);
         Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
         mission.updatePhase(MissionPhase.DISPATCHED);
 
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
         when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
 
         assertThatThrownBy(() -> missionIdentityCheckService.verify(
                 "ms_test123",
-                "pat_test123",
                 new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1}),
                 new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{2}),
-                admin
+                authentication
         ))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -124,40 +144,25 @@ class MissionIdentityCheckServiceTest {
     }
 
     @Test
-    void verify_rejectsPatientMismatch() {
-        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
-        Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
-        mission.updatePhase(MissionPhase.ARRIVED);
-
-        when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
-
-        assertThatThrownBy(() -> missionIdentityCheckService.verify(
-                "ms_test123",
-                "pat_other",
-                new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1}),
-                new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{2}),
-                admin
-        ))
-                .isInstanceOf(BusinessException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.PATIENT_MISMATCH);
-    }
-
-    @Test
     void verify_rejectsWhenReferenceImageMissing() {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication(admin);
         Mission mission = buildMission("pat_test123", "");
         mission.updatePhase(MissionPhase.VERIFYING);
         setField(missionIdentityCheckService, "fileStorageRoot", tempDir.toString());
 
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
         when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
 
         assertThatThrownBy(() -> missionIdentityCheckService.verify(
                 "ms_test123",
-                "pat_test123",
                 new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1}),
                 new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{2}),
-                admin
+                authentication
         ))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -167,12 +172,18 @@ class MissionIdentityCheckServiceTest {
     @Test
     void verify_rejectsWhenIdentityCheckFails() throws Exception {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication(admin);
         Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
         mission.updatePhase(MissionPhase.VERIFYING);
         Files.createDirectories(tempDir.resolve("patients/pat_test123"));
         Files.write(tempDir.resolve("patients/pat_test123/reference.jpg"), new byte[]{10, 20, 30});
         setField(missionIdentityCheckService, "fileStorageRoot", tempDir.toString());
 
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
         when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
         when(consultationIdentityVerificationClient.verify(eq("pat_test123"), any(), eq("reference.jpg"), any(), eq("face.jpg"), any(), eq("id-card.jpg")))
                 .thenReturn(IdentityVerificationResult.builder()
@@ -190,10 +201,9 @@ class MissionIdentityCheckServiceTest {
 
         assertThatThrownBy(() -> missionIdentityCheckService.verify(
                 "ms_test123",
-                "pat_test123",
                 new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1, 2, 3}),
                 new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{4, 5, 6}),
-                admin
+                authentication
         ))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
@@ -203,10 +213,16 @@ class MissionIdentityCheckServiceTest {
     @Test
     void verify_bypassesWhenFlagEnabled() {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication(admin);
         Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
         mission.updatePhase(MissionPhase.ARRIVED);
         setField(missionIdentityCheckService, "identityCheckBypassEnabled", true);
 
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
         when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
         when(missionIdentityCheckCacheService.saveVerified("ms_test123", "pat_test123"))
                 .thenReturn(new MissionIdentityCheckCacheService.VerifiedIdentityCheck(
@@ -216,10 +232,9 @@ class MissionIdentityCheckServiceTest {
 
         MissionIdentityCheckResponse response = missionIdentityCheckService.verify(
                 "ms_test123",
-                "pat_test123",
                 new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1, 2, 3}),
                 new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{4, 5, 6}),
-                admin
+                authentication
         );
 
         assertThat(mission.getPhase()).isEqualTo(MissionPhase.VERIFYING);
@@ -228,8 +243,57 @@ class MissionIdentityCheckServiceTest {
         assertThat(response.getIdentityCheck().getReasonCodes()).containsExactly("BYPASSED");
         verify(missionRepository).save(mission);
         verify(missionIdentityCheckCacheService).saveVerified("ms_test123", "pat_test123");
-        verify(accessControlService).assertAdmin(admin);
+        verify(accessControlService).assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        );
         verifyNoInteractions(consultationIdentityVerificationClient);
+    }
+
+    @Test
+    void verify_acceptsMissionTerminalAuthentication() {
+        Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
+        mission.updatePhase(MissionPhase.ARRIVED);
+        setField(missionIdentityCheckService, "identityCheckBypassEnabled", true);
+
+        MissionTerminalPrincipal terminalPrincipal = new MissionTerminalPrincipal(
+                "terminal:ms_test123",
+                "ms_test123",
+                "case_test123",
+                List.of(MissionTerminalScopes.IDENTITY_CHECK)
+        );
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                terminalPrincipal,
+                "terminal-token",
+                terminalPrincipal.getAuthorities()
+        );
+
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("terminal:ms_test123", "MISSION_TERMINAL"));
+        when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
+        when(missionIdentityCheckCacheService.saveVerified("ms_test123", "pat_test123"))
+                .thenReturn(new MissionIdentityCheckCacheService.VerifiedIdentityCheck(
+                        OffsetDateTime.parse("2026-03-18T10:05:00+09:00"),
+                        600
+                ));
+
+        MissionIdentityCheckResponse response = missionIdentityCheckService.verify(
+                "ms_test123",
+                new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1, 2, 3}),
+                new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{4, 5, 6}),
+                authentication
+        );
+
+        assertThat(response.getStatus()).isEqualTo("VERIFIED");
+        verify(accessControlService).assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        );
     }
 
     private IdentityVerificationResult successResult() {
@@ -304,6 +368,14 @@ class MissionIdentityCheckServiceTest {
                 .build();
         setField(mission, "publicId", "ms_test123");
         return mission;
+    }
+
+    private Authentication adminAuthentication(AuthenticatedUser authenticatedUser) {
+        return new UsernamePasswordAuthenticationToken(
+                authenticatedUser,
+                "access-token",
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+        );
     }
 
     private void setField(Object target, String fieldName, Object value) {

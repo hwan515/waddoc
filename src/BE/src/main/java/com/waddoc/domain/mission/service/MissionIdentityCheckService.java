@@ -10,11 +10,13 @@ import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
-import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.authorization.AccessActor;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.security.jwt.MissionTerminalScopes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -47,12 +49,15 @@ public class MissionIdentityCheckService {
 
     public MissionIdentityCheckResponse verify(
             String missionId,
-            String patientId,
             MultipartFile faceImage,
             MultipartFile idCardImage,
-            AuthenticatedUser authenticatedUser
+            Authentication authentication
     ) {
-        accessControlService.assertAdmin(authenticatedUser);
+        AccessActor actor = accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                missionId,
+                MissionTerminalScopes.IDENTITY_CHECK
+        );
 
         Mission mission = missionRepository.findWithDetailsByPublicId(missionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
@@ -62,9 +67,6 @@ public class MissionIdentityCheckService {
         }
 
         Patient patient = mission.getCareCase().getPatient();
-        if (!patient.getPublicId().equals(patientId)) {
-            throw new BusinessException(ErrorCode.PATIENT_MISMATCH);
-        }
 
         if (mission.getPhase() == MissionPhase.ARRIVED) {
             mission.updatePhase(MissionPhase.VERIFYING);
@@ -72,12 +74,12 @@ public class MissionIdentityCheckService {
         }
 
         if (identityCheckBypassEnabled) {
-            return bypassIdentityCheck(mission, patient, authenticatedUser);
+            return bypassIdentityCheck(mission, patient, actor);
         }
 
         byte[] referenceImage = readReferenceImage(patient);
         IdentityVerificationResult identityVerificationResult = consultationIdentityVerificationClient.verify(
-                patientId,
+                patient.getPublicId(),
                 referenceImage,
                 extractFilename(patient.getReferenceImagePath()),
                 getBytes(faceImage),
@@ -96,8 +98,8 @@ public class MissionIdentityCheckService {
                 "MISSION",
                 mission.getPublicId(),
                 "corr_mis_" + mission.getPublicId(),
-                authenticatedUser.userId(),
-                authenticatedUser.role().name(),
+                actor.actorId(),
+                actor.actorRole(),
                 Map.of(
                         "patientId", patient.getPublicId(),
                         "missionPhase", mission.getPhase().name(),
@@ -117,7 +119,7 @@ public class MissionIdentityCheckService {
     private MissionIdentityCheckResponse bypassIdentityCheck(
             Mission mission,
             Patient patient,
-            AuthenticatedUser authenticatedUser
+            AccessActor actor
     ) {
         // TODO: Remove this bypass once the AI IDV server is stable and all environments use the real verification flow.
         log.warn(
@@ -134,8 +136,8 @@ public class MissionIdentityCheckService {
                 "MISSION",
                 mission.getPublicId(),
                 "corr_mis_" + mission.getPublicId(),
-                authenticatedUser.userId(),
-                authenticatedUser.role().name(),
+                actor.actorId(),
+                actor.actorRole(),
                 Map.of(
                         "patientId", patient.getPublicId(),
                         "missionPhase", mission.getPhase().name()

@@ -1,6 +1,7 @@
 package com.waddoc.domain.mission.controller;
 
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
+import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
 import com.waddoc.domain.mission.dto.MissionIdentityCheckResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
@@ -10,6 +11,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.mission.service.MissionIdentityCheckService;
 import com.waddoc.domain.mission.service.MissionQueryService;
+import com.waddoc.domain.mission.service.MissionTerminalTokenService;
 import com.waddoc.global.error.GlobalExceptionHandler;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,9 @@ class MissionControllerTest {
 
     @MockBean
     private MissionIdentityCheckService missionIdentityCheckService;
+
+    @MockBean
+    private MissionTerminalTokenService missionTerminalTokenService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
@@ -182,7 +187,6 @@ class MissionControllerTest {
     void verifyMissionIdentity_usesDocumentedMultipartPath() throws Exception {
         when(missionIdentityCheckService.verify(
                 eq("ms_F2gHn6"),
-                eq("pat_T7nLp4"),
                 any(),
                 any(),
                 isNull()
@@ -206,12 +210,10 @@ class MissionControllerTest {
                 .nextStep("VITALS")
                 .build());
 
-        MockMultipartFile patientId = new MockMultipartFile("patientId", "", MediaType.TEXT_PLAIN_VALUE, "pat_T7nLp4".getBytes());
         MockMultipartFile faceImage = new MockMultipartFile("faceImage", "face.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{1, 2, 3});
         MockMultipartFile idCardImage = new MockMultipartFile("idCardImage", "id-card.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[]{4, 5, 6});
 
         mockMvc.perform(multipart("/api/v1/missions/{missionId}/identity-check", "ms_F2gHn6")
-                        .file(patientId)
                         .file(faceImage)
                         .file(idCardImage))
                 .andExpect(status().isOk())
@@ -219,5 +221,24 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.patientId").value("pat_T7nLp4"))
                 .andExpect(jsonPath("$.status").value("VERIFIED"))
                 .andExpect(jsonPath("$.nextStep").value("VITALS"));
+    }
+
+    @Test
+    void issueMissionTerminalToken_returnsMissionScopedToken() throws Exception {
+        when(missionTerminalTokenService.issueToken(eq("ms_F2gHn6"), isNull()))
+                .thenReturn(IssueMissionTerminalTokenResponse.builder()
+                        .missionId("ms_F2gHn6")
+                        .caseId("case_T7nLp4")
+                        .terminalToken("mission-terminal-token")
+                        .expiresIn(1800)
+                        .scopes(List.of("mission:identity-check", "session:issue-patient-token"))
+                        .build());
+
+        mockMvc.perform(post("/api/v1/missions/{missionId}/terminal/token", "ms_F2gHn6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.missionId").value("ms_F2gHn6"))
+                .andExpect(jsonPath("$.caseId").value("case_T7nLp4"))
+                .andExpect(jsonPath("$.terminalToken").value("mission-terminal-token"))
+                .andExpect(jsonPath("$.scopes[0]").value("mission:identity-check"));
     }
 }

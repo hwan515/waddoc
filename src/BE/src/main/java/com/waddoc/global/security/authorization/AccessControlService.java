@@ -11,7 +11,9 @@ import com.waddoc.domain.user.entity.Role;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.MissionTerminalPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -73,8 +75,38 @@ public class AccessControlService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PATIENT_NOT_FOUND));
     }
 
+    public AccessActor assertAdminOrMissionTerminal(
+            Authentication authentication,
+            String missionId,
+            String requiredScope
+    ) {
+        assertAuthenticated(authentication);
+
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof AuthenticatedUser authenticatedUser) {
+            assertAdmin(authenticatedUser);
+            return new AccessActor(authenticatedUser.userId(), authenticatedUser.role().name());
+        }
+
+        if (principal instanceof MissionTerminalPrincipal missionTerminalPrincipal) {
+            if (!missionTerminalPrincipal.missionId().equals(missionId)
+                    || !missionTerminalPrincipal.hasScope(requiredScope)) {
+                throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
+            }
+            return new AccessActor(missionTerminalPrincipal.subject(), missionTerminalPrincipal.actorRole());
+        }
+
+        throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+    }
+
     private void assertAuthenticated(AuthenticatedUser authenticatedUser) {
         if (authenticatedUser == null) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+    }
+
+    private void assertAuthenticated(Authentication authentication) {
+        if (authentication == null || authentication.getPrincipal() == null) {
             throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
         }
     }

@@ -1096,7 +1096,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 >
 > **토큰 발급 정책**: 의사와 환자의 토큰은 **별도 엔드포인트**에서 발급한다.
 > - 의사: 세션 생성 시 (9.1) 자신의 토큰만 발급
-> - 환자: 미션이 진료 준비 단계에 도달한 뒤 차량 태블릿에서 **본인 확인** 요청 (9.2), 이후 **활력징후 단계 완료 후, 의사 세션이 준비되면** **환자 토큰 발급** 요청 (9.3)
+> - 차량 단말: 미션에 바인딩된 제한 토큰 발급 (9.2)
+> - 환자: 차량 단말이 `MISSION_TERMINAL` 토큰으로 **본인 확인** 요청 (9.3), 이후 **활력징후 단계 완료 후, 의사 세션이 준비되면** **환자 토큰 발급** 요청 (9.4)
 
 ### 9.1 진료 세션 생성 — 의사 토큰 발급
 
@@ -1150,17 +1151,54 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.2 환자 본인 확인 (차량 태블릿 — 관리자 인증)
+### 9.2 차량 단말 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/missions/{missionId}/terminal/token` |
+| Auth | Bearer Token (DOCTOR, ADMIN) |
+
+> 차량 태블릿은 관리자 JWT를 직접 보관하지 않고, **해당 미션 범위로 제한된 단말 토큰**만 사용한다.
+> 서버는 요청자가 해당 케이스를 조회·진료할 수 있는 의사 또는 관리자임을 확인한 뒤, `missionId`에 바인딩된 짧은 TTL의 `MISSION_TERMINAL` 토큰을 발급한다.
+> 이 토큰은 **본인 확인**과 **환자 WebRTC 토큰 발급**에만 사용할 수 있으며 다른 관리자 API에는 사용할 수 없다.
+
+**Request Body**: 없음
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "terminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "mission:identity-check",
+    "session:issue-patient-token"
+  ]
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+| 403 | `AUTH_FORBIDDEN` | 해당 미션/케이스에 접근 권한이 없는 사용자 |
+
+---
+
+### 9.3 환자 본인 확인 (차량 태블릿 — 미션 단말 토큰)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/missions/{missionId}/identity-check` |
-| Auth | Bearer Token (ADMIN) |
+| Auth | Bearer Token (MISSION_TERMINAL) |
 
-> 차량 태블릿은 **운영 단말**로 정의하며, 관리자 계정으로 로그인되어 있다.
+> 차량 태블릿은 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로만 호출한다.
 > `진료 시작` 버튼은 환자 세션 생성이 아니라, 미션 단계 전환과 본인 확인/현장 진료 준비 시작을 의미한다.
-> 서버는 `patientId` 기준으로 `PATIENT.reference_image_path`를 조회한 뒤 파일 스토리지에서 기존 기준 이미지를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
+> 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
 > GPU 서버 내부 응답 필수 필드: `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`
 > Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
 > 검증 성공 시 서버는 별도 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 차량 태블릿은 활력징후 단계로 이동한다.
@@ -1169,7 +1207,6 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| `patientId` | string | O | 케이스 환자 ID |
 | `faceImage` | file | O | 차량에서 촬영한 환자 얼굴 이미지 |
 | `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지 |
 
@@ -1218,29 +1255,21 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 404 | `MISSION_NOT_FOUND` | 미션 없음 |
 | 403 | `MISSION_NOT_READY` | 미션이 본인 확인 가능한 준비 상태가 아님 |
 | 403 | `IDENTITY_CHECK_FAILED` | GPU 본인 확인 실패 |
-| 403 | `PATIENT_MISMATCH` | 미션의 케이스 환자 ID와 불일치 |
 | 409 | `REFERENCE_IMAGE_MISSING` | 환자 기준 이미지가 등록되지 않음 |
 | 502 | `AI_IDV_REQUEST_FAILED` | 본인 확인 AI 서버 호출 실패 |
 
 ---
 
-### 9.3 환자 토큰 발급 (차량 태블릿 — 관리자 인증)
+### 9.4 환자 토큰 발급 (차량 태블릿 — 미션 단말 토큰)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/sessions/{sessionId}/participants/patient/token` |
-| Auth | Bearer Token (ADMIN) |
+| Auth | Bearer Token (MISSION_TERMINAL) |
 
 > 차량 태블릿은 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청한다.
-> 이 API는 이미 성공한 본인 확인 상태를 검증한 뒤, 환자용 LiveKit 토큰만 발급한다.
-
-**Request Body**
-```json
-{
-  "patientId": "pat_T7nLp4"
-}
-```
+> 이 API는 `sessionId -> case -> mission -> patient`로 대상 환자를 결정하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
 
 **Response** `200 OK`
 ```json
@@ -1261,12 +1290,11 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 |--------|-----------|------|
 | 403 | `MISSION_NOT_READY` | 미션이 환자 참가 가능한 준비 상태가 아님 |
 | 404 | `SESSION_NOT_FOUND` | 세션 없음 |
-| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
 | 403 | `IDENTITY_CHECK_NOT_CONFIRMED` | 최근 본인 확인 성공 상태가 없거나 만료됨 |
 
 ---
 
-### 9.4 세션 토큰 재발급
+### 9.5 세션 토큰 재발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1311,7 +1339,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.5 세션 상태 조회
+### 9.6 세션 상태 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1348,7 +1376,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.6 진료 종료 및 요약 기록
+### 9.7 진료 종료 및 요약 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1385,7 +1413,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.7 LiveKit Webhook 수신 (서버 간)
+### 9.8 LiveKit Webhook 수신 (서버 간)
 
 | 항목 | 값 |
 |------|-----|
