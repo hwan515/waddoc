@@ -80,6 +80,10 @@ function getBookingLookupPrompt(
   return `${getBookingSummary(booking, currentIndex, totalCount)} ${options}`;
 }
 
+function isValidPhoneNumber(phone: string): boolean {
+  return /^[0-9]{9,20}$/.test(phone);
+}
+
 export function useIntakeFlow() {
   const store = useIntakeStore();
   const { speak, stop: stopTTS } = useTTS();
@@ -196,16 +200,23 @@ export function useIntakeFlow() {
   );
 
   const startCall = useCallback(async () => {
-    const callerPhone =
-      useIntakeStore.getState().callerPhone || DEFAULT_CALLER_PHONE;
+    const enteredPhone = useIntakeStore.getState().dialBuffer.trim();
+    if (!isValidPhoneNumber(enteredPhone)) {
+      store.addMessage({
+        role: 'system',
+        text: '환자 전화번호 9~20자리를 입력해주세요.',
+        type: 'info',
+      });
+      return;
+    }
 
     store.reset();
-    store.setCallerPhone(callerPhone);
+    store.setCallerPhone(enteredPhone);
 
     if (!USE_MOCK) {
       store.setIsLoading(true);
       try {
-        const { intakeSessionId } = await intakeApi.createSession(callerPhone);
+        const { intakeSessionId } = await intakeApi.createSession(enteredPhone);
         store.setSessionId(intakeSessionId);
       } catch {
         store.addMessage({
@@ -555,6 +566,18 @@ export function useIntakeFlow() {
     async (digit: string) => {
       const { phase } = useIntakeStore.getState();
 
+      if (phase === 'IDLE' || phase === 'SESSION_END') {
+        if (phase === 'SESSION_END') {
+          store.reset();
+        }
+        if (digit === '#') {
+          store.clearDialBuffer();
+          return;
+        }
+        store.appendDialBuffer(digit);
+        return;
+      }
+
       if (phase === 'IDENTIFY_BY_INPUT' || phase === 'EXISTING_IDENTIFY') {
         if (digit === '#') {
           submitDialBufferRef.current?.();
@@ -722,6 +745,7 @@ export function useIntakeFlow() {
     endCall,
     handleDigit,
     submitDialBuffer,
+    clearDialBuffer: store.clearDialBuffer,
   };
 }
 

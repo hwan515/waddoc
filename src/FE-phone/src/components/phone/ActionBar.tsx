@@ -5,6 +5,7 @@ interface ActionBarProps {
   onCall: () => void;
   onHangUp: () => void;
   onSend: () => void;
+  onClear: () => void;
   dialBuffer: string;
   showSend: boolean;
 }
@@ -14,11 +15,14 @@ export default function ActionBar({
   onCall,
   onHangUp,
   onSend,
+  onClear,
   dialBuffer,
   showSend,
 }: ActionBarProps) {
   const isIdle = phase === 'IDLE';
   const isEnded = phase === 'SESSION_END';
+  const canStartCall = (isIdle || isEnded) && !!dialBuffer;
+  const showClear = (isIdle || isEnded) && !!dialBuffer;
 
   return (
     <div className="action-bar">
@@ -26,7 +30,7 @@ export default function ActionBar({
         <button
           className="action-btn action-btn--call"
           onClick={onCall}
-          disabled={!isIdle && !isEnded}
+          disabled={!canStartCall}
           title="전화 걸기"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
@@ -36,6 +40,15 @@ export default function ActionBar({
       </div>
 
       <div className="action-btn-wrapper">
+        {showClear && (
+          <button
+            className="action-btn action-btn--clear"
+            onClick={onClear}
+            title="입력 초기화"
+          >
+            C
+          </button>
+        )}
         {showSend && dialBuffer && (
           <button className="action-btn action-btn--send" onClick={onSend} title="입력 전송">
             ✉
