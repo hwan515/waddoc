@@ -787,7 +787,11 @@
   "patient": {
     "patientId": "pat_Zk3mQ9",
     "name": "홍길동",
-    "birthDate6": "580315"
+    "birthDate6": "580315",
+    "birthDate": "1958-03-15",
+    "gender": "MALE",
+    "phone": "01012345678",
+    "address": "경북 울릉군 울릉읍 ..."
   },
   "doctor": {
     "doctorId": "doc_P5wMn4",
@@ -805,6 +809,16 @@
   "createdAt": "2026-03-10T10:05:00+09:00"
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `patient.patientId` | string | 환자 공개 ID |
+| `patient.name` | string | 환자 이름 |
+| `patient.birthDate6` | string | 생년월일 6자리 |
+| `patient.birthDate` | string | 생년월일 (`YYYY-MM-DD`) |
+| `patient.gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `patient.phone` | string | 환자 전화번호 |
+| `patient.address` | string | 환자 주소 |
 
 ---
 
@@ -830,7 +844,9 @@
     {
       "caseId": "case_T7nLp4",
       "status": "PREPARING",
+      "patientId": "pat_Zk3mQ9",
       "patientName": "홍길동",
+      "patientGender": "MALE",
       "departmentName": "내과",
       "appointmentDate": "2026-03-11",
       "startTime": "10:00",
@@ -840,6 +856,19 @@
   "totalCount": 1
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `cases[].caseId` | string | 케이스 공개 ID |
+| `cases[].status` | string | 케이스 상태 |
+| `cases[].patientId` | string | 환자 공개 ID |
+| `cases[].patientName` | string | 환자 이름 |
+| `cases[].patientGender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `cases[].departmentName` | string | 진료과명 |
+| `cases[].appointmentDate` | string | 예약 날짜 (`YYYY-MM-DD`) |
+| `cases[].startTime` | string | 예약 시작 시간 |
+| `cases[].missionPhase` | string | 연결된 미션 단계 |
+| `totalCount` | int | 조회된 케이스 수 |
 
 ---
 
@@ -1059,7 +1088,7 @@ data: {"connectedAt":"2026-03-19T17:20:00+09:00"}
 ```text
 id: 73a8f5a7-8df7-4f08-b52e-0d0cb3e0a2f5
 event: notification
-data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientId":"pat_Zk3mQ9","patientName":"박순자","patientGender":"FEMALE","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
+data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientId":"pat_Zk3mQ9","patientName":"박순자","patientGender":"FEMALE","patientBirthDate":"1958-03-15","patientPhone":"01012345678","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
 ```
 
 > `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
@@ -1081,6 +1110,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | `patientId` | string | O | 환자 ID (`pat_...`) |
 | `patientName` | string | O | 환자명 |
 | `patientGender` | string | O | 환자 성별 (`MALE` | `FEMALE` | `UNKNOWN`) |
+| `patientBirthDate` | string | O | 환자 생년월일 (`YYYY-MM-DD`) |
+| `patientPhone` | string | O | 환자 전화번호 |
 | `appointmentDate` | string | O | 예약 날짜 (`YYYY-MM-DD`) |
 | `startTime` | string | O | 예약 시작 시간 (`HH:mm:ss`) |
 | `location` | string | O | 환자 주소 |
