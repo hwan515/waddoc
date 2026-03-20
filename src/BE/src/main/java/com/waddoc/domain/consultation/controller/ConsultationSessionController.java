@@ -2,7 +2,6 @@ package com.waddoc.domain.consultation.controller;
 
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.dto.ConsultationSessionStatusResponse;
-import com.waddoc.domain.consultation.dto.IssuePatientTokenRequest;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
 import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
 import com.waddoc.domain.consultation.dto.PutConsultationSummaryRequest;
@@ -18,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -50,18 +50,13 @@ public class ConsultationSessionController {
     }
 
     @PostMapping("/{sessionId}/participants/patient/token")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MISSION_TERMINAL')")
     public ResponseEntity<IssuePatientTokenResponse> issuePatientToken(
             @PathVariable String sessionId,
-            @Valid @RequestBody IssuePatientTokenRequest request,
-            @AuthenticationPrincipal AuthenticatedUser authenticatedUser
+            Authentication authentication
     ) {
         return ResponseEntity.ok(
-                consultationPatientTokenService.issuePatientToken(
-                        sessionId,
-                        request.getPatientId(),
-                        authenticatedUser
-                )
+                consultationPatientTokenService.issuePatientToken(sessionId, authentication)
         );
     }
 

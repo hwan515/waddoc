@@ -12,10 +12,12 @@ import com.waddoc.domain.mission.service.MissionIdentityCheckCacheService;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
-import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.authorization.AccessActor;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.security.jwt.MissionTerminalScopes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,11 +42,8 @@ public class ConsultationPatientTokenService {
     @Transactional(readOnly = true)
     public IssuePatientTokenResponse issuePatientToken(
             String sessionId,
-            String patientId,
-            AuthenticatedUser authenticatedUser
+            Authentication authentication
     ) {
-        accessControlService.assertAdmin(authenticatedUser);
-
         ConsultationSession session = consultationSessionRepository.findWithParticipantsByPublicId(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 
@@ -53,17 +52,18 @@ public class ConsultationPatientTokenService {
         }
 
         Patient patient = session.getCareCase().getPatient();
-        if (!patient.getPublicId().equals(patientId)) {
-            throw new BusinessException(ErrorCode.PATIENT_MISMATCH);
-        }
-
         Mission mission = missionRepository.findByCareCase(session.getCareCase())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_READY));
         if (!READY_MISSION_PHASES.contains(mission.getPhase())) {
             throw new BusinessException(ErrorCode.MISSION_NOT_READY);
         }
+        AccessActor actor = accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                mission.getPublicId(),
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+        );
 
-        if (missionIdentityCheckCacheService.findVerified(mission.getPublicId(), patientId).isEmpty()) {
+        if (missionIdentityCheckCacheService.findVerified(mission.getPublicId(), patient.getPublicId()).isEmpty()) {
             throw new BusinessException(ErrorCode.IDENTITY_CHECK_NOT_CONFIRMED);
         }
 
@@ -73,8 +73,8 @@ public class ConsultationPatientTokenService {
                 "CONSULTATION_SESSION",
                 session.getPublicId(),
                 "corr_ses_" + session.getPublicId(),
-                authenticatedUser.userId(),
-                authenticatedUser.role().name(),
+                actor.actorId(),
+                actor.actorRole(),
                 Map.of(
                         "patientId", patient.getPublicId(),
                         "missionPhase", mission.getPhase().name()
