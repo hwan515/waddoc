@@ -6,7 +6,7 @@
 
 - `frontend`: 마이크 캡처, 실시간 자막 표시, 채팅 UI, 브라우저 TTS
 - `main-server`: 세션 관리, 메시지 저장, 예약 플로우 진입
-- `ai-server`: 실시간 STT WebSocket, Upstage 추천 어댑터
+- `ai-server`: GPU 기반 IDV verify API, 실시간 STT WebSocket, Upstage 추천 어댑터
 
 ## Request Flow
 
@@ -21,6 +21,16 @@
 9. Spring이 봇 메시지를 저장한 뒤 프론트에 반환합니다.
 10. 프론트는 추천 문구를 말풍선과 TTS로 동시에 출력합니다.
 
+## Vehicle IDV Flow
+
+1. 차량 태블릿이 `mission identity-check` 요청을 Spring으로 보냅니다.
+2. Spring이 환자 기준 이미지를 조회합니다.
+3. Spring이 FastAPI `POST /idv/api/v1/verify`로 `referenceImage`, `faceImage`, `idCardImage`를 전송합니다.
+4. FastAPI가 얼굴 매칭, 신분증 OCR, 신분증 얼굴 대조를 수행합니다.
+5. FastAPI가 점수와 OCR 결과를 정규화해 Spring에 반환합니다.
+6. Spring이 환자 원본 정보와 재검증한 뒤 최근 본인확인 성공 상태를 캐시에 저장합니다.
+7. 차량 태블릿은 활력징후 단계로 이동하고, 세션 준비 후 환자 토큰을 발급받아 진료실에 입장합니다.
+
 ## Service Boundaries
 
 ### Frontend
@@ -34,12 +44,15 @@
 - `/api/v1/chat` 공개 REST API 담당
 - 세션 생성과 메시지 저장 담당
 - final transcript만 받아 FastAPI에 triage를 요청
+- 환자 기준 이미지 조회 및 본인확인 결과 재검증 담당
+- 최근 본인확인 성공 상태 캐시 및 환자 토큰 발급 담당
 
 ### AI Server
 
+- `/idv/api/v1` 본인확인 REST API 담당
 - `/api/v1/stt` 실시간 WebSocket 담당
 - `/api/v1/triage` 추천 API 담당
-- STT 엔진과 Upstage 프롬프트 로직을 캡슐화
+- 얼굴 매칭/OCR/STT/추천 로직을 캡슐화
 
 ## Realtime Design Rules
 

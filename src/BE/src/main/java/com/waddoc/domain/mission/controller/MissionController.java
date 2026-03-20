@@ -3,11 +3,13 @@ package com.waddoc.domain.mission.controller;
 import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
+import com.waddoc.domain.mission.dto.MissionIdentityCheckResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
 import com.waddoc.domain.mission.dto.UpdateMissionPhaseRequest;
 import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.service.MissionCommandService;
+import com.waddoc.domain.mission.service.MissionIdentityCheckService;
 import com.waddoc.domain.mission.service.MissionQueryService;
 import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.validation.Valid;
@@ -25,6 +27,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
@@ -35,6 +39,7 @@ import java.time.LocalDate;
 public class MissionController {
 
     private final MissionCommandService missionCommandService;
+    private final MissionIdentityCheckService missionIdentityCheckService;
     private final MissionQueryService missionQueryService;
 
     @PostMapping
@@ -70,5 +75,18 @@ public class MissionController {
             @Valid @RequestBody UpdateMissionPhaseRequest request
     ) {
         return ResponseEntity.ok(missionCommandService.updateMissionPhase(authenticatedUser, missionId, request));
+    }
+
+    @PostMapping("/{missionId}/identity-check")
+    public ResponseEntity<MissionIdentityCheckResponse> verifyMissionIdentity(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String missionId,
+            @RequestPart("patientId") String patientId,
+            @RequestPart("faceImage") MultipartFile faceImage,
+            @RequestPart("idCardImage") MultipartFile idCardImage
+    ) {
+        return ResponseEntity.ok(
+                missionIdentityCheckService.verify(missionId, patientId, faceImage, idCardImage, authenticatedUser)
+        );
     }
 }

@@ -2,6 +2,7 @@ package com.waddoc.domain.consultation.controller;
 
 import com.waddoc.domain.consultation.dto.ConsultationSummaryResponse;
 import com.waddoc.domain.consultation.dto.ConsultationSessionStatusResponse;
+import com.waddoc.domain.consultation.dto.IssuePatientTokenRequest;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
 import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
 import com.waddoc.domain.consultation.dto.PutConsultationSummaryRequest;
@@ -15,7 +16,6 @@ import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,9 +26,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/sessions")
@@ -51,21 +49,17 @@ public class ConsultationSessionController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping(value = "/{sessionId}/participants/patient/token", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/{sessionId}/participants/patient/token")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<IssuePatientTokenResponse> issuePatientToken(
             @PathVariable String sessionId,
-            @RequestPart("patientId") String patientId,
-            @RequestPart("faceImage") MultipartFile faceImage,
-            @RequestPart("idCardImage") MultipartFile idCardImage,
+            @Valid @RequestBody IssuePatientTokenRequest request,
             @AuthenticationPrincipal AuthenticatedUser authenticatedUser
     ) {
         return ResponseEntity.ok(
                 consultationPatientTokenService.issuePatientToken(
                         sessionId,
-                        patientId,
-                        faceImage,
-                        idCardImage,
+                        request.getPatientId(),
                         authenticatedUser
                 )
         );
