@@ -1,5 +1,6 @@
 package com.waddoc.domain.guardian.dto;
 
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.patient.entity.PatientGuardianLink;
 import lombok.Builder;
 import lombok.Getter;
@@ -16,6 +17,7 @@ public class GuardianPatientResponse {
     private String phone;
     private String regionCode;
     private String address;
+    private PatientGender gender;
     private String relation;
     private LocalDate approvedAt;
 
@@ -27,6 +29,7 @@ public class GuardianPatientResponse {
                 .phone(link.getPatient().getPhone())
                 .regionCode(link.getPatient().getRegionCode())
                 .address(link.getPatient().getAddress())
+                .gender(link.getPatient().getGender())
                 .relation(link.getRelation())
                 .approvedAt(link.getApprovedAt() != null ? link.getApprovedAt().toLocalDate() : null)
                 .build();

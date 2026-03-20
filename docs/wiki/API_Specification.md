@@ -1457,12 +1457,25 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
       "phone": "01012345678",
       "regionCode": "ULLEUNG",
       "address": "경북 울릉군 울릉읍 ...",
+      "gender": "MALE",
       "relation": "자녀",
       "approvedAt": "2026-01-15"
     }
   ]
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `patients[].patientId` | string | 환자 공개 ID |
+| `patients[].name` | string | 환자 이름 |
+| `patients[].birthDate6` | string | 생년월일 6자리 |
+| `patients[].phone` | string | 전화번호 |
+| `patients[].regionCode` | string | 지역 코드 |
+| `patients[].address` | string | 주소 |
+| `patients[].gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `patients[].relation` | string | 보호자와 환자의 관계 |
+| `patients[].approvedAt` | date | 연결 승인 일자 |
 
 ---
 
@@ -1585,6 +1598,39 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | `phone` | string | X | 전화번호 검색 |
 | `page` | int | X | 페이지 |
 | `size` | int | X | 페이지 크기 |
+
+**Response** `200 OK`
+```json
+{
+  "patients": [
+    {
+      "patientId": "pat_Zk3mQ9",
+      "name": "홍길동",
+      "birthDate6": "580315",
+      "phone": "01012345678",
+      "regionCode": "ULLEUNG",
+      "address": "경북 울릉군 울릉읍 ...",
+      "gender": "MALE"
+    }
+  ],
+  "totalCount": 1,
+  "page": 0,
+  "size": 20
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `patients[].patientId` | string | 환자 공개 ID |
+| `patients[].name` | string | 환자 이름 |
+| `patients[].birthDate6` | string | 생년월일 6자리 |
+| `patients[].phone` | string | 전화번호 |
+| `patients[].regionCode` | string | 지역 코드 |
+| `patients[].address` | string | 주소 |
+| `patients[].gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `totalCount` | int | 전체 환자 수 |
+| `page` | int | 현재 페이지 |
+| `size` | int | 페이지 크기 |
 
 ---
 
