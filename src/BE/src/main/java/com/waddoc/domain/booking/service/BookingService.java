@@ -6,6 +6,9 @@ import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.entity.CareCase;
+import com.waddoc.domain.consultation.entity.ConsultationSession;
+import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.consultation.service.ConsultationLiveKitService;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
@@ -16,6 +19,10 @@ import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
 import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -28,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -45,6 +53,10 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final CareCaseRepository careCaseRepository;
     private final DispatchOutboxRepository dispatchOutboxRepository;
+    private final MissionRepository missionRepository;
+    private final ConsultationSessionRepository consultationSessionRepository;
+    private final MissionCommandService missionCommandService;
+    private final ConsultationLiveKitService consultationLiveKitService;
     private final AuditLogService auditLogService;
     private final SmsService smsService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -101,11 +113,16 @@ public class BookingService {
                 .build();
         careCaseRepository.save(careCase);
         // 배차 요청은 DB에 먼저 적재하고, 별도 relay가 Kafka로 내보낸다.
-        dispatchOutboxRepository.save(DispatchOutbox.builder()
+        DispatchOutbox dispatchOutbox = dispatchOutboxRepository.save(DispatchOutbox.builder()
                 .careCase(careCase)
                 .regionCode(patient.getRegionCode())
                 .destination(patient.getAddress())
                 .build());
+
+        // 당일 예약은 테스트/운영 편의를 위해 미션과 진료방을 즉시 준비한다.
+        if (shouldProvisionImmediateConsult(slot)) {
+            provisionImmediateConsultArtifacts(careCase, patient, dispatchOutbox);
+        }
 
         session.touch();
 
@@ -114,12 +131,9 @@ public class BookingService {
         String departmentName = slot.getDoctor().getDepartmentName();
         int month = slot.getSlotDate().getMonthValue();
         int day = slot.getSlotDate().getDayOfMonth();
-        int hour = slot.getStartTime().getHour();
-        String amPm = hour < 12 ? "오전" : "오후";
-        int displayHour = hour <= 12 ? hour : hour - 12;
         String ttsMessage = String.format(
-                "%s %s 선생님, %d월 %d일 %s %d시 예약이 완료되었습니다.",
-                departmentName, doctorName, month, day, amPm, displayHour);
+                "%s %s 선생님, %d월 %d일 %s 예약이 완료되었습니다.",
+                departmentName, doctorName, month, day, formatTimeForTts(slot.getStartTime()));
         String smsMessage = buildBookingCreatedSms(patient, slot, doctorName, departmentName);
         NewBookingNotificationPayload notificationPayload = NewBookingNotificationPayload.from(booking, careCase);
 
@@ -325,5 +339,69 @@ public class BookingService {
             return "";
         }
         return phoneNumber.replaceAll("[^0-9]", "");
+    }
+
+    private String formatTimeForTts(java.time.LocalTime time) {
+        int hour = time.getHour();
+        String amPm = hour < 12 ? "오전" : "오후";
+        int displayHour = hour == 0 ? 12 : (hour <= 12 ? hour : hour - 12);
+        int minute = time.getMinute();
+
+        // 30분 단위 슬롯이 많아서 "9시"와 "9시 30분"을 명확히 구분해 읽어준다.
+        if (minute == 0) {
+            return String.format("%s %d시", amPm, displayHour);
+        }
+        return String.format("%s %d시 %d분", amPm, displayHour, minute);
+    }
+
+    private boolean shouldProvisionImmediateConsult(ScheduleSlot slot) {
+        return slot.getSlotDate().isEqual(LocalDate.now());
+    }
+
+    private void provisionImmediateConsultArtifacts(
+            CareCase careCase,
+            Patient patient,
+            DispatchOutbox dispatchOutbox
+    ) {
+        // TODO: Replace this same-day auto-provisioning with an explicit instant-consult booking flow and schedule policy.
+        // 배차 소비를 기다리지 않고 즉시 진료 가능한 상태까지 끌어올린다.
+        Mission mission = missionRepository.findByCareCase(careCase)
+                .orElseGet(() -> missionCommandService.createMissionForDispatch(
+                        careCase,
+                        null,
+                        patient.getAddress(),
+                        LocalDateTime.now()
+                ));
+        mission.updatePhase(MissionPhase.DISPATCHED);
+        mission.updatePhase(MissionPhase.EN_ROUTE);
+        mission.updatePhase(MissionPhase.ARRIVED);
+        missionRepository.save(mission);
+
+        // 본인확인 단계에서 바로 사용할 수 있도록 READY 세션을 미리 만든다.
+        ConsultationSession consultationSession = consultationSessionRepository.findByCareCase(careCase)
+                .orElseGet(() -> {
+                    ConsultationSession createdSession = ConsultationSession.builder()
+                            .careCase(careCase)
+                            .roomId(null)
+                            .livekitUrl(consultationLiveKitService.getLivekitUrl())
+                            .build();
+                    consultationLiveKitService.createRoom(createdSession.getRoomId());
+                    createdSession.markReady();
+                    return consultationSessionRepository.save(createdSession);
+                });
+
+        // 즉시 진료용 mission이 준비됐으면 기존 배차 outbox는 중복 처리되지 않도록 닫는다.
+        dispatchOutbox.markCompleted();
+        auditLogService.log(
+                "BOOKING_IMMEDIATE_CONSULT_PROVISIONED",
+                "CARE_CASE",
+                careCase.getPublicId(),
+                "corr_case_" + careCase.getPublicId(),
+                Map.of(
+                        "missionId", mission.getPublicId(),
+                        "sessionId", consultationSession.getPublicId(),
+                        "dispatchOutboxStatus", dispatchOutbox.getStatus().name()
+                )
+        );
     }
 }

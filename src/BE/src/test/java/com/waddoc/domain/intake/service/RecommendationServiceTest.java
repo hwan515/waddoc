@@ -106,8 +106,8 @@ class RecommendationServiceTest {
         ScheduleSlot preferredSlot = ScheduleSlot.builder()
                 .doctor(preferredDoctor)
                 .slotDate(LocalDate.now().plusDays(1))
-                .startTime(LocalTime.of(10, 0))
-                .endTime(LocalTime.of(10, 30))
+                .startTime(LocalTime.of(10, 30))
+                .endTime(LocalTime.of(11, 0))
                 .build();
 
         Booking lastBooking = Booking.builder()
@@ -146,6 +146,7 @@ class RecommendationServiceTest {
         assertThat(response.getSymptomCategory()).isEqualTo("DTMF_SELECTION");
         assertThat(response.getAvailableSlots()).hasSize(2);
         assertThat(response.getAvailableSlots().get(0).getDoctorName()).isEqualTo("김의사");
+        assertThat(response.getTtsMessage()).contains("오전 10시 30분");
         assertThat(response.getTtsMessage()).contains("예약은 1번");
 
         // 세션에 선택 결과가 저장되었는지 확인
