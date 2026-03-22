@@ -33,6 +33,20 @@ public class MissionTerminalTokenService {
 
         accessControlService.assertAssignedDoctorOrAdmin(authenticatedUser, mission.getCareCase());
 
+        return issueTokenInternal(mission, authenticatedUser.userId(), authenticatedUser.role().name());
+    }
+
+    @Transactional(readOnly = true)
+    public IssueMissionTerminalTokenResponse issueTokenForDeviceClaim(String missionId, String terminalId) {
+        Mission mission = missionRepository.findWithDetailsByPublicId(missionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
+
+        // 차량 단말이 후보 조회 후 확정한 미션에 한해 mission-terminal 토큰을 발급한다.
+        return issueTokenInternal(mission, terminalId, "DEVICE_TERMINAL");
+    }
+
+    private IssueMissionTerminalTokenResponse issueTokenInternal(Mission mission, String actorId, String actorRole) {
+        // 차량 단말은 본인확인과 환자 토큰 발급 범위만 갖도록 최소 권한으로 발급한다.
         List<String> scopes = List.of(
                 MissionTerminalScopes.IDENTITY_CHECK,
                 MissionTerminalScopes.ISSUE_PATIENT_TOKEN
@@ -48,8 +62,8 @@ public class MissionTerminalTokenService {
                 "MISSION",
                 mission.getPublicId(),
                 "corr_mis_" + mission.getPublicId(),
-                authenticatedUser.userId(),
-                authenticatedUser.role().name(),
+                actorId,
+                actorRole,
                 Map.of(
                         "caseId", mission.getCareCase().getPublicId(),
                         "expiresInSeconds", jwtTokenProvider.getMissionTerminalTokenExpiry(),

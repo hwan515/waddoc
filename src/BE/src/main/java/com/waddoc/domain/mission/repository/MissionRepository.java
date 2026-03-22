@@ -1,5 +1,6 @@
 package com.waddoc.domain.mission.repository;
 
+import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
@@ -21,6 +22,27 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
     boolean existsByVehicleIdAndPhaseIn(String vehicleId, Collection<MissionPhase> phases);
 
     List<Mission> findAllByCareCaseIn(List<CareCase> careCases);
+
+    @Query("""
+            select m
+            from Mission m
+            join fetch m.careCase c
+            join fetch c.booking b
+            join fetch c.patient p
+            join fetch c.doctor d
+            join fetch d.user du
+            where p.birthDate6 = :birthDate6
+              and p.phone like concat('%', :phoneLast4)
+              and b.status = :bookingStatus
+              and m.phase in :phases
+            order by b.startTime asc, m.publicId asc
+            """)
+    List<Mission> findTerminalCandidates(
+            @Param("phoneLast4") String phoneLast4,
+            @Param("birthDate6") String birthDate6,
+            @Param("bookingStatus") BookingStatus bookingStatus,
+            @Param("phases") Collection<MissionPhase> phases
+    );
 
     @Query("""
             select m

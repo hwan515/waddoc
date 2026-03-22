@@ -14,7 +14,10 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
     (config) => {
         const { token } = useAuthStore.getState();
-        if (token) {
+        const hasExplicitAuthorization =
+            Boolean(config.headers?.Authorization) || Boolean(config.headers?.authorization);
+
+        if (token && !hasExplicitAuthorization) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
@@ -31,9 +34,19 @@ apiClient.interceptors.response.use(
     },
     async (error) => {
         const originalRequest = error.config;
+        const { token } = useAuthStore.getState();
+        const currentUserAuthorization = token ? `Bearer ${token}` : null;
+        const requestAuthorization =
+            originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || null;
+        const isNonUserAuthorization =
+            Boolean(requestAuthorization) && requestAuthorization !== currentUserAuthorization;
+        const isTerminalBootstrapRequest = originalRequest?.url?.includes('/terminal/');
         
         // 401 에러이고 재시도 횟수를 초과하지 않은 경우 (Token 만료 의심)
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401
+            && !originalRequest._retry
+            && !isNonUserAuthorization
+            && !isTerminalBootstrapRequest) {
             originalRequest._retry = true;
 
             try {

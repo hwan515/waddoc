@@ -1,69 +1,229 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+import apiClient from '../../utils/api';
+
+const TERMINAL_ID = import.meta.env.VITE_ROBOT_TERMINAL_ID || '';
+const TERMINAL_KEY = import.meta.env.VITE_ROBOT_TERMINAL_KEY || '';
 
 const Setup = () => {
     const navigate = useNavigate();
-    const [missionId, setMissionId] = useState(localStorage.getItem('robot_mission_id') || '');
-    const [sessionId, setSessionId] = useState(localStorage.getItem('robot_session_id') || '');
+    const [phoneLast4, setPhoneLast4] = useState('');
+    const [birthDate6, setBirthDate6] = useState('');
+    const [candidates, setCandidates] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
 
-    const handleSaveAndNext = () => {
-        if (!missionId.trim()) {
-            alert('Mission ID는 필수입니다.');
+    const hasTerminalConfig = useMemo(
+        () => Boolean(TERMINAL_ID.trim() && TERMINAL_KEY.trim()),
+        []
+    );
+
+    const extractApiErrorMessage = (error, fallbackMessage) => {
+        const detail = error?.response?.data?.detail;
+        const message = error?.response?.data?.message;
+        return detail || message || fallbackMessage;
+    };
+
+    const clearLegacyRobotState = () => {
+        localStorage.removeItem('robot_mission_id');
+        localStorage.removeItem('robot_session_id');
+        localStorage.removeItem('webrtc_terminal_token');
+        localStorage.removeItem('robot_device_terminal_token');
+        localStorage.removeItem('robot_mission_terminal_token');
+        localStorage.removeItem('current_mission_id');
+    };
+
+    const bootstrapDeviceTerminal = async () => {
+        const response = await apiClient.post('/terminal/bootstrap-token', {
+            terminalId: TERMINAL_ID,
+            terminalKey: TERMINAL_KEY,
+        });
+
+        const deviceTerminalToken = response?.data?.deviceTerminalToken;
+        if (!deviceTerminalToken) {
+            throw new Error('차량 단말 토큰이 비어 있습니다.');
+        }
+
+        localStorage.setItem('robot_device_terminal_token', deviceTerminalToken);
+        return deviceTerminalToken;
+    };
+
+    const lookupCandidates = async (deviceTerminalToken) => {
+        const response = await apiClient.post('/terminal/check-in/candidates', {
+            phoneLast4,
+            birthDate6,
+        }, {
+            headers: {
+                Authorization: `Bearer ${deviceTerminalToken}`,
+            },
+        });
+
+        return response?.data?.candidates || [];
+    };
+
+    const claimMission = async (missionId, deviceTerminalToken) => {
+        const response = await apiClient.post(`/terminal/missions/${missionId}/claim`, {
+            phoneLast4,
+            birthDate6,
+        }, {
+            headers: {
+                Authorization: `Bearer ${deviceTerminalToken}`,
+            },
+        });
+
+        const missionTerminalToken = response?.data?.terminalToken;
+        if (!missionTerminalToken) {
+            throw new Error('미션 단말 토큰이 비어 있습니다.');
+        }
+
+        localStorage.setItem('current_mission_id', missionId);
+        localStorage.setItem('robot_mission_terminal_token', missionTerminalToken);
+        navigate('/robot/auth');
+    };
+
+    const handleLookup = async () => {
+        if (!hasTerminalConfig) {
+            setErrorMsg('차량 단말 설정이 없습니다. VITE_ROBOT_TERMINAL_ID, VITE_ROBOT_TERMINAL_KEY를 확인해주세요.');
             return;
         }
-        localStorage.setItem('robot_mission_id', missionId.trim());
-        localStorage.setItem('robot_session_id', sessionId.trim());
-        navigate('/robot/auth');
+        if (!/^\d{4}$/.test(phoneLast4)) {
+            setErrorMsg('전화번호 뒤 4자리를 입력해주세요.');
+            return;
+        }
+        if (!/^\d{6}$/.test(birthDate6)) {
+            setErrorMsg('생년월일 6자리를 입력해주세요.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setErrorMsg('');
+        setCandidates([]);
+        clearLegacyRobotState();
+
+        try {
+            const deviceTerminalToken = await bootstrapDeviceTerminal();
+            const nextCandidates = await lookupCandidates(deviceTerminalToken);
+
+            if (nextCandidates.length === 0) {
+                setErrorMsg('오늘 차량 진료 대상이 조회되지 않았습니다. 입력 정보를 다시 확인해주세요.');
+                return;
+            }
+
+            if (nextCandidates.length === 1) {
+                await claimMission(nextCandidates[0].missionId, deviceTerminalToken);
+                return;
+            }
+
+            setCandidates(nextCandidates);
+        } catch (error) {
+            console.error('Robot check-in lookup failed:', error);
+            setErrorMsg(extractApiErrorMessage(error, '차량 단말 인증 또는 대상 조회에 실패했습니다.'));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCandidateSelect = async (missionId) => {
+        setIsSubmitting(true);
+        setErrorMsg('');
+        try {
+            const deviceTerminalToken = localStorage.getItem('robot_device_terminal_token') || await bootstrapDeviceTerminal();
+            await claimMission(missionId, deviceTerminalToken);
+        } catch (error) {
+            console.error('Mission claim failed:', error);
+            setErrorMsg(extractApiErrorMessage(error, '선택한 예약으로 차량 진료를 시작할 수 없습니다.'));
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#061A40] font-sans relative overflow-hidden">
-            {/* Background Decorations */}
             <div className="absolute top-1/4 left-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
             <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
-            <div className="relative z-10 w-full max-w-2xl bg-white/10 backdrop-blur-md border border-white/20 p-8 flex flex-col items-center rounded-2xl shadow-2xl text-white">
-                <h1 className="text-3xl font-bold mb-4 text-center text-[#B9D6F2]">🛠️ [TEST] 데이터 주입</h1>
+            <div className="relative z-10 w-full max-w-3xl bg-white/10 backdrop-blur-md border border-white/20 p-8 flex flex-col items-center rounded-2xl shadow-2xl text-white">
+                <h1 className="text-3xl font-bold mb-4 text-center text-[#B9D6F2]">진료 시작</h1>
                 <p className="text-slate-300 mb-8 text-center whitespace-pre-line leading-relaxed text-sm">
-                    실제 환경에서는 서버부터 자동으로 할당받거나 로봇단말에 하드웨어적으로 주입되어야 하지만,{'\n'}
-                    현재 E2E(End-to-End) 테스트를 위해 수동으로 ID를 주입합니다.
+                    차량 진료 대상을 확인하기 위해{'\n'}
+                    전화번호 뒤 4자리와 생년월일 6자리를 입력해주세요.
                 </p>
 
                 <div className="space-y-6 w-full max-w-md">
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Mission ID <span className="text-[#B9D6F2] font-semibold">(필수)</span>
+                            전화번호 뒤 4자리
                         </label>
                         <input
                             type="text"
-                            value={missionId}
-                            onChange={(e) => setMissionId(e.target.value)}
-                            placeholder="예: ms_xxxx"
-                            className="w-full px-4 py-3 bg-[#061A40] border border-[#3B62A4] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-[#B9D6F2] flex-1 text-xl tracking-wider text-center"
+                            inputMode="numeric"
+                            maxLength={4}
+                            value={phoneLast4}
+                            onChange={(event) => setPhoneLast4(event.target.value.replace(/\D/g, '').slice(0, 4))}
+                            placeholder="예: 3720"
+                            className="w-full px-4 py-3 bg-[#061A40] border border-[#3B62A4] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-[#B9D6F2] text-xl tracking-widest text-center"
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-2">
-                            Session ID (화상진료 방 입장 시 폴링 오류 대안용)
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                            생년월일 6자리
                         </label>
                         <input
                             type="text"
-                            value={sessionId}
-                            onChange={(e) => setSessionId(e.target.value)}
-                            placeholder="예: ses_xxxx"
-                            className="w-full px-4 py-3 bg-[#061A40] border border-[#3B62A4] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-[#B9D6F2] flex-1 text-xl tracking-wider text-center"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={birthDate6}
+                            onChange={(event) => setBirthDate6(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="예: 580315"
+                            className="w-full px-4 py-3 bg-[#061A40] border border-[#3B62A4] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-[#B9D6F2] text-xl tracking-widest text-center"
                         />
                     </div>
                 </div>
 
+                {errorMsg && (
+                    <div className="mt-6 w-full max-w-md rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-200 text-center">
+                        {errorMsg}
+                    </div>
+                )}
+
                 <div className="mt-10 flex gap-4 w-full max-w-md">
                     <button
-                        onClick={handleSaveAndNext}
-                        className="px-10 py-4 bg-[#0353A4] hover:bg-[#006DAA] text-white text-xl font-semibold border border-[#B9D6F2]/30 rounded-xl shadow-lg transition-colors w-full flex items-center justify-center gap-2"
+                        onClick={handleLookup}
+                        disabled={isSubmitting}
+                        className="px-10 py-4 bg-[#0353A4] hover:bg-[#006DAA] disabled:opacity-60 disabled:cursor-not-allowed text-white text-xl font-semibold border border-[#B9D6F2]/30 rounded-xl shadow-lg transition-colors w-full flex items-center justify-center gap-2"
                     >
-                        확인 및 인증 진행하기 ➔
+                        {isSubmitting ? '조회 중...' : '대상 조회하기'}
                     </button>
                 </div>
+
+                {candidates.length > 1 && (
+                    <div className="mt-10 w-full max-w-2xl">
+                        <h2 className="text-xl font-semibold text-[#B9D6F2] mb-4 text-center">차량 진료 대상 선택</h2>
+                        <div className="space-y-3">
+                            {candidates.map((candidate) => (
+                                <button
+                                    key={candidate.missionId}
+                                    onClick={() => handleCandidateSelect(candidate.missionId)}
+                                    disabled={isSubmitting}
+                                    className="w-full rounded-2xl border border-white/20 bg-[#061A40]/80 px-5 py-4 text-left transition hover:border-[#B9D6F2]/60 hover:bg-[#0B2447] disabled:opacity-60"
+                                >
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <p className="text-lg font-semibold text-white">{candidate.patientMaskedName}</p>
+                                            <p className="text-sm text-slate-300 mt-1">
+                                                {candidate.appointmentDate} {candidate.appointmentTime} / 담당 {candidate.doctorMaskedName}
+                                            </p>
+                                        </div>
+                                        <span className="text-xs font-medium text-[#B9D6F2]">
+                                            {candidate.missionPhase}
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
