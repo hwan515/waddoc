@@ -33,6 +33,12 @@ const AuthStep = () => {
     const detectionIntervalRef = useRef(null);
     const countdownRef = useRef(null);
 
+    const extractApiErrorMessage = (error, fallbackMessage) => {
+        const detail = error?.response?.data?.detail;
+        const message = error?.response?.data?.message;
+        return detail || message || fallbackMessage;
+    };
+
     // base64를 Blob으로 변환하는 유틸 함수
     const base64ToBlob = (base64, mimeType = 'image/jpeg') => {
         const byteString = atob(base64.split(',')[1]);
@@ -222,75 +228,57 @@ const AuthStep = () => {
     const submitAuth = async (faceBase64, idCardBase64) => {
         setAuthStatus('submitting');
         try {
-            // Setup.jsx 에서 주입받은 Mission ID 우선 사용 (없을 시 폴백)
-            const missionId = localStorage.getItem('robot_mission_id') || "mis_K9pQr1";
+            const missionId = localStorage.getItem('current_mission_id');
+            const terminalToken = localStorage.getItem('robot_mission_terminal_token');
             console.log("🚀 [인증 시작] 대상 미션 ID:", missionId);
-            
-            // 1. 차량 단말 토큰 발급 (API 9.2) - 현재는 의사/관리자 계정 토큰으로 호출하지만 백엔드 연동을 위해 더미 요청 구조. 
-            // 실제 환경에선 권한 헤더를 같이 전송해야 하지만 apiClient(인터셉터)가 액세스 토큰을 자동 탑재합니다.
-            let terminalToken = "";
-            try {
-                const tokenRes = await apiClient.post(`/missions/${missionId}/terminal/token`);
-                if (tokenRes.data && tokenRes.data.terminalToken) {
-                    terminalToken = tokenRes.data.terminalToken;
-                    localStorage.setItem('webrtc_terminal_token', terminalToken);
-                    localStorage.setItem('current_mission_id', missionId); // 임시 보관
-                }
-            } catch (err) {
-                console.warn('단말 토큰 발급 API 실패. 임시 토큰으로 우회합니다.', err);
-                terminalToken = "temp-terminal-token";
-                localStorage.setItem('webrtc_terminal_token', terminalToken);
-                localStorage.setItem('current_mission_id', missionId);
+
+            if (!missionId) {
+                handleAuthFail('선택된 미션이 없습니다. 진료 시작 화면으로 돌아가 다시 진행해주세요.');
+                return;
             }
 
-            // 2. 환자 본인 확인 API (API 9.3) - 방금 받은 단말 토큰 사용
+            if (!terminalToken) {
+                handleAuthFail('차량 단말 인증 정보가 없습니다. 진료 시작 화면으로 돌아가 다시 진행해주세요.');
+                return;
+            }
+            
             const formData = new FormData();
             formData.append('faceImage', base64ToBlob(faceBase64), 'face.jpg');
             formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.jpg');
+
+            await apiClient.post(`/missions/${missionId}/identity-check`, formData, {
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    'Authorization': `Bearer ${terminalToken}`
+                } 
+            });
             
-            try {
-                // 커스텀 헤더를 넘겨서 apiClient 내부 Bearer 토큰 덮어쓰기
-                await apiClient.post(`/missions/${missionId}/identity-check`, formData, {
-                    headers: { 
-                        'Content-Type': 'multipart/form-data',
-                        'Authorization': `Bearer ${terminalToken}`
-                    } 
-                });
-                
-                // 성공 시
-                setAuthStatus('success');
-                setFailCount(0);
-                failCountRef.current = 0;
-                stopVideo();
-                setTimeout(() => {
-                    navigate('/robot/measure-intro');
-                }, 2000);
-            } catch (apiError) {
-                console.warn('본인 인증 API 실패. 통과 처리합니다.', apiError);
-                // 데모 목적으로 실패하더라도 다음 화면으로 넘김
-                setAuthStatus('success');
-                stopVideo();
-                setTimeout(() => {
-                    navigate('/robot/measure-intro');
-                }, 2000);
-            }
+            setAuthStatus('success');
+            setFailCount(0);
+            failCountRef.current = 0;
+            stopVideo();
+            setTimeout(() => {
+                navigate('/robot/measure-intro');
+            }, 2000);
         } catch (err) {
             console.error("Auth Error:", err);
-            handleAuthFail();
+            handleAuthFail(extractApiErrorMessage(err, '본인 인증에 실패했습니다. 다시 시도해주세요.'));
         }
     };
 
-    const handleAuthFail = () => {
+    const handleAuthFail = (message = '인증에 실패하여 다시 시도해주세요') => {
         setAuthStatus('fail');
         failCountRef.current += 1;
         setFailCount(failCountRef.current);
+        setCaptureStep('face');
+        setFaceImgData(null);
 
         if (failCountRef.current >= 5) {
             setErrorMsg("진료 예약했던 번호로 문의해주세요.");
             // 5회 이상 실패 시 무한 루프를 막거나 완전히 종료하려면 여기서 리셋 타이머를 안 줄 수도 있습니다.
             // 일단은 에러 유지 상태로 둠
         } else {
-            setErrorMsg("인증에 실패하여 다시 시도해주세요");
+            setErrorMsg(message);
             setTimeout(() => {
                 setAuthStatus('idle');
                 setErrorMsg('');

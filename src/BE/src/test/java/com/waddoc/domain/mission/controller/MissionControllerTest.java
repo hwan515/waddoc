@@ -1,5 +1,7 @@
 package com.waddoc.domain.mission.controller;
 
+import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
@@ -59,6 +61,9 @@ class MissionControllerTest {
 
     @MockBean
     private MissionTerminalTokenService missionTerminalTokenService;
+
+    @MockBean
+    private ConsultationPatientTokenService consultationPatientTokenService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
@@ -240,5 +245,25 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.caseId").value("case_T7nLp4"))
                 .andExpect(jsonPath("$.terminalToken").value("mission-terminal-token"))
                 .andExpect(jsonPath("$.scopes[0]").value("mission:identity-check"));
+    }
+
+    @Test
+    void issuePatientTokenByMission_returnsMissionScopedPatientToken() throws Exception {
+        when(consultationPatientTokenService.issuePatientTokenByMission(eq("ms_F2gHn6"), isNull()))
+                .thenReturn(IssuePatientTokenResponse.builder()
+                        .sessionId("ses_P8mQr2")
+                        .patientToken("patient-token")
+                        .expiresIn(7200)
+                        .room(IssuePatientTokenResponse.RoomDetail.builder()
+                                .roomId("room_ses_P8mQr2")
+                                .livekitUrl("wss://livekit.test")
+                                .build())
+                        .build());
+
+        mockMvc.perform(post("/api/v1/missions/{missionId}/participants/patient/token", "ms_F2gHn6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value("ses_P8mQr2"))
+                .andExpect(jsonPath("$.patientToken").value("patient-token"))
+                .andExpect(jsonPath("$.room.roomId").value("room_ses_P8mQr2"));
     }
 }

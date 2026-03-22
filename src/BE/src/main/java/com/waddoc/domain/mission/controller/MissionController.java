@@ -1,5 +1,7 @@
 package com.waddoc.domain.mission.controller;
 
+import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
 import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
@@ -44,6 +46,7 @@ public class MissionController {
     private final MissionIdentityCheckService missionIdentityCheckService;
     private final MissionQueryService missionQueryService;
     private final MissionTerminalTokenService missionTerminalTokenService;
+    private final ConsultationPatientTokenService consultationPatientTokenService;
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -103,6 +106,17 @@ public class MissionController {
     ) {
         return ResponseEntity.ok(
                 missionIdentityCheckService.verify(missionId, faceImage, idCardImage, authentication)
+        );
+    }
+
+    @PostMapping("/{missionId}/participants/patient/token")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MISSION_TERMINAL')")
+    public ResponseEntity<IssuePatientTokenResponse> issuePatientTokenByMission(
+            @PathVariable String missionId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(
+                consultationPatientTokenService.issuePatientTokenByMission(missionId, authentication)
         );
     }
 }

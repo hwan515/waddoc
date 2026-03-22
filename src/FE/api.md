@@ -1151,19 +1151,103 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.2 차량 단말 토큰 발급
+### 9.2 차량 단말 bootstrap 토큰 발급
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/missions/{missionId}/terminal/token` |
-| Auth | Bearer Token (DOCTOR, ADMIN) |
+| Path | `/api/v1/terminal/bootstrap-token` |
+| Auth | 없음 |
 
-> 차량 태블릿은 관리자 JWT를 직접 보관하지 않고, **해당 미션 범위로 제한된 단말 토큰**만 사용한다.
-> 서버는 요청자가 해당 케이스를 조회·진료할 수 있는 의사 또는 관리자임을 확인한 뒤, `missionId`에 바인딩된 짧은 TTL의 `MISSION_TERMINAL` 토큰을 발급한다.
-> 이 토큰은 **본인 확인**과 **환자 WebRTC 토큰 발급**에만 사용할 수 있으며 다른 관리자 API에는 사용할 수 없다.
+> 차량 태블릿은 관리자/의사 브라우저 로그인에 의존하지 않고, 환경변수로 주입된 단말 bootstrap credential로 `DEVICE_TERMINAL` 토큰을 먼저 발급받는다.
+> 이 토큰은 후보 조회와 mission claim에만 사용할 수 있다.
 
-**Request Body**: 없음
+**Request Body**
+```json
+{
+  "terminalId": "robot-terminal-01",
+  "terminalKey": "<BOOTSTRAP_SECRET>"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "terminalId": "robot-terminal-01",
+  "deviceTerminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "terminal:check-in-candidates",
+    "terminal:claim-mission"
+  ]
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 401 | `AUTH_INVALID_CREDENTIALS` | 단말 bootstrap credential 불일치 |
+| 503 | `AUTH_TERMINAL_BOOTSTRAP_DISABLED` | 서버에 차량 단말 bootstrap credential 미설정 |
+
+---
+
+### 9.2a 차량 진료 대상 후보 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/check-in/candidates` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 환자가 입력한 `전화번호 뒤 4자리 + 생년월일 6자리`를 기준으로 차량 진료 가능한 mission 후보를 조회한다.
+> 응답에는 마스킹된 이름과 예약 시간만 포함한다.
+
+**Request Body**
+```json
+{
+  "phoneLast4": "3720",
+  "birthDate6": "580315"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "candidates": [
+    {
+      "missionId": "ms_F2gHn6",
+      "patientMaskedName": "홍*동",
+      "appointmentDate": "2026-03-20",
+      "appointmentTime": "14:30",
+      "doctorMaskedName": "이*종",
+      "missionPhase": "ARRIVED"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+---
+
+### 9.2b 차량 mission claim 및 미션 단말 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/missions/{missionId}/claim` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 선택한 mission과 환자 입력값을 서버에 다시 전달해 claim을 요청한다.
+> 서버는 같은 날짜/환자 정보/mission phase를 재검증한 뒤, 해당 mission 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급한다.
+
+**Request Body**
+```json
+{
+  "phoneLast4": "3720",
+  "birthDate6": "580315"
+}
+```
 
 **Response** `200 OK`
 ```json
@@ -1184,7 +1268,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 404 | `MISSION_NOT_FOUND` | 미션 없음 |
-| 403 | `AUTH_FORBIDDEN` | 해당 미션/케이스에 접근 권한이 없는 사용자 |
+| 403 | `TERMINAL_MISSION_CLAIM_FORBIDDEN` | 입력한 접수 정보로 해당 미션을 시작할 수 없음 |
 
 ---
 
@@ -1265,11 +1349,11 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/sessions/{sessionId}/participants/patient/token` |
+| Path | `/api/v1/missions/{missionId}/participants/patient/token` |
 | Auth | Bearer Token (MISSION_TERMINAL) |
 
 > 차량 태블릿은 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청한다.
-> 이 API는 `sessionId -> case -> mission -> patient`로 대상 환자를 결정하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
+> 이 API는 `missionId -> case -> consultationSession -> patient` 순서로 대상 세션을 서버에서 해석하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
 
 **Response** `200 OK`
 ```json
