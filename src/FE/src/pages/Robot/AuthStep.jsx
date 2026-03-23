@@ -14,7 +14,6 @@ const AuthStep = () => {
     const [authStatus, setAuthStatus] = useState('idle'); // idle, capturing, submitting, success, fail
     const [captureStep, setCaptureStep] = useState('face'); // 'face' -> 'idcard' -> 'submitting' -> 'done'
     const [errorMsg, setErrorMsg] = useState('');
-    const [failCount, setFailCount] = useState(0);
     const failCountRef = useRef(0);
 
     const [faceImgData, setFaceImgData] = useState(null);
@@ -32,6 +31,25 @@ const AuthStep = () => {
 
     const detectionIntervalRef = useRef(null);
     const countdownRef = useRef(null);
+
+    const startVideo = () => {
+        navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })
+            .then((stream) => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+            })
+            .catch((err) => {
+                console.error(err);
+                setErrorMsg("카메라 접근을 허용해주세요.");
+            });
+    };
+
+    const stopVideo = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+        }
+    };
 
     const extractApiErrorMessage = (error, fallbackMessage) => {
         const detail = error?.response?.data?.detail;
@@ -74,25 +92,6 @@ const AuthStep = () => {
             if (countdownRef.current) clearInterval(countdownRef.current);
         };
     }, []);
-
-    const startVideo = () => {
-        navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })
-            .then((stream) => {
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                }
-            })
-            .catch((err) => {
-                console.error(err);
-                setErrorMsg("카메라 접근을 허용해주세요.");
-            });
-    };
-
-    const stopVideo = () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-        }
-    };
 
     const handleVideoPlay = () => {
         if (!isModelLoaded) return;
@@ -254,7 +253,6 @@ const AuthStep = () => {
             });
             
             setAuthStatus('success');
-            setFailCount(0);
             failCountRef.current = 0;
             stopVideo();
             setTimeout(() => {
@@ -269,7 +267,6 @@ const AuthStep = () => {
     const handleAuthFail = (message = '인증에 실패하여 다시 시도해주세요') => {
         setAuthStatus('fail');
         failCountRef.current += 1;
-        setFailCount(failCountRef.current);
         setCaptureStep('face');
         setFaceImgData(null);
 
@@ -420,7 +417,7 @@ const AuthStep = () => {
                         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#061A40]/90 backdrop-blur-md animate-fade-in">
                             <CheckCircle2 className="w-24 h-24 text-green-400 mb-4 animate-scale-up" />
                             <h2 className="text-3xl font-bold text-white mb-2">본인 인증 완료</h2>
-                            <p className="text-[#B9D6F2] text-lg font-medium">화상 진료실로 이동합니다...</p>
+                            <p className="text-[#B9D6F2] text-lg font-medium">건강정보 측정 단계로 넘어갑니다...</p>
                         </div>
                     )}
                 </div>
