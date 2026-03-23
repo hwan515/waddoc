@@ -40,6 +40,7 @@ services:
       - AI_IDV_TRANSFER_MODE=multipart
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
+      - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:

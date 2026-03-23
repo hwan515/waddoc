@@ -1223,7 +1223,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Path | `/api/v1/terminal/bootstrap-token` |
 | Auth | 없음 |
 
-> 차량 태블릿은 관리자/의사 브라우저 로그인에 의존하지 않고, 환경변수로 주입된 단말 bootstrap credential로 `DEVICE_TERMINAL` 토큰을 먼저 발급받는다.
+> 차량 태블릿은 관리자/의사 브라우저 로그인에 의존하지 않고, 환경변수로 주입된 단말 credential로 `DEVICE_TERMINAL` 토큰을 먼저 발급받는다.
+> 서버는 `ROBOT_TERMINAL_REGISTRY`에 등록된 엔트리와 `terminalId`, `terminalKey`를 대조해 `vehicleId`, `regionCode` 바인딩 정보를 함께 토큰에 싣는다.
 > 이 토큰은 후보 조회와 mission claim에만 사용할 수 있다.
 
 **Request Body**
@@ -1238,6 +1239,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 ```json
 {
   "terminalId": "robot-terminal-01",
+  "vehicleId": "veh_GIMCHEON_01",
+  "regionCode": "GIMCHEON",
   "deviceTerminalToken": "eyJhbGci...",
   "expiresIn": 1800,
   "scopes": [
@@ -1265,6 +1268,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Auth | Bearer Token (`DEVICE_TERMINAL`) |
 
 > 환자가 입력한 `전화번호 뒤 4자리 + 생년월일 6자리`를 기준으로 차량 진료 가능한 mission 후보를 조회한다.
+> 서버는 `DEVICE_TERMINAL` 토큰에 바인딩된 `regionCode`와 이미 배정된 `vehicleId`를 함께 확인해, 현재 단말이 접근 가능한 mission만 반환한다.
 > 응답에는 마스킹된 이름과 예약 시간만 포함한다.
 
 **Request Body**
@@ -1303,7 +1307,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Auth | Bearer Token (`DEVICE_TERMINAL`) |
 
 > 차량 태블릿은 선택한 mission과 환자 입력값을 서버에 다시 전달해 claim을 요청한다.
-> 서버는 같은 날짜/환자 정보/mission phase를 재검증한 뒤, 해당 mission 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급한다.
+> 서버는 같은 날짜/환자 정보/mission phase를 재검증한 뒤, 단말의 `vehicleId`/`regionCode`와 mission을 다시 대조한다.
+> 즉시 진료처럼 `mission.vehicleId`가 아직 비어 있으면 첫 claim 시점에 현재 단말의 `vehicleId`로 고정한 뒤, 해당 mission 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급한다.
 > claim 성공 후 차량 태블릿은 `current_mission_id`와 `terminalToken`을 저장해, 이후 본인 확인/활력징후 저장/환자 참가 토큰 발급까지 같은 토큰을 재사용한다.
 
 **Request Body**

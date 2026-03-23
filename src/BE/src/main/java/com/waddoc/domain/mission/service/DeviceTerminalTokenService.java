@@ -1,13 +1,13 @@
 package com.waddoc.domain.mission.service;
 
 import com.waddoc.domain.audit.service.AuditLogService;
+import com.waddoc.domain.mission.config.RobotTerminalRegistry;
 import com.waddoc.domain.mission.dto.DeviceTerminalBootstrapRequest;
 import com.waddoc.domain.mission.dto.DeviceTerminalBootstrapResponse;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.jwt.DeviceTerminalScopes;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,29 +18,27 @@ public class DeviceTerminalTokenService {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final AuditLogService auditLogService;
-    private final String bootstrapId;
-    private final String bootstrapKey;
+    private final RobotTerminalRegistry robotTerminalRegistry;
 
     public DeviceTerminalTokenService(
             JwtTokenProvider jwtTokenProvider,
             AuditLogService auditLogService,
-            @Value("${robot-terminal.bootstrap-id:}") String bootstrapId,
-            @Value("${robot-terminal.bootstrap-key:}") String bootstrapKey
+            RobotTerminalRegistry robotTerminalRegistry
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.auditLogService = auditLogService;
-        this.bootstrapId = bootstrapId;
-        this.bootstrapKey = bootstrapKey;
+        this.robotTerminalRegistry = robotTerminalRegistry;
     }
 
     public DeviceTerminalBootstrapResponse bootstrap(DeviceTerminalBootstrapRequest request) {
-        if (bootstrapId == null || bootstrapId.isBlank() || bootstrapKey == null || bootstrapKey.isBlank()) {
+        if (!robotTerminalRegistry.isConfigured()) {
             throw new BusinessException(ErrorCode.AUTH_TERMINAL_BOOTSTRAP_DISABLED);
         }
 
         String requestedTerminalId = request.getTerminalId().trim();
-        // TODO: replace FE-exposed shared bootstrap credential with per-device registry and secure provisioning.
-        if (!bootstrapId.equals(requestedTerminalId) || !bootstrapKey.equals(request.getTerminalKey())) {
+        RobotTerminalRegistry.TerminalRegistration registration = robotTerminalRegistry.findByTerminalId(requestedTerminalId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
+        if (!registration.matchesKey(request.getTerminalKey())) {
             throw new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS);
         }
 
@@ -48,7 +46,12 @@ public class DeviceTerminalTokenService {
                 DeviceTerminalScopes.CHECK_IN_CANDIDATES,
                 DeviceTerminalScopes.CLAIM_MISSION
         );
-        String deviceTerminalToken = jwtTokenProvider.createDeviceTerminalToken(requestedTerminalId, scopes);
+        String deviceTerminalToken = jwtTokenProvider.createDeviceTerminalToken(
+                requestedTerminalId,
+                registration.vehicleId(),
+                registration.regionCode(),
+                scopes
+        );
 
         auditLogService.log(
                 "DEVICE_TERMINAL_BOOTSTRAPPED",
@@ -58,6 +61,8 @@ public class DeviceTerminalTokenService {
                 requestedTerminalId,
                 "DEVICE_TERMINAL",
                 Map.of(
+                        "vehicleId", registration.vehicleId() != null ? registration.vehicleId() : "",
+                        "regionCode", registration.regionCode() != null ? registration.regionCode() : "",
                         "expiresInSeconds", jwtTokenProvider.getDeviceTerminalTokenExpiry(),
                         "scopes", scopes
                 )
@@ -65,6 +70,8 @@ public class DeviceTerminalTokenService {
 
         return DeviceTerminalBootstrapResponse.of(
                 requestedTerminalId,
+                registration.vehicleId(),
+                registration.regionCode(),
                 deviceTerminalToken,
                 jwtTokenProvider.getDeviceTerminalTokenExpiry(),
                 scopes

@@ -91,6 +91,16 @@ public class Mission extends BaseTimeEntity {
         this.estimatedArrivalTime = estimatedArrivalTime;
     }
 
+    public void assignVehicle(String vehicleId) {
+        if (vehicleId == null || vehicleId.isBlank()) {
+            return;
+        }
+        if (this.vehicleId != null && !this.vehicleId.isBlank() && !Objects.equals(this.vehicleId, vehicleId)) {
+            throw new IllegalStateException("Mission already assigned to a different vehicle.");
+        }
+        this.vehicleId = vehicleId;
+    }
+
     public void updatePhase(MissionPhase phase) {
         if (this.phase == phase) {
             return;

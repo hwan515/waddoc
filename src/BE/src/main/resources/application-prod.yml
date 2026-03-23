@@ -15,11 +15,9 @@ jwt:
   access-token-expiry: 900
   refresh-token-expiry: 604800
   mission-terminal-token-expiry: ${MISSION_TERMINAL_TOKEN_EXPIRY:1800}
-  device-terminal-token-expiry: ${DEVICE_TERMINAL_TOKEN_EXPIRY:1800}
 
 robot-terminal:
-  bootstrap-id: ${ROBOT_TERMINAL_BOOTSTRAP_ID:}
-  bootstrap-key: ${ROBOT_TERMINAL_BOOTSTRAP_KEY:}
+  registry: ${ROBOT_TERMINAL_REGISTRY:}
 
 ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}

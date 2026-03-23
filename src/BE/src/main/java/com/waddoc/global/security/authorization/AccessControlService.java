@@ -101,6 +101,11 @@ public class AccessControlService {
     }
 
     public AccessActor assertDeviceTerminal(Authentication authentication, String requiredScope) {
+        DeviceTerminalPrincipal deviceTerminalPrincipal = assertDeviceTerminalPrincipal(authentication, requiredScope);
+        return new AccessActor(deviceTerminalPrincipal.terminalId(), deviceTerminalPrincipal.actorRole());
+    }
+
+    public DeviceTerminalPrincipal assertDeviceTerminalPrincipal(Authentication authentication, String requiredScope) {
         assertAuthenticated(authentication);
 
         Object principal = authentication.getPrincipal();
@@ -108,7 +113,7 @@ public class AccessControlService {
             if (!deviceTerminalPrincipal.hasScope(requiredScope)) {
                 throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
             }
-            return new AccessActor(deviceTerminalPrincipal.terminalId(), deviceTerminalPrincipal.actorRole());
+            return deviceTerminalPrincipal;
         }
 
         throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);

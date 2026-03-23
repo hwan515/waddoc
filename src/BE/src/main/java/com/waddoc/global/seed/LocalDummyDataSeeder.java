@@ -9,9 +9,7 @@ import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.consultation.entity.ConnectionState;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
-import com.waddoc.domain.consultation.entity.ConsultationSummary;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
-import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.DoctorProfileRepository;
@@ -34,6 +32,9 @@ import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.domain.user.repository.UserRepository;
+import com.waddoc.domain.vehicle.entity.OperationalStatus;
+import com.waddoc.domain.vehicle.entity.Vehicle;
+import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.global.type.ApprovalStatus;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -48,19 +49,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -70,58 +66,99 @@ import java.util.stream.Collectors;
 public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private static final String DEFAULT_CHANNEL = "PHONE";
-    private static final String SEED_ADMIN_USERNAME = "seed_admin";
-    private static final String SEED_ROOM_PREFIX = "seed-room-";
-    private static final String REGION_GIMCHEON_JEUNGSAN = "GIMCHEON_JEUNGSAN";
-    private static final String ADDRESS_PREFIX = "경북 김천시 증산면 ";
-    private static final int PATIENT_COUNT = 80;
-    private static final int GUARDIAN_COUNT = 28;
-
-    private static final List<LocalTime> SLOT_START_TIMES = List.of(
-            LocalTime.of(9, 0), LocalTime.of(9, 30), LocalTime.of(10, 0), LocalTime.of(10, 30),
-            LocalTime.of(11, 0), LocalTime.of(11, 30), LocalTime.of(14, 0), LocalTime.of(14, 30),
-            LocalTime.of(15, 0), LocalTime.of(15, 30), LocalTime.of(16, 0), LocalTime.of(16, 30),
-            LocalTime.of(17, 0), LocalTime.of(17, 30));
-
-    private static final List<DayOfWeek> WEEKDAYS = List.of(
-            DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY);
-    private static final List<DayOfWeek> MON_WED_FRI = List.of(
-            DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY);
-    private static final List<DayOfWeek> TUE_THU_SAT = List.of(
-            DayOfWeek.TUESDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY);
-    private static final List<DayOfWeek> MON_THU = List.of(DayOfWeek.MONDAY, DayOfWeek.THURSDAY);
-    private static final List<DayOfWeek> WED_SAT = List.of(DayOfWeek.WEDNESDAY, DayOfWeek.SATURDAY);
+    private static final String ADMIN_USERNAME = "seed_prod_admin";
+    private static final String ADMIN_NAME = "운영 더미 관리자";
+    private static final String GUARDIAN_USERNAME = "seed_prod_guardian_01";
+    private static final String GUARDIAN_NAME = "김보호";
+    private static final String LIVEKIT_URL_PLACEHOLDER = "__SET_LIVEKIT_URL__";
+    private static final DateTimeFormatter BIRTH_DATE6_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
+    private static final LocalDate FUTURE_SLOT_END_DATE = LocalDate.of(2026, 4, 13);
 
     private static final List<DoctorSeed> DOCTOR_SEEDS = List.of(
-            new DoctorSeed("seed_doc_im_01", "김도현", "INTERNAL_MEDICINE", "내과", ApprovalStatus.APPROVED, WEEKDAYS),
-            new DoctorSeed("seed_doc_im_02", "박지연", "INTERNAL_MEDICINE", "내과", ApprovalStatus.APPROVED, WEEKDAYS),
-            new DoctorSeed("seed_doc_im_03", "이성훈", "INTERNAL_MEDICINE", "내과", ApprovalStatus.APPROVED, WEEKDAYS),
-            new DoctorSeed("seed_doc_im_04", "조은서", "INTERNAL_MEDICINE", "내과", ApprovalStatus.APPROVED, WEEKDAYS),
-            new DoctorSeed("seed_doc_ortho_01", "최준혁", "ORTHOPEDICS", "정형외과", ApprovalStatus.APPROVED, MON_WED_FRI),
-            new DoctorSeed("seed_doc_ortho_02", "강민석", "ORTHOPEDICS", "정형외과", ApprovalStatus.APPROVED, MON_WED_FRI),
-            new DoctorSeed("seed_doc_ortho_03", "윤서진", "ORTHOPEDICS", "정형외과", ApprovalStatus.APPROVED, MON_WED_FRI),
-            new DoctorSeed("seed_doc_derm_01", "임수빈", "DERMATOLOGY", "피부과", ApprovalStatus.APPROVED, TUE_THU_SAT),
-            new DoctorSeed("seed_doc_derm_02", "한지후", "DERMATOLOGY", "피부과", ApprovalStatus.APPROVED, TUE_THU_SAT),
-            new DoctorSeed("seed_doc_neuro_01", "정유진", "NEUROLOGY", "신경과", ApprovalStatus.APPROVED, MON_THU),
-            new DoctorSeed("seed_doc_neuro_02", "오태경", "NEUROLOGY", "신경과", ApprovalStatus.APPROVED, MON_THU),
-            new DoctorSeed("seed_doc_eye_01", "장소라", "OPHTHALMOLOGY", "안과", ApprovalStatus.APPROVED, WED_SAT),
-            new DoctorSeed("seed_doc_family_pending", "백현우", "FAMILY_MEDICINE", "가정의학과", ApprovalStatus.PENDING,
-                    List.of()),
-            new DoctorSeed("seed_doc_im_pending", "서지훈", "INTERNAL_MEDICINE", "내과", ApprovalStatus.PENDING, List.of()));
+            new DoctorSeed("seed_prod_doc_im_01", "김도현", "INTERNAL_MEDICINE", "내과"),
+            new DoctorSeed("seed_prod_doc_im_02", "박지연", "INTERNAL_MEDICINE", "내과"),
+            new DoctorSeed("seed_prod_doc_ortho_01", "최준혁", "ORTHOPEDICS", "정형외과"),
+            new DoctorSeed("seed_prod_doc_derm_01", "임수빈", "DERMATOLOGY", "피부과"),
+            new DoctorSeed("seed_prod_doc_neuro_01", "정유진", "NEUROLOGY", "신경과"),
+            new DoctorSeed("seed_prod_doc_eye_01", "장소라", "OPHTHALMOLOGY", "안과"));
 
-    private static final List<String> PATIENT_SURNAMES = List.of("김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한",
-            "오");
-    private static final List<String> FEMALE_PATIENT_GIVEN_NAMES = List.of("영희", "순자", "말순", "춘자", "정숙", "옥자", "미숙",
-            "연자", "복순", "경자", "명자", "금순");
-    private static final List<String> MALE_PATIENT_GIVEN_NAMES = List.of("영수", "철수", "성호", "동수", "만수", "기동", "정호", "태수",
-            "병철", "정남", "종수", "상호");
-    private static final List<String> GUARDIAN_GIVEN_NAMES = List.of("민지", "지훈", "수진", "현우", "은정", "준호", "혜진", "성민",
-            "도윤", "예진", "수현", "태현", "현정", "유진", "소연", "재훈");
-    private static final List<String> ROAD_NAMES = List.of("장전1길", "장전2길", "장전3길", "황점길", "금곡길", "황점1길", "금곡1길",
-            "장전마을길");
-    private static final List<String> RELATIONS = List.of("배우자", "아들", "딸", "며느리", "사위", "손자", "손녀", "조카");
-    private static final List<String> CANCEL_REASONS = List.of("환자 사정으로 일정 변경", "보호자 요청으로 예약 취소", "현장 상황으로 재예약 예정",
-            "증상 호전으로 취소", "중복 예약 확인 후 취소");
+    private static final List<VehicleSeed> VEHICLE_SEEDS = List.of(
+            new VehicleSeed("veh_GIMCHEON_01", "GIMCHEON-01", "GIMCHEON", "김천 1호차"),
+            new VehicleSeed("veh_ANDONG_01", "ANDONG-01", "ANDONG", "안동 1호차"),
+            new VehicleSeed("veh_YEONGJU_01", "YEONGJU-01", "YEONGJU", "영주 1호차"),
+            new VehicleSeed("veh_SANGJU_01", "SANGJU-01", "SANGJU", "상주 1호차"));
+
+    private static final List<PatientSeed> PATIENT_SEEDS = List.of(
+            new PatientSeed("gim_sudo01", "홍길동", LocalDate.of(1911, 11, 11), PatientGender.MALE, "GIMCHEON",
+                    "경북 김천시 증산면 수도리 수도길 865-13-1438", "01011111111", "patients/pat_prd_gim_sudo01/reference.jpg"),
+            new PatientSeed("gim_hwang01", "김철수", LocalDate.of(1968, 4, 15), PatientGender.MALE, "GIMCHEON",
+                    "경북 김천시 증산면 황점리 황점1길 70-100-807", "01049163720", "patients/pat_prd_gim_hwang01/reference.jpg"),
+            new PatientSeed("gim_jirye01", "박영수", LocalDate.of(1957, 9, 3), PatientGender.MALE, "GIMCHEON",
+                    "경북 김천시 지례면 박곡리 지례예술촌길 390-427", "01033333333", "patients/pat_prd_gim_jirye01/reference.jpg"),
+            new PatientSeed("andong01", "안순자", LocalDate.of(1954, 2, 18), PatientGender.FEMALE, "ANDONG",
+                    "경북 안동시 임동면 사월리(보마골) 한절골길 356-384", "01044444444", "patients/pat_prd_andong01/reference.jpg"),
+            new PatientSeed("yj_marak01", "최복례", LocalDate.of(1952, 8, 21), PatientGender.FEMALE, "YEONGJU",
+                    "경북 영주시 단산면 마락리 영단로 1236-1-1522-4", "01055555555", "patients/pat_prd_yj_marak01/reference.jpg"),
+            new PatientSeed("yj_nam01", "이영희", LocalDate.of(1948, 3, 17), PatientGender.FEMALE, "YEONGJU",
+                    "경북 영주시 부석면 남대리 영부로 847-3-1199-24(남대리)", "01066666666", "patients/pat_prd_yj_nam01/reference.jpg"),
+            new PatientSeed("yj_nam02", "정말자", LocalDate.of(1959, 12, 9), PatientGender.FEMALE, "YEONGJU",
+                    "경북 영주시 부석면 남대리 영부로890번길 17-236(남대리)", "01077777777", "patients/pat_prd_yj_nam02/reference.jpg"),
+            new PatientSeed("sj_oeseo01", "장영호", LocalDate.of(1961, 7, 26), PatientGender.MALE, "SANGJU",
+                    "경북 상주시 외서면 대전2리 갈골 하나동1길, 하나동2길, 송죽동1길, 송죽동2길, 행복동길, 낙원동길", "01088888888",
+                    "patients/pat_prd_sj_oeseo01/reference.jpg"),
+            new PatientSeed("sj_euncheok01", "서금자", LocalDate.of(1950, 10, 12), PatientGender.FEMALE, "SANGJU",
+                    "경북 상주시 은척면 장암2리 수예길 16-132", "01099999999", "patients/pat_prd_sj_euncheok01/reference.jpg"),
+            new PatientSeed("sj_hwanam01", "윤복순", LocalDate.of(1949, 5, 30), PatientGender.FEMALE, "SANGJU",
+                    "경북 상주시 화남면 동관2리 평온동관로 3791-385", "01012341234", "patients/pat_prd_sj_hwanam01/reference.jpg"),
+            new PatientSeed("sj_hwanam02", "오정자", LocalDate.of(1956, 1, 8), PatientGender.FEMALE, "SANGJU",
+                    "경북 상주시 화남면 동관2리 비룡동관로 967-1162", "01023452345", "patients/pat_prd_sj_hwanam02/reference.jpg"));
+
+    private static final List<GuardianLinkSeed> GUARDIAN_LINK_SEEDS = List.of(
+            new GuardianLinkSeed("gim_sudo01", "배우자"),
+            new GuardianLinkSeed("gim_hwang01", "아들"),
+            new GuardianLinkSeed("gim_jirye01", "딸"),
+            new GuardianLinkSeed("andong01", "자부"));
+
+    private static final List<ScenarioSeed> SCENARIO_SEEDS = List.of(
+            new ScenarioSeed("gim_sudo01", "seed_prod_doc_im_01", -10, LocalTime.of(9, 0), "김천 수도리 권역 차량 단말 본인인증 검증용 예약", -70,
+                    -65, CaseStatus.PREPARING,
+                    new MissionSeed("GIMCHEON-01", MissionPhase.ARRIVED, MissionPhase.EN_ROUTE, "36.1115000", "128.0708000", -50, -20),
+                    new ConsultationSeed(ConsultationSessionStatus.READY, "prod-room-gim-01", null, null)),
+            new ScenarioSeed("gim_hwang01", "seed_prod_doc_im_02", -9, LocalTime.of(9, 30), "김천 황점리 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED, null,
+                    null),
+            new ScenarioSeed("gim_jirye01", "seed_prod_doc_ortho_01", -8, LocalTime.of(10, 0), "김천 지례 권역 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED,
+                    null, null),
+            new ScenarioSeed("andong01", "seed_prod_doc_neuro_01", -7, LocalTime.of(11, 0), "안동 임동면 본인인증 진행중 시나리오 검증용 예약", -60, -55,
+                    CaseStatus.IN_PROGRESS,
+                    new MissionSeed("ANDONG-01", MissionPhase.VERIFYING, MissionPhase.ARRIVED, "36.6987000", "128.8223000", -60, -25),
+                    new ConsultationSeed(ConsultationSessionStatus.READY, "prod-room-andong-01", null, null)),
+            new ScenarioSeed("yj_marak01", "seed_prod_doc_derm_01", -6, LocalTime.of(13, 0), "영주 단산면 active mission 검증용 예약", -50, -45,
+                    CaseStatus.PREPARING,
+                    new MissionSeed("YEONGJU-01", MissionPhase.ARRIVED, MissionPhase.EN_ROUTE, "36.8049000", "128.6240000", -45, -10),
+                    new ConsultationSeed(ConsultationSessionStatus.READY, "prod-room-yeongju-01", null, null)),
+            new ScenarioSeed("yj_nam01", "seed_prod_doc_im_02", -5, LocalTime.of(14, 0), "영주 남대리 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED, null, null),
+            new ScenarioSeed("yj_nam02", "seed_prod_doc_eye_01", -4, LocalTime.of(15, 0), "영주 남대리 안과 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED, null,
+                    null),
+            new ScenarioSeed("sj_oeseo01", "seed_prod_doc_ortho_01", -3, LocalTime.of(16, 0), "상주 외서면 화상진료 진행중 시나리오 검증용 예약", -40, -35,
+                    CaseStatus.IN_PROGRESS,
+                    new MissionSeed("SANGJU-01", MissionPhase.CONSULTING, MissionPhase.VERIFYING, "36.4109000", "128.1591000", -55, -15),
+                    new ConsultationSeed(ConsultationSessionStatus.IN_PROGRESS, "prod-room-sangju-01", -20, -18)),
+            new ScenarioSeed("sj_euncheok01", "seed_prod_doc_im_01", -2, LocalTime.of(10, 30), "상주 은척면 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED, null,
+                    null),
+            new ScenarioSeed("sj_hwanam01", "seed_prod_doc_neuro_01", -1, LocalTime.of(11, 0), "상주 화남면 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED, null,
+                    null),
+            new ScenarioSeed("sj_hwanam02", "seed_prod_doc_derm_01", -1, LocalTime.of(11, 30), "상주 화남면 피부과 미래 예약 조회용 예약", 0, 0, CaseStatus.CREATED,
+                    null, null));
+
+    private static final List<FutureSlotSeed> FUTURE_SLOT_SEEDS = List.of(
+            new FutureSlotSeed("seed_prod_doc_im_01", LocalTime.of(9, 0), LocalTime.of(9, 30)),
+            new FutureSlotSeed("seed_prod_doc_im_02", LocalTime.of(9, 30), LocalTime.of(10, 0)),
+            new FutureSlotSeed("seed_prod_doc_ortho_01", LocalTime.of(10, 0), LocalTime.of(10, 30)),
+            new FutureSlotSeed("seed_prod_doc_neuro_01", LocalTime.of(11, 0), LocalTime.of(11, 30)),
+            new FutureSlotSeed("seed_prod_doc_derm_01", LocalTime.of(13, 0), LocalTime.of(13, 30)),
+            new FutureSlotSeed("seed_prod_doc_im_02", LocalTime.of(14, 0), LocalTime.of(14, 30)),
+            new FutureSlotSeed("seed_prod_doc_eye_01", LocalTime.of(15, 0), LocalTime.of(15, 30)),
+            new FutureSlotSeed("seed_prod_doc_ortho_01", LocalTime.of(16, 0), LocalTime.of(16, 30)));
 
     private final UserRepository userRepository;
     private final PatientRepository patientRepository;
@@ -133,421 +170,119 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private final IntakeSessionRepository intakeSessionRepository;
     private final MissionRepository missionRepository;
     private final ConsultationSessionRepository consultationSessionRepository;
-    private final ConsultationSummaryRepository consultationSummaryRepository;
+    private final VehicleRepository vehicleRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
 
     @Value("${app.seed.default-password}")
     private String defaultPassword;
 
-    @Value("${livekit.url}")
+    @Value("${livekit.url:}")
     private String livekitUrl;
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (isSeedAlreadyApplied()) {
-            log.info("Seed data already present. Skipping bootstrap seed.");
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+
+        User adminUser = ensureUser(ADMIN_USERNAME, ADMIN_NAME, Role.ADMIN, null, ApprovalStatus.APPROVED);
+        Map<String, DoctorProfile> doctorsByUsername = seedDoctors(adminUser);
+        User guardianUser = ensureUser(GUARDIAN_USERNAME, GUARDIAN_NAME, Role.GUARDIAN, adminUser, ApprovalStatus.APPROVED);
+        Map<String, Vehicle> vehiclesByCode = seedVehicles();
+        Map<String, Patient> patientsByKey = seedPatients(adminUser);
+
+        seedGuardianLinks(patientsByKey, guardianUser, adminUser);
+        seedScenarios(today, now, doctorsByUsername, patientsByKey, vehiclesByCode);
+        seedFutureSlots(today, doctorsByUsername);
+
+        log.info("Prod-like dummy data synced. adminUsername={}, doctorCount={}, vehicleCodes={}, patientCount={}, activeMissionCount={}, futureSlotEnd={}",
+                adminUser.getUsername(), doctorsByUsername.size(), vehiclesByCode.keySet(), patientsByKey.size(),
+                SCENARIO_SEEDS.stream().filter(seed -> seed.missionSeed() != null).count(), FUTURE_SLOT_END_DATE);
+    }
+
+    private Map<String, DoctorProfile> seedDoctors(User adminUser) {
+        Map<String, DoctorProfile> doctorsByUsername = new LinkedHashMap<>();
+        for (DoctorSeed seed : DOCTOR_SEEDS) {
+            User user = ensureUser(seed.username(), seed.name(), Role.DOCTOR, adminUser, ApprovalStatus.APPROVED);
+            doctorsByUsername.put(seed.username(), ensureDoctorProfile(user, seed.department(), seed.departmentName()));
+        }
+        return doctorsByUsername;
+    }
+
+    private Map<String, Vehicle> seedVehicles() {
+        Map<String, Vehicle> vehiclesByCode = new LinkedHashMap<>();
+        for (VehicleSeed seed : VEHICLE_SEEDS) {
+            vehiclesByCode.put(seed.code(), ensureVehicle(seed));
+        }
+        return vehiclesByCode;
+    }
+
+    private Map<String, Patient> seedPatients(User adminUser) {
+        Map<String, Patient> patientsByKey = new LinkedHashMap<>();
+        for (PatientSeed seed : PATIENT_SEEDS) {
+            patientsByKey.put(seed.key(), ensurePatient(
+                    seed.name(), seed.birthDate(), seed.gender(), seed.regionCode(), seed.address(), seed.phone(),
+                    seed.referenceImagePath(), adminUser));
+        }
+        return patientsByKey;
+    }
+
+    private void seedGuardianLinks(Map<String, Patient> patientsByKey, User guardianUser, User adminUser) {
+        for (GuardianLinkSeed seed : GUARDIAN_LINK_SEEDS) {
+            ensureGuardianLink(getPatient(patientsByKey, seed.patientKey()), guardianUser, seed.relation(),
+                    GuardianLinkStatus.APPROVED, adminUser);
+        }
+    }
+
+    private void seedScenarios(LocalDate today, LocalDateTime now, Map<String, DoctorProfile> doctorsByUsername,
+            Map<String, Patient> patientsByKey, Map<String, Vehicle> vehiclesByCode) {
+        for (ScenarioSeed seed : SCENARIO_SEEDS) {
+            Patient patient = getPatient(patientsByKey, seed.patientKey());
+            DoctorProfile doctor = getDoctor(doctorsByUsername, seed.doctorUsername());
+            ScheduleSlot slot = ensureSlot(doctor, today.plusDays(seed.dayOffset()), seed.startTime(),
+                    seed.startTime().plusMinutes(30));
+
+            IntakeSession intakeSession = ensureIntakeSession(
+                    patient, patient.getPhone(), doctor.getDepartment(), doctor.getDepartmentName(),
+                    seed.selectionReason(), List.of(slot.getPublicId()), CompletionReason.BOOKING_CREATED);
+            syncIntakeSessionTimeline(intakeSession, now.plusMinutes(seed.lastActivityOffsetMinutes()),
+                    now.plusMinutes(seed.endedOffsetMinutes()), CompletionReason.BOOKING_CREATED);
+
+            Booking booking = ensureBooking(patient, slot, BookingStatus.CONFIRMED, intakeSession, null);
+            CareCase careCase = ensureCareCase(booking, intakeSession);
+            syncCaseStatus(careCase, seed.caseStatus());
+
+            if (seed.missionSeed() != null) {
+                Vehicle vehicle = getVehicle(vehiclesByCode, seed.missionSeed().vehicleCode());
+                LocalDateTime dispatchedAt = now.plusMinutes(seed.missionSeed().dispatchedOffsetMinutes());
+                LocalDateTime eta = now.plusMinutes(seed.missionSeed().etaOffsetMinutes());
+                Mission mission = ensureMission(careCase, vehicle.getPublicId(), patient.getAddress(), dispatchedAt, eta);
+                syncMissionState(mission, vehicle.getPublicId(), patient.getAddress(), dispatchedAt, eta,
+                        seed.missionSeed().phase(), seed.missionSeed().previousPhase(),
+                        bd(seed.missionSeed().latitude()), bd(seed.missionSeed().longitude()), null);
+            }
+
+            if (seed.consultationSeed() != null) {
+                ConsultationSession session = ensureConsultationSession(careCase, seed.consultationSeed().roomId(),
+                        resolveSeedLivekitUrl());
+                syncConsultationSessionState(session, seed.consultationSeed().status(),
+                        resolveTimestamp(now, seed.consultationSeed().doctorJoinedOffsetMinutes()),
+                        resolveTimestamp(now, seed.consultationSeed().startedOffsetMinutes()), null, null);
+            }
+        }
+    }
+
+    private void seedFutureSlots(LocalDate today, Map<String, DoctorProfile> doctorsByUsername) {
+        // 예약 추천이 "가장 빠른 오늘 슬롯"부터 안내되도록 조회용 미래 슬롯도 오늘부터 채운다.
+        LocalDate startDate = today;
+        if (startDate.isAfter(FUTURE_SLOT_END_DATE)) {
             return;
         }
 
-        LocalDate today = LocalDate.now();
-        LocalDate historyStart = today.minusDays(18);
-        LocalDate scheduleEnd = resolveScheduleEnd(today);
-
-        User adminUser = ensureUser("seed_admin", "로컬 관리자", Role.ADMIN, null, ApprovalStatus.APPROVED);
-        DoctorSeedBundle doctorBundle = seedDoctors(adminUser);
-        GuardianSeedBundle guardianBundle = seedGuardians(adminUser);
-        List<Patient> patients = seedPatients(adminUser);
-
-        seedGuardianLinks(patients, guardianBundle, adminUser);
-        seedDepartmentSlots(doctorBundle.approvedDoctors(), historyStart, scheduleEnd);
-        seedJourneys(patients, doctorBundle.approvedDoctors(), today, scheduleEnd);
-
-        log.info(
-                "Expanded local dummy data seeded. adminUsername={}, approvedDoctorCount={}, guardianCount={}, patientCount={}, defaultPassword={}, sampleDoctorUsernames={}, samplePatientPhones={}",
-                adminUser.getUsername(),
-                doctorBundle.approvedDoctors().size(),
-                guardianBundle.allUsers().size(),
-                patients.size(),
-                defaultPassword,
-                doctorBundle.approvedDoctors().stream().map(doctor -> doctor.getUser().getUsername()).limit(5).toList(),
-                patients.stream().map(Patient::getPhone).limit(6).toList());
-    }
-
-    private boolean isSeedAlreadyApplied() {
-        return userRepository.findByUsername(SEED_ADMIN_USERNAME).isPresent()
-                && consultationSessionRepository.findWithParticipantsByRoomId(SEED_ROOM_PREFIX + "001").isPresent();
-    }
-
-    private DoctorSeedBundle seedDoctors(User adminUser) {
-        List<DoctorProfile> approvedDoctors = new ArrayList<>();
-        List<User> pendingDoctors = new ArrayList<>();
-
-        for (DoctorSeed seed : DOCTOR_SEEDS) {
-            User user = ensureUser(seed.username(), seed.name(), Role.DOCTOR, adminUser, seed.approvalStatus());
-            DoctorProfile doctorProfile = ensureDoctorProfile(user, seed.department(), seed.departmentName());
-            if (seed.approvalStatus() == ApprovalStatus.APPROVED) {
-                approvedDoctors.add(doctorProfile);
-            } else {
-                pendingDoctors.add(user);
-            }
-        }
-
-        approvedDoctors.sort(Comparator.comparing(doctor -> doctor.getUser().getUsername()));
-        return new DoctorSeedBundle(approvedDoctors, pendingDoctors);
-    }
-
-    private GuardianSeedBundle seedGuardians(User adminUser) {
-        List<User> approved = new ArrayList<>();
-        List<User> pending = new ArrayList<>();
-        List<User> rejected = new ArrayList<>();
-
-        for (int i = 0; i < GUARDIAN_COUNT; i++) {
-            ApprovalStatus approvalStatus = guardianApprovalStatus(i);
-            String username = String.format("seed_guardian_%02d", i + 1);
-            String name = buildGuardianName(i);
-            User guardian = ensureUser(username, name, Role.GUARDIAN, adminUser, approvalStatus);
-            if (approvalStatus == ApprovalStatus.APPROVED) {
-                approved.add(guardian);
-            } else if (approvalStatus == ApprovalStatus.PENDING) {
-                pending.add(guardian);
-            } else {
-                rejected.add(guardian);
-            }
-        }
-
-        return new GuardianSeedBundle(approved, pending, rejected);
-    }
-
-    private List<Patient> seedPatients(User adminUser) {
-        List<Patient> patients = new ArrayList<>();
-        for (int i = 0; i < PATIENT_COUNT; i++) {
-            patients.add(ensurePatient(
-                    buildPatientName(i),
-                    buildPatientBirthDate(i),
-                    buildPatientGender(i),
-                    buildPatientAddress(i),
-                    buildPatientPhone(i),
-                    String.format("seed/patients/patient-%02d-reference.jpg", i + 1),
-                    adminUser));
-        }
-        return patients;
-    }
-
-    private void seedGuardianLinks(List<Patient> patients, GuardianSeedBundle guardianBundle, User adminUser) {
-        for (int i = 0; i < 24; i++) {
-            ensureGuardianLink(
-                    patients.get(i),
-                    guardianBundle.approvedUsers().get(i % guardianBundle.approvedUsers().size()),
-                    RELATIONS.get(i % RELATIONS.size()),
-                    GuardianLinkStatus.APPROVED,
-                    adminUser);
-        }
-
-        for (int i = 0; i < 8; i++) {
-            ensureGuardianLink(
-                    patients.get(24 + i),
-                    guardianBundle.pendingUsers().get(i % guardianBundle.pendingUsers().size()),
-                    RELATIONS.get((i + 2) % RELATIONS.size()),
-                    GuardianLinkStatus.PENDING,
-                    adminUser);
-        }
-
-        for (int i = 0; i < 4; i++) {
-            ensureGuardianLink(
-                    patients.get(32 + i),
-                    guardianBundle.rejectedUsers().get(i % guardianBundle.rejectedUsers().size()),
-                    RELATIONS.get((i + 4) % RELATIONS.size()),
-                    GuardianLinkStatus.REJECTED,
-                    adminUser);
-        }
-    }
-
-    private void seedDepartmentSlots(List<DoctorProfile> approvedDoctors, LocalDate startDate, LocalDate endDate) {
-        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            for (DoctorProfile doctor : approvedDoctors) {
-                if (!isWorkingDay(doctor, date)) {
-                    continue;
-                }
-                for (LocalTime startTime : SLOT_START_TIMES) {
-                    ensureSlot(doctor, date, startTime, startTime.plusMinutes(30));
-                }
-            }
-        }
-    }
-
-    private void seedJourneys(List<Patient> patients, List<DoctorProfile> approvedDoctors, LocalDate today,
-            LocalDate scheduleEnd) {
-        Map<String, List<DoctorProfile>> doctorsByDepartment = approvedDoctors.stream()
-                .collect(Collectors.groupingBy(
-                        DoctorProfile::getDepartment,
-                        LinkedHashMap::new,
-                        Collectors.collectingAndThen(Collectors.toList(), list -> {
-                            list.sort(Comparator.comparing(doctor -> doctor.getUser().getUsername()));
-                            return list;
-                        })));
-        Map<String, Integer> doctorCursor = new HashMap<>();
-        SeedSequence sequence = new SeedSequence();
-
-        seedHistoricalCompletedCases(patients.subList(0, 14), doctorsByDepartment, doctorCursor, today, sequence);
-        seedActiveMissionCases(patients.subList(14, 24), doctorsByDepartment, doctorCursor, today, sequence);
-        seedFutureConfirmedBookings(patients.subList(24, 58), doctorsByDepartment, doctorCursor, today, scheduleEnd);
-        seedCancelledBookings(patients.subList(58, 68), doctorsByDepartment, doctorCursor, today, scheduleEnd);
-        seedIntakeOnlySessions(patients.subList(68, patients.size()), doctorsByDepartment, doctorCursor, today);
-    }
-
-    private void seedHistoricalCompletedCases(List<Patient> patients,
-            Map<String, List<DoctorProfile>> doctorsByDepartment,
-            Map<String, Integer> doctorCursor,
-            LocalDate today,
-            SeedSequence sequence) {
-        List<String> departments = List.of(
-                "INTERNAL_MEDICINE", "ORTHOPEDICS", "DERMATOLOGY", "NEUROLOGY", "OPHTHALMOLOGY",
-                "INTERNAL_MEDICINE", "ORTHOPEDICS", "DERMATOLOGY", "NEUROLOGY", "INTERNAL_MEDICINE",
-                "ORTHOPEDICS", "INTERNAL_MEDICINE", "OPHTHALMOLOGY", "DERMATOLOGY");
-
-        for (int i = 0; i < patients.size(); i++) {
-            seedJourney(
-                    patients.get(i),
-                    nextDoctor(doctorsByDepartment, doctorCursor, departments.get(i % departments.size())),
-                    today.minusDays(i + 1L),
-                    SLOT_START_TIMES.get(i % SLOT_START_TIMES.size()),
-                    BookingStatus.COMPLETED,
-                    CaseStatus.COMPLETED,
-                    MissionPhase.COMPLETED,
-                    ConsultationSessionStatus.COMPLETED,
-                    true,
-                    true,
-                    null,
-                    sequence,
-                    i);
-        }
-    }
-
-    private void seedActiveMissionCases(List<Patient> patients,
-            Map<String, List<DoctorProfile>> doctorsByDepartment,
-            Map<String, Integer> doctorCursor,
-            LocalDate today,
-            SeedSequence sequence) {
-        List<ActiveJourneyPlan> plans = List.of(
-                new ActiveJourneyPlan("INTERNAL_MEDICINE", 0, LocalTime.of(9, 30), BookingStatus.CONFIRMED,
-                        CaseStatus.PREPARING, MissionPhase.DISPATCHED, null, false),
-                new ActiveJourneyPlan("ORTHOPEDICS", 0, LocalTime.of(11, 0), BookingStatus.CONFIRMED,
-                        CaseStatus.PREPARING, MissionPhase.EN_ROUTE, null, false),
-                new ActiveJourneyPlan("DERMATOLOGY", 1, LocalTime.of(14, 0), BookingStatus.CONFIRMED,
-                        CaseStatus.PREPARING, MissionPhase.ARRIVED, ConsultationSessionStatus.READY, false),
-                new ActiveJourneyPlan("NEUROLOGY", 1, LocalTime.of(15, 30), BookingStatus.CONFIRMED,
-                        CaseStatus.IN_PROGRESS, MissionPhase.VERIFYING, ConsultationSessionStatus.READY, false),
-                new ActiveJourneyPlan("INTERNAL_MEDICINE", 2, LocalTime.of(10, 0), BookingStatus.CONFIRMED,
-                        CaseStatus.IN_PROGRESS, MissionPhase.CONSULTING, ConsultationSessionStatus.IN_PROGRESS, false),
-                new ActiveJourneyPlan("OPHTHALMOLOGY", 2, LocalTime.of(16, 0), BookingStatus.CONFIRMED,
-                        CaseStatus.IN_PROGRESS, MissionPhase.CONSULTING, ConsultationSessionStatus.IN_PROGRESS, false),
-                new ActiveJourneyPlan("ORTHOPEDICS", 3, LocalTime.of(9, 0), BookingStatus.COMPLETED,
-                        CaseStatus.IN_PROGRESS, MissionPhase.RETURNING, ConsultationSessionStatus.COMPLETED, true),
-                new ActiveJourneyPlan("DERMATOLOGY", 4, LocalTime.of(17, 0), BookingStatus.CONFIRMED,
-                        CaseStatus.PREPARING, MissionPhase.DISPATCHED, null, false),
-                new ActiveJourneyPlan("INTERNAL_MEDICINE", 5, LocalTime.of(14, 30), BookingStatus.CONFIRMED,
-                        CaseStatus.PREPARING, MissionPhase.EN_ROUTE, null, false),
-                new ActiveJourneyPlan("NEUROLOGY", 6, LocalTime.of(17, 30), BookingStatus.CONFIRMED,
-                        CaseStatus.IN_PROGRESS, MissionPhase.VERIFYING, ConsultationSessionStatus.READY, false));
-
-        for (int i = 0; i < patients.size(); i++) {
-            ActiveJourneyPlan plan = plans.get(i);
-            seedJourney(
-                    patients.get(i),
-                    nextDoctor(doctorsByDepartment, doctorCursor, plan.department()),
-                    today.plusDays(plan.dayOffset()),
-                    plan.startTime(),
-                    plan.bookingStatus(),
-                    plan.caseStatus(),
-                    plan.missionPhase(),
-                    plan.sessionStatus(),
-                    true,
-                    plan.createSummary(),
-                    null,
-                    sequence,
-                    100 + i);
-        }
-    }
-
-    private void seedFutureConfirmedBookings(List<Patient> patients,
-            Map<String, List<DoctorProfile>> doctorsByDepartment,
-            Map<String, Integer> doctorCursor,
-            LocalDate today,
-            LocalDate scheduleEnd) {
-        List<String> departmentRotation = List.of(
-                "INTERNAL_MEDICINE", "ORTHOPEDICS", "DERMATOLOGY", "NEUROLOGY",
-                "INTERNAL_MEDICINE", "OPHTHALMOLOGY", "INTERNAL_MEDICINE", "ORTHOPEDICS");
-
-        for (int i = 0; i < patients.size(); i++) {
-            LocalDate appointmentDate = today.plusDays(3L + i);
-            if (appointmentDate.isAfter(scheduleEnd)) {
-                appointmentDate = scheduleEnd.minusDays(i % 5L);
-            }
-            seedJourney(
-                    patients.get(i),
-                    nextDoctor(doctorsByDepartment, doctorCursor,
-                            departmentRotation.get(i % departmentRotation.size())),
-                    appointmentDate,
-                    SLOT_START_TIMES.get((i + 4) % SLOT_START_TIMES.size()),
-                    BookingStatus.CONFIRMED,
-                    CaseStatus.CREATED,
-                    null,
-                    null,
-                    false,
-                    false,
-                    null,
-                    null,
-                    200 + i);
-        }
-    }
-
-    private void seedCancelledBookings(List<Patient> patients,
-            Map<String, List<DoctorProfile>> doctorsByDepartment,
-            Map<String, Integer> doctorCursor,
-            LocalDate today,
-            LocalDate scheduleEnd) {
-        List<String> departmentRotation = List.of("INTERNAL_MEDICINE", "ORTHOPEDICS", "DERMATOLOGY", "NEUROLOGY",
-                "OPHTHALMOLOGY");
-
-        for (int i = 0; i < patients.size(); i++) {
-            LocalDate appointmentDate = today.plusDays(5L + (i * 2L));
-            if (appointmentDate.isAfter(scheduleEnd)) {
-                appointmentDate = scheduleEnd.minusDays((i % 4L) + 1L);
-            }
-            seedJourney(
-                    patients.get(i),
-                    nextDoctor(doctorsByDepartment, doctorCursor,
-                            departmentRotation.get(i % departmentRotation.size())),
-                    appointmentDate,
-                    SLOT_START_TIMES.get((i + 2) % SLOT_START_TIMES.size()),
-                    BookingStatus.CANCELLED,
-                    CaseStatus.CANCELLED,
-                    null,
-                    null,
-                    false,
-                    false,
-                    CANCEL_REASONS.get(i % CANCEL_REASONS.size()),
-                    null,
-                    300 + i);
-        }
-    }
-
-    private void seedIntakeOnlySessions(List<Patient> patients,
-            Map<String, List<DoctorProfile>> doctorsByDepartment,
-            Map<String, Integer> doctorCursor,
-            LocalDate today) {
-        CompletionReason[] completionReasons = {
-                CompletionReason.EXISTING_BOOKING_CHECKED, CompletionReason.EXISTING_BOOKING_CHECKED,
-                CompletionReason.EXISTING_BOOKING_CHECKED, CompletionReason.EXISTING_BOOKING_CHECKED,
-                CompletionReason.EXISTING_BOOKING_CHECKED, CompletionReason.EXISTING_BOOKING_CHECKED,
-                CompletionReason.NO_INPUT_TIMEOUT, CompletionReason.NO_INPUT_TIMEOUT, CompletionReason.NO_INPUT_TIMEOUT,
-                CompletionReason.USER_HANGUP, CompletionReason.USER_HANGUP, CompletionReason.USER_HANGUP
-        };
-        List<String> departmentRotation = List.of("INTERNAL_MEDICINE", "ORTHOPEDICS", "DERMATOLOGY", "NEUROLOGY",
-                "OPHTHALMOLOGY");
-
-        for (int i = 0; i < patients.size(); i++) {
-            DoctorProfile doctor = nextDoctor(doctorsByDepartment, doctorCursor,
-                    departmentRotation.get(i % departmentRotation.size()));
-            LocalDate slotDate = today.plusDays(7L + i);
-            LocalTime slotTime = SLOT_START_TIMES.get((i + 1) % SLOT_START_TIMES.size());
-            ScheduleSlot slot = ensureSlot(doctor, slotDate, slotTime, slotTime.plusMinutes(30));
-            IntakeSession intakeSession = ensureIntakeSession(
-                    patients.get(i),
-                    patients.get(i).getPhone(),
-                    doctor.getDepartment(),
-                    doctor.getDepartmentName(),
-                    buildSelectionReason(doctor.getDepartment(), 400 + i),
-                    List.of(slot.getPublicId()),
-                    completionReasons[i]);
-            LocalDateTime activityTime = LocalDateTime.of(slotDate, slotTime.minusMinutes(20));
-            syncIntakeSessionTimeline(intakeSession, activityTime, activityTime.plusMinutes(4), completionReasons[i]);
-        }
-    }
-
-    private void seedJourney(Patient patient,
-            DoctorProfile doctor,
-            LocalDate appointmentDate,
-            LocalTime startTime,
-            BookingStatus bookingStatus,
-            CaseStatus caseStatus,
-            MissionPhase missionPhase,
-            ConsultationSessionStatus sessionStatus,
-            boolean createMission,
-            boolean createSummary,
-            String cancelReason,
-            SeedSequence sequence,
-            int seedIndex) {
-        ScheduleSlot slot = ensureSlot(doctor, appointmentDate, startTime, startTime.plusMinutes(30));
-        IntakeSession intakeSession = ensureIntakeSession(
-                patient,
-                patient.getPhone(),
-                doctor.getDepartment(),
-                doctor.getDepartmentName(),
-                buildSelectionReason(doctor.getDepartment(), seedIndex),
-                List.of(slot.getPublicId()),
-                CompletionReason.BOOKING_CREATED);
-
-        LocalDateTime intakeBaseTime = LocalDateTime.of(appointmentDate, startTime.minusMinutes(25));
-        syncIntakeSessionTimeline(intakeSession, intakeBaseTime, intakeBaseTime.plusMinutes(5),
-                CompletionReason.BOOKING_CREATED);
-
-        Booking booking = ensureBooking(patient, slot, bookingStatus, intakeSession, cancelReason);
-        CareCase careCase = ensureCareCase(booking, intakeSession);
-        syncCaseStatus(careCase, caseStatus);
-
-        if (createMission && missionPhase != null) {
-            LocalDateTime dispatchedAt = LocalDateTime.of(appointmentDate, startTime.minusMinutes(50));
-            LocalDateTime eta = LocalDateTime.of(appointmentDate, startTime.minusMinutes(15));
-            LocalDateTime missionCompletedAt = missionPhase == MissionPhase.COMPLETED
-                    ? LocalDateTime.of(appointmentDate, startTime.plusMinutes(45))
-                    : null;
-
-            Mission mission = ensureMission(
-                    careCase,
-                    String.format("GIMCHEON-%02d", sequence.nextVehicle()),
-                    patient.getAddress(),
-                    dispatchedAt,
-                    eta,
-                    missionPhase,
-                    coordinateValue(35.8612, seedIndex),
-                    coordinateValue(128.0581, seedIndex + 7));
-            syncMissionTimeline(mission, dispatchedAt, eta, missionCompletedAt);
-        }
-
-        if (sessionStatus != null) {
-            ConsultationSession session = ensureConsultationSession(
-                    careCase,
-                    String.format("seed-room-%03d", sequence.nextRoom()),
-                    sessionStatus,
-                    resolveDurationMinutes(sessionStatus, seedIndex));
-
-            LocalDateTime joinedAt = LocalDateTime.of(appointmentDate, startTime.plusMinutes(3));
-            LocalDateTime startedAt = sessionStatus == ConsultationSessionStatus.READY
-                    ? null
-                    : LocalDateTime.of(appointmentDate, startTime.plusMinutes(5));
-            LocalDateTime endedAt = sessionStatus == ConsultationSessionStatus.COMPLETED
-                    ? LocalDateTime.of(appointmentDate,
-                            startTime.plusMinutes(5 + resolveDurationMinutes(sessionStatus, seedIndex)))
-                    : null;
-
-            syncConsultationSessionState(
-                    session,
-                    sessionStatus,
-                    joinedAt,
-                    startedAt,
-                    endedAt,
-                    resolveDurationMinutes(sessionStatus, seedIndex));
-
-            if (createSummary) {
-                ensureConsultationSummary(
-                        session,
-                        buildSummaryNote(doctor.getDepartment(), seedIndex),
-                        shouldIssuePrescription(doctor.getDepartment(), seedIndex),
-                        buildPrescriptionNote(doctor.getDepartment(), seedIndex),
-                        needsFollowUp(doctor.getDepartment(), seedIndex));
+        for (LocalDate slotDate = startDate; !slotDate.isAfter(FUTURE_SLOT_END_DATE); slotDate = slotDate.plusDays(1)) {
+            for (FutureSlotSeed seed : FUTURE_SLOT_SEEDS) {
+                ensureSlot(getDoctor(doctorsByUsername, seed.doctorUsername()), slotDate, seed.startTime(), seed.endTime());
             }
         }
     }
@@ -560,7 +295,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         .name(name)
                         .role(role)
                         .build()));
-
         syncUserBasics(user, name, role);
         syncApprovalStatus(user, approver, targetStatus);
         return user;
@@ -589,7 +323,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         if (user.getApprovalStatus() == targetStatus) {
             return;
         }
-
         if (targetStatus == ApprovalStatus.APPROVED) {
             user.approve(approver);
             return;
@@ -642,9 +375,58 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return doctorProfile;
     }
 
-    private Patient ensurePatient(String name, LocalDate birthDate, PatientGender gender, String address, String phone,
-            String referenceImagePath, User uploadedBy) {
-        String birthDate6 = birthDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
+    private Vehicle ensureVehicle(VehicleSeed seed) {
+        vehicleRepository.findByRegionCodeAndIsActiveTrue(seed.regionCode())
+                .filter(existing -> !Objects.equals(existing.getCode(), seed.code()))
+                .ifPresent(existing -> {
+                    throw new IllegalStateException(
+                            "Active vehicle conflict for region %s: %s".formatted(seed.regionCode(), existing.getCode()));
+                });
+
+        Vehicle vehicle = vehicleRepository.findByCode(seed.code()).orElseGet(() -> vehicleRepository.save(
+                Vehicle.builder()
+                        .code(seed.code())
+                        .regionCode(seed.regionCode())
+                        .displayName(seed.displayName())
+                        .isActive(true)
+                        .operationalStatus(OperationalStatus.OPERATIONAL)
+                        .statusChangedAt(LocalDateTime.now())
+                        .build()));
+
+        if (!Objects.equals(vehicle.getPublicId(), seed.publicId())
+                || !Objects.equals(vehicle.getRegionCode(), seed.regionCode())
+                || !Objects.equals(vehicle.getDisplayName(), seed.displayName())
+                || !vehicle.isActive()
+                || vehicle.getOperationalStatus() != OperationalStatus.OPERATIONAL
+                || vehicle.getStatusReason() != null) {
+            entityManager.createQuery("""
+                    update Vehicle v
+                       set v.publicId = :publicId,
+                           v.regionCode = :regionCode,
+                           v.displayName = :displayName,
+                           v.isActive = true,
+                           v.operationalStatus = :operationalStatus,
+                           v.statusChangedAt = :statusChangedAt,
+                           v.statusReason = null
+                     where v.id = :id
+                    """)
+                    .setParameter("publicId", seed.publicId())
+                    .setParameter("regionCode", seed.regionCode())
+                    .setParameter("displayName", seed.displayName())
+                    .setParameter("operationalStatus", OperationalStatus.OPERATIONAL)
+                    .setParameter("statusChangedAt", LocalDateTime.now())
+                    .setParameter("id", vehicle.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(vehicle);
+        }
+
+        return vehicle;
+    }
+
+    private Patient ensurePatient(String name, LocalDate birthDate, PatientGender gender, String regionCode,
+            String address, String phone, String referenceImagePath, User uploadedBy) {
+        String birthDate6 = birthDate.format(BIRTH_DATE6_FORMAT);
         Patient patient = patientRepository.findByPhone(phone)
                 .or(() -> patientRepository.findAllByNameAndBirthDate6(name, birthDate6).stream().findFirst())
                 .orElseGet(() -> patientRepository.save(
@@ -652,30 +434,30 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                                 .name(name)
                                 .birthDate(birthDate)
                                 .gender(gender)
-                                .regionCode(REGION_GIMCHEON_JEUNGSAN)
+                                .regionCode(regionCode)
                                 .address(address)
                                 .phone(phone)
                                 .build()));
 
-        if (!name.equals(patient.getName())
-                || !birthDate.equals(patient.getBirthDate())
-                || gender != patient.getGender()
-                || !REGION_GIMCHEON_JEUNGSAN.equals(patient.getRegionCode())
-                || !address.equals(patient.getAddress())
-                || !phone.equals(patient.getPhone())) {
-            patient.updateProfile(name, birthDate, gender, REGION_GIMCHEON_JEUNGSAN, address, phone);
+        if (!Objects.equals(patient.getName(), name)
+                || !Objects.equals(patient.getBirthDate(), birthDate)
+                || patient.getGender() != gender
+                || !Objects.equals(patient.getRegionCode(), regionCode)
+                || !Objects.equals(patient.getAddress(), address)
+                || !Objects.equals(patient.getPhone(), phone)) {
+            patient.updateProfile(name, birthDate, gender, regionCode, address, phone);
         }
 
         if (referenceImagePath != null
-                && (!patient.hasReferenceImage() || !referenceImagePath.equals(patient.getReferenceImagePath()))) {
+                && (!patient.hasReferenceImage() || !Objects.equals(patient.getReferenceImagePath(), referenceImagePath))) {
             patient.updateReferenceImage(referenceImagePath, uploadedBy);
         }
 
         return patient;
     }
 
-    private void ensureGuardianLink(Patient patient, User guardianUser, String relation,
-            GuardianLinkStatus targetStatus, User approver) {
+    private void ensureGuardianLink(Patient patient, User guardianUser, String relation, GuardianLinkStatus targetStatus,
+            User approver) {
         PatientGuardianLink link = patientGuardianLinkRepository.findByPatientAndGuardianUser(patient, guardianUser)
                 .orElseGet(() -> patientGuardianLinkRepository.save(
                         PatientGuardianLink.builder()
@@ -699,9 +481,13 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         if (targetStatus == GuardianLinkStatus.APPROVED && link.getStatus() != GuardianLinkStatus.APPROVED) {
             link.approve(approver);
-        } else if (targetStatus == GuardianLinkStatus.REJECTED && link.getStatus() != GuardianLinkStatus.REJECTED) {
+            return;
+        }
+        if (targetStatus == GuardianLinkStatus.REJECTED && link.getStatus() != GuardianLinkStatus.REJECTED) {
             link.reject(approver);
-        } else if (targetStatus == GuardianLinkStatus.PENDING && link.getStatus() != GuardianLinkStatus.PENDING) {
+            return;
+        }
+        if (targetStatus == GuardianLinkStatus.PENDING && link.getStatus() != GuardianLinkStatus.PENDING) {
             entityManager.createQuery("""
                     update PatientGuardianLink l
                        set l.status = :status,
@@ -715,13 +501,10 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             entityManager.flush();
             entityManager.refresh(link);
         }
-
     }
 
-    private IntakeSession ensureIntakeSession(Patient patient, String callerNumber,
-            String department, String departmentName,
-            String selectionReason,
-            List<String> offeredSlotIds,
+    private IntakeSession ensureIntakeSession(Patient patient, String callerNumber, String department,
+            String departmentName, String selectionReason, List<String> offeredSlotIds,
             CompletionReason completionReason) {
         IntakeSession intakeSession = intakeSessionRepository
                 .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, IntakeChannel.PHONE)
@@ -731,29 +514,20 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                                 .channel(IntakeChannel.PHONE)
                                 .build()));
 
-        if (intakeSession.getPatient() == null || !intakeSession.getPatient().getId().equals(patient.getId())) {
+        if (intakeSession.getPatient() == null || !Objects.equals(intakeSession.getPatient().getId(), patient.getId())) {
             intakeSession.bindPatient(patient);
         }
 
-        intakeSession.recordSelection(
-                department,
-                departmentName,
-                ConfidenceLevel.HIGH,
-                false,
-                selectionReason,
+        intakeSession.recordSelection(department, departmentName, ConfidenceLevel.HIGH, false, selectionReason,
                 offeredSlotIds);
-
         if (intakeSession.isActive()) {
             intakeSession.complete(completionReason);
         }
-
         return intakeSession;
     }
 
-    private void syncIntakeSessionTimeline(IntakeSession intakeSession,
-            LocalDateTime lastActivityAt,
-            LocalDateTime endedAt,
-            CompletionReason completionReason) {
+    private void syncIntakeSessionTimeline(IntakeSession intakeSession, LocalDateTime lastActivityAt,
+            LocalDateTime endedAt, CompletionReason completionReason) {
         entityManager.createQuery("""
                 update IntakeSession i
                    set i.status = :status,
@@ -774,7 +548,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     }
 
     private ScheduleSlot ensureSlot(DoctorProfile doctor, LocalDate slotDate, LocalTime startTime, LocalTime endTime) {
-        return scheduleSlotRepository
+        ScheduleSlot slot = scheduleSlotRepository
                 .findByDoctorUserUsernameAndSlotDateAndStartTime(doctor.getUser().getUsername(), slotDate, startTime)
                 .orElseGet(() -> scheduleSlotRepository.save(
                         ScheduleSlot.builder()
@@ -783,27 +557,35 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                                 .startTime(startTime)
                                 .endTime(endTime)
                                 .build()));
+
+        if (!Objects.equals(slot.getEndTime(), endTime)) {
+            entityManager.createQuery("""
+                    update ScheduleSlot s
+                       set s.endTime = :endTime
+                     where s.id = :id
+                    """)
+                    .setParameter("endTime", endTime)
+                    .setParameter("id", slot.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(slot);
+        }
+        return slot;
     }
 
     private Booking ensureBooking(Patient patient, ScheduleSlot slot, BookingStatus targetStatus,
             IntakeSession intakeSession, String cancelReason) {
-        Booking booking = bookingRepository.findBySlot(slot).orElseGet(() -> {
-            if (!slot.isBooked() && targetStatus != BookingStatus.CANCELLED) {
-                slot.markBooked();
-            }
-
-            return bookingRepository.save(
-                    Booking.builder()
-                            .patient(patient)
-                            .intakeSession(intakeSession)
-                            .slot(slot)
-                            .doctor(slot.getDoctor())
-                            .channel(DEFAULT_CHANNEL)
-                            .appointmentDate(slot.getSlotDate())
-                            .startTime(slot.getStartTime())
-                            .endTime(slot.getEndTime())
-                            .build());
-        });
+        Booking booking = bookingRepository.findBySlot(slot).orElseGet(() -> bookingRepository.save(
+                Booking.builder()
+                        .patient(patient)
+                        .intakeSession(intakeSession)
+                        .slot(slot)
+                        .doctor(slot.getDoctor())
+                        .channel(DEFAULT_CHANNEL)
+                        .appointmentDate(slot.getSlotDate())
+                        .startTime(slot.getStartTime())
+                        .endTime(slot.getEndTime())
+                        .build()));
 
         if (targetStatus == BookingStatus.CANCELLED) {
             slot.markAvailable();
@@ -813,18 +595,30 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         entityManager.createQuery("""
                 update Booking b
-                   set b.intakeSession = :intakeSession,
+                   set b.patient = :patient,
+                       b.intakeSession = :intakeSession,
+                       b.slot = :slot,
+                       b.doctor = :doctor,
+                       b.channel = :channel,
+                       b.appointmentDate = :appointmentDate,
+                       b.startTime = :startTime,
+                       b.endTime = :endTime,
                        b.status = :status,
                        b.cancelReason = :cancelReason,
                        b.cancelledAt = :cancelledAt
                  where b.id = :id
                 """)
+                .setParameter("patient", patient)
                 .setParameter("intakeSession", intakeSession)
+                .setParameter("slot", slot)
+                .setParameter("doctor", slot.getDoctor())
+                .setParameter("channel", DEFAULT_CHANNEL)
+                .setParameter("appointmentDate", slot.getSlotDate())
+                .setParameter("startTime", slot.getStartTime())
+                .setParameter("endTime", slot.getEndTime())
                 .setParameter("status", targetStatus)
                 .setParameter("cancelReason", targetStatus == BookingStatus.CANCELLED ? cancelReason : null)
-                .setParameter("cancelledAt", targetStatus == BookingStatus.CANCELLED
-                        ? LocalDateTime.of(slot.getSlotDate(), slot.getStartTime().minusMinutes(35))
-                        : null)
+                .setParameter("cancelledAt", null)
                 .setParameter("id", booking.getId())
                 .executeUpdate();
         entityManager.flush();
@@ -841,20 +635,22 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         .intakeSession(intakeSession)
                         .build()));
 
-        if (intakeSession != null && (careCase.getIntakeSession() == null
-                || !careCase.getIntakeSession().getId().equals(intakeSession.getId()))) {
-            entityManager.createQuery("""
-                    update CareCase c
-                       set c.intakeSession = :intakeSession
-                     where c.id = :id
-                    """)
-                    .setParameter("intakeSession", intakeSession)
-                    .setParameter("id", careCase.getId())
-                    .executeUpdate();
-            entityManager.flush();
-            entityManager.refresh(careCase);
-        }
-
+        entityManager.createQuery("""
+                update CareCase c
+                   set c.booking = :booking,
+                       c.patient = :patient,
+                       c.doctor = :doctor,
+                       c.intakeSession = :intakeSession
+                 where c.id = :id
+                """)
+                .setParameter("booking", booking)
+                .setParameter("patient", booking.getPatient())
+                .setParameter("doctor", booking.getDoctor())
+                .setParameter("intakeSession", intakeSession)
+                .setParameter("id", careCase.getId())
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.refresh(careCase);
         return careCase;
     }
 
@@ -875,9 +671,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.refresh(careCase);
     }
 
-    private Mission ensureMission(CareCase careCase, String vehicleId, String destination,
-            LocalDateTime dispatchedAt, LocalDateTime estimatedArrivalTime,
-            MissionPhase targetPhase, BigDecimal latitude, BigDecimal longitude) {
+    private Mission ensureMission(CareCase careCase, String vehicleId, String destination, LocalDateTime dispatchedAt,
+            LocalDateTime estimatedArrivalTime) {
         Mission mission = missionRepository.findByCareCase(careCase).orElseGet(() -> missionRepository.save(
                 Mission.builder()
                         .careCase(careCase)
@@ -908,31 +703,36 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             entityManager.flush();
             entityManager.refresh(mission);
         }
-
-        if (latitude != null && longitude != null) {
-            mission.updateLocation(latitude, longitude);
-        }
-
-        if (mission.getPhase() != targetPhase) {
-            mission.updatePhase(targetPhase);
-        }
-
         return mission;
     }
 
-    private void syncMissionTimeline(Mission mission,
-            LocalDateTime dispatchedAt,
-            LocalDateTime estimatedArrivalTime,
-            LocalDateTime completedAt) {
+    private void syncMissionState(Mission mission, String vehicleId, String destination, LocalDateTime dispatchedAt,
+            LocalDateTime estimatedArrivalTime, MissionPhase phase, MissionPhase previousPhase, BigDecimal latitude,
+            BigDecimal longitude, LocalDateTime completedAt) {
         entityManager.createQuery("""
                 update Mission m
-                   set m.dispatchedAt = :dispatchedAt,
+                   set m.vehicleId = :vehicleId,
+                       m.destination = :destination,
+                       m.dispatchedAt = :dispatchedAt,
                        m.estimatedArrivalTime = :estimatedArrivalTime,
-                       m.completedAt = :completedAt
+                       m.phase = :phase,
+                       m.previousPhase = :previousPhase,
+                       m.latitude = :latitude,
+                       m.longitude = :longitude,
+                       m.completedAt = :completedAt,
+                       m.lastTelemetrySourceEventId = null,
+                       m.lastTelemetrySeqNo = null,
+                       m.lastTelemetryAt = null
                  where m.id = :id
                 """)
+                .setParameter("vehicleId", vehicleId)
+                .setParameter("destination", destination)
                 .setParameter("dispatchedAt", dispatchedAt)
                 .setParameter("estimatedArrivalTime", estimatedArrivalTime)
+                .setParameter("phase", phase)
+                .setParameter("previousPhase", previousPhase)
+                .setParameter("latitude", latitude)
+                .setParameter("longitude", longitude)
                 .setParameter("completedAt", completedAt)
                 .setParameter("id", mission.getId())
                 .executeUpdate();
@@ -940,51 +740,40 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.refresh(mission);
     }
 
-    private ConsultationSession ensureConsultationSession(CareCase careCase, String roomId,
-            ConsultationSessionStatus targetStatus, Integer durationMinutes) {
+    private ConsultationSession ensureConsultationSession(CareCase careCase, String roomId, String livekitUrlValue) {
         ConsultationSession session = consultationSessionRepository.findByCareCase(careCase)
                 .orElseGet(() -> consultationSessionRepository.save(
                         ConsultationSession.builder()
                                 .careCase(careCase)
                                 .roomId(roomId)
-                                .livekitUrl(livekitUrl)
+                                .livekitUrl(livekitUrlValue)
                                 .build()));
 
-        if (targetStatus == ConsultationSessionStatus.READY
-                && session.getStatus() == ConsultationSessionStatus.CREATED) {
-            session.markReady();
+        if (!Objects.equals(session.getRoomId(), roomId) || !Objects.equals(session.getLivekitUrl(), livekitUrlValue)) {
+            entityManager.createQuery("""
+                    update ConsultationSession s
+                       set s.roomId = :roomId,
+                           s.livekitUrl = :livekitUrl
+                     where s.id = :id
+                    """)
+                    .setParameter("roomId", roomId)
+                    .setParameter("livekitUrl", livekitUrlValue)
+                    .setParameter("id", session.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(session);
         }
-        if (targetStatus == ConsultationSessionStatus.IN_PROGRESS
-                && session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
-            session.connectDoctor();
-            session.connectPatient();
-        }
-        if (targetStatus == ConsultationSessionStatus.COMPLETED
-                && session.getStatus() != ConsultationSessionStatus.COMPLETED) {
-            if (session.getStatus() == ConsultationSessionStatus.CREATED) {
-                session.markReady();
-            }
-            if (session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
-                session.start();
-            }
-            session.complete(durationMinutes != null ? durationMinutes : 15);
-        }
-
         return session;
     }
 
-    private void syncConsultationSessionState(ConsultationSession session,
-            ConsultationSessionStatus targetStatus,
-            LocalDateTime joinedAt,
-            LocalDateTime startedAt,
-            LocalDateTime endedAt,
-            Integer durationMinutes) {
-        ConnectionState doctorState = targetStatus == ConsultationSessionStatus.READY
-                ? ConnectionState.DISCONNECTED
-                : ConnectionState.CONNECTED;
-        ConnectionState patientState = targetStatus == ConsultationSessionStatus.READY
-                ? ConnectionState.DISCONNECTED
-                : ConnectionState.CONNECTED;
+    private void syncConsultationSessionState(ConsultationSession session, ConsultationSessionStatus targetStatus,
+            LocalDateTime joinedAt, LocalDateTime startedAt, LocalDateTime endedAt, Integer durationMinutes) {
+        ConnectionState doctorState = targetStatus == ConsultationSessionStatus.IN_PROGRESS
+                ? ConnectionState.CONNECTED
+                : ConnectionState.DISCONNECTED;
+        ConnectionState patientState = targetStatus == ConsultationSessionStatus.IN_PROGRESS
+                ? ConnectionState.CONNECTED
+                : ConnectionState.DISCONNECTED;
 
         entityManager.createQuery("""
                 update ConsultationSession s
@@ -1005,9 +794,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 .setParameter("livekitUrl", session.getLivekitUrl())
                 .setParameter("doctorState", doctorState)
                 .setParameter("patientState", patientState)
-                .setParameter("doctorJoinedAt", targetStatus == ConsultationSessionStatus.READY ? null : joinedAt)
-                .setParameter("patientJoinedAt",
-                        targetStatus == ConsultationSessionStatus.READY ? null : joinedAt.plusMinutes(1))
+                .setParameter("doctorJoinedAt", joinedAt)
+                .setParameter("patientJoinedAt", joinedAt == null ? null : joinedAt.plusMinutes(1))
                 .setParameter("startedAt", startedAt)
                 .setParameter("endedAt", endedAt)
                 .setParameter("durationMinutes", durationMinutes)
@@ -1017,209 +805,68 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.refresh(session);
     }
 
-    private void ensureConsultationSummary(ConsultationSession session, String summaryNote,
-            boolean prescriptionIssued, String prescriptionNote,
-            boolean needsFollowUp) {
-        ConsultationSummary summary = consultationSummaryRepository.findBySession(session)
-                .orElseGet(() -> consultationSummaryRepository.save(
-                        ConsultationSummary.builder()
-                                .session(session)
-                                .summaryNote(summaryNote)
-                                .prescriptionIssued(prescriptionIssued)
-                                .prescriptionNote(prescriptionNote)
-                                .needsFollowUp(needsFollowUp)
-                                .build()));
-        summary.update(summaryNote, prescriptionIssued, prescriptionNote, needsFollowUp);
-    }
-
-    private DoctorProfile nextDoctor(Map<String, List<DoctorProfile>> doctorsByDepartment,
-            Map<String, Integer> doctorCursor,
-            String department) {
-        List<DoctorProfile> doctors = doctorsByDepartment.get(department);
-        if (doctors == null || doctors.isEmpty()) {
-            throw new IllegalStateException("No doctor seeded for department: " + department);
+    private Patient getPatient(Map<String, Patient> patientsByKey, String patientKey) {
+        Patient patient = patientsByKey.get(patientKey);
+        if (patient == null) {
+            throw new IllegalStateException("Seed patient not found: " + patientKey);
         }
-
-        int cursor = doctorCursor.getOrDefault(department, 0);
-        doctorCursor.put(department, cursor + 1);
-        return doctors.get(cursor % doctors.size());
+        return patient;
     }
 
-    private boolean isWorkingDay(DoctorProfile doctor, LocalDate date) {
-        DoctorSeed doctorSeed = DOCTOR_SEEDS.stream()
-                .filter(seed -> seed.username().equals(doctor.getUser().getUsername()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "Doctor seed metadata missing for " + doctor.getUser().getUsername()));
-        return doctorSeed.workDays().contains(date.getDayOfWeek());
-    }
-
-    private LocalDate resolveScheduleEnd(LocalDate today) {
-        LocalDate aprilEnd = LocalDate.of(today.getYear(), 4, 30);
-        return today.isAfter(aprilEnd) ? today.plusDays(42) : aprilEnd;
-    }
-
-    private ApprovalStatus guardianApprovalStatus(int index) {
-        if (index < 20) {
-            return ApprovalStatus.APPROVED;
+    private DoctorProfile getDoctor(Map<String, DoctorProfile> doctorsByUsername, String username) {
+        DoctorProfile doctor = doctorsByUsername.get(username);
+        if (doctor == null) {
+            throw new IllegalStateException("Seed doctor not found: " + username);
         }
-        if (index < 26) {
-            return ApprovalStatus.PENDING;
+        return doctor;
+    }
+
+    private Vehicle getVehicle(Map<String, Vehicle> vehiclesByCode, String vehicleCode) {
+        Vehicle vehicle = vehiclesByCode.get(vehicleCode);
+        if (vehicle == null) {
+            throw new IllegalStateException("Seed vehicle not found: " + vehicleCode);
         }
-        return ApprovalStatus.REJECTED;
+        return vehicle;
     }
 
-    private String buildPatientName(int index) {
-        String surname = PATIENT_SURNAMES.get(index % PATIENT_SURNAMES.size());
-        List<String> givenNames = index % 2 == 0 ? FEMALE_PATIENT_GIVEN_NAMES : MALE_PATIENT_GIVEN_NAMES;
-        return surname + givenNames.get((index / PATIENT_SURNAMES.size()) % givenNames.size());
+    private String resolveSeedLivekitUrl() {
+        return livekitUrl == null || livekitUrl.isBlank() ? LIVEKIT_URL_PLACEHOLDER : livekitUrl;
     }
 
-    private PatientGender buildPatientGender(int index) {
-        return index % 2 == 0 ? PatientGender.FEMALE : PatientGender.MALE;
-    }
-
-    private String buildGuardianName(int index) {
-        return PATIENT_SURNAMES.get((index + 3) % PATIENT_SURNAMES.size())
-                + GUARDIAN_GIVEN_NAMES.get(index % GUARDIAN_GIVEN_NAMES.size());
-    }
-
-    private LocalDate buildPatientBirthDate(int index) {
-        int year;
-        if (index < 16) {
-            year = 1938 + (index % 9);
-        } else if (index < 44) {
-            year = 1947 + (index % 10);
-        } else if (index < 68) {
-            year = 1957 + (index % 10);
-        } else if (index < 76) {
-            year = 1967 + (index % 10);
-        } else {
-            year = 1978 + (index % 8);
-        }
-        return LocalDate.of(year, (index % 12) + 1, ((index * 3) % 28) + 1);
-    }
-
-    private String buildPatientAddress(int index) {
-        String roadName = ROAD_NAMES.get(index % ROAD_NAMES.size());
-        int houseNumber = 19 + (index * 3);
-        return index % 4 == 0
-                ? ADDRESS_PREFIX + roadName + " " + houseNumber + "-" + ((index % 7) + 1)
-                : ADDRESS_PREFIX + roadName + " " + houseNumber;
-    }
-
-    private String buildPatientPhone(int index) {
-        return String.format("010%08d", 51000000 + index);
-    }
-
-    private String buildSelectionReason(String department, int seedIndex) {
-        List<String> reasons = switch (department) {
-            case "INTERNAL_MEDICINE" ->
-                List.of("어지럼과 혈압 변동으로 내과 상담 요청", "기침과 미열이 이어져 내과 예약 희망", "복통과 소화불량 증상으로 내과 진료 요청");
-            case "ORTHOPEDICS" ->
-                List.of("무릎 통증과 보행 불편으로 정형외과 예약 요청", "허리 통증이 심해져 정형외과 진료 필요", "어깨 관절 통증으로 정형외과 상담 요청");
-            case "DERMATOLOGY" ->
-                List.of("가려움과 발진이 반복되어 피부과 진료 요청", "팔 부위 습진 악화로 피부과 예약 희망", "두드러기 증상 확인을 위해 피부과 상담 요청");
-            case "NEUROLOGY" -> List.of("두통과 어지럼이 반복되어 신경과 진료 요청", "손 저림 증상으로 신경과 상담 필요", "머리가 무겁고 집중이 어려워 신경과 예약");
-            case "OPHTHALMOLOGY" -> List.of("시야 흐림과 눈 충혈로 안과 예약 요청", "안구 건조와 이물감으로 안과 상담 희망", "눈부심이 심해져 안과 진료 필요");
-            default -> List.of("증상 확인을 위해 진료 예약을 진행함");
-        };
-        return reasons.get(seedIndex % reasons.size());
-    }
-
-    private String buildSummaryNote(String department, int seedIndex) {
-        List<String> notes = switch (department) {
-            case "INTERNAL_MEDICINE" -> List.of("혈압과 복용 약을 점검했고 당분간 현재 처방을 유지하기로 안내했습니다.",
-                    "감기 증상은 경미해 대증 치료와 수분 섭취를 중심으로 설명했습니다.", "복통은 식습관과 복용 중인 약을 확인해 경과 관찰 후 재평가하기로 했습니다.");
-            case "ORTHOPEDICS" -> List.of("무릎 관절 통증은 퇴행성 변화 가능성이 있어 보행량 조절과 찜질을 안내했습니다.",
-                    "허리 통증은 급성 악화 소견은 없어 약 복용과 자세 교정을 설명했습니다.", "어깨 통증은 반복 사용 영향이 커 보여 스트레칭과 추적 관찰을 권고했습니다.");
-            case "DERMATOLOGY" -> List.of("접촉성 피부염 가능성이 높아 자극 회피와 연고 사용법을 설명했습니다.",
-                    "가려움은 야간 악화 양상이 있어 보습과 항히스타민 복용을 안내했습니다.", "발진은 급성 중증 소견은 없어 경과 관찰과 재내원 기준을 설명했습니다.");
-            case "NEUROLOGY" -> List.of("긴장성 두통 가능성이 높아 수면과 수분 섭취, 복약 방법을 안내했습니다.",
-                    "어지럼은 탈수와 기립성 저혈압 가능성을 함께 설명하고 주의사항을 전달했습니다.", "손 저림은 경추성 가능성을 배제할 수 없어 증상 지속 시 추가 평가를 권고했습니다.");
-            case "OPHTHALMOLOGY" -> List.of("안구 건조 증상이 주된 문제로 보여 인공눈물 사용과 생활 습관을 안내했습니다.",
-                    "충혈은 염증 소견이 경미해 점안제 사용과 악화 시 재내원 기준을 설명했습니다.", "시야 흐림은 급성 응급 소견은 없어 약물 사용 후 경과를 보기로 했습니다.");
-            default -> List.of("진료 후 경과 관찰과 복약 지도를 안내했습니다.");
-        };
-        return notes.get(seedIndex % notes.size());
-    }
-
-    private String buildPrescriptionNote(String department, int seedIndex) {
-        if (!shouldIssuePrescription(department, seedIndex)) {
-            return null;
-        }
-        return switch (department) {
-            case "INTERNAL_MEDICINE" -> "혈압약 또는 소화기 증상 완화 약 7일분 처방";
-            case "ORTHOPEDICS" -> "소염진통제와 근이완제 5일분 처방";
-            case "DERMATOLOGY" -> "연고와 항히스타민제 사용법 안내";
-            case "NEUROLOGY" -> "두통 조절 약과 생활 관리 지침 안내";
-            case "OPHTHALMOLOGY" -> "점안제와 인공눈물 사용법 안내";
-            default -> "기본 복약 지도를 제공";
-        };
-    }
-
-    private boolean shouldIssuePrescription(String department, int seedIndex) {
-        if ("DERMATOLOGY".equals(department) || "OPHTHALMOLOGY".equals(department)) {
-            return true;
-        }
-        return seedIndex % 3 != 0;
-    }
-
-    private boolean needsFollowUp(String department, int seedIndex) {
-        if ("NEUROLOGY".equals(department) || "ORTHOPEDICS".equals(department)) {
-            return true;
-        }
-        return seedIndex % 4 == 0;
-    }
-
-    private Integer resolveDurationMinutes(ConsultationSessionStatus sessionStatus, int seedIndex) {
-        if (sessionStatus == null || sessionStatus == ConsultationSessionStatus.READY) {
-            return null;
-        }
-        return 12 + (seedIndex % 9);
-    }
-
-    private BigDecimal coordinateValue(double base, int seedIndex) {
-        double offset = (seedIndex % 15) * 0.00073d;
-        return bd(String.format(java.util.Locale.US, "%.7f", base + offset));
+    private LocalDateTime resolveTimestamp(LocalDateTime baseTime, Integer offsetMinutes) {
+        return offsetMinutes == null ? null : baseTime.plusMinutes(offsetMinutes);
     }
 
     private BigDecimal bd(String value) {
         return new BigDecimal(value);
     }
 
-    private record DoctorSeed(String username, String name, String department, String departmentName,
-            ApprovalStatus approvalStatus, List<DayOfWeek> workDays) {
+    private record DoctorSeed(String username, String name, String department, String departmentName) {
     }
 
-    private record DoctorSeedBundle(List<DoctorProfile> approvedDoctors, List<User> pendingDoctors) {
+    private record VehicleSeed(String publicId, String code, String regionCode, String displayName) {
     }
 
-    private record GuardianSeedBundle(List<User> approvedUsers, List<User> pendingUsers, List<User> rejectedUsers) {
-        private List<User> allUsers() {
-            List<User> allUsers = new ArrayList<>(approvedUsers);
-            allUsers.addAll(pendingUsers);
-            allUsers.addAll(rejectedUsers);
-            return allUsers;
-        }
+    private record PatientSeed(String key, String name, LocalDate birthDate, PatientGender gender, String regionCode,
+            String address, String phone, String referenceImagePath) {
     }
 
-    private record ActiveJourneyPlan(String department, int dayOffset, LocalTime startTime,
-            BookingStatus bookingStatus, CaseStatus caseStatus,
-            MissionPhase missionPhase, ConsultationSessionStatus sessionStatus,
-            boolean createSummary) {
+    private record GuardianLinkSeed(String patientKey, String relation) {
     }
 
-    private static final class SeedSequence {
-        private int vehicle = 1;
-        private int room = 1;
+    private record ScenarioSeed(String patientKey, String doctorUsername, int dayOffset, LocalTime startTime,
+            String selectionReason, int endedOffsetMinutes, int lastActivityOffsetMinutes, CaseStatus caseStatus,
+            MissionSeed missionSeed, ConsultationSeed consultationSeed) {
+    }
 
-        private int nextVehicle() {
-            return vehicle++;
-        }
+    private record MissionSeed(String vehicleCode, MissionPhase phase, MissionPhase previousPhase, String latitude,
+            String longitude, int dispatchedOffsetMinutes, int etaOffsetMinutes) {
+    }
 
-        private int nextRoom() {
-            return room++;
-        }
+    private record ConsultationSeed(ConsultationSessionStatus status, String roomId, Integer doctorJoinedOffsetMinutes,
+            Integer startedOffsetMinutes) {
+    }
+
+    private record FutureSlotSeed(String doctorUsername, LocalTime startTime, LocalTime endTime) {
     }
 }

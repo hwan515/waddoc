@@ -1,40 +1,78 @@
--- prod dummy seed fallback
--- - LocalDummyDataSeeder.java의 핵심 구조를 기준으로 작성한 수동 SQL
--- - 모든 더미 사용자 기본 비밀번호: Passw0rd!
--- - consultation_session.livekit_url은 기존 데이터의 값을 재사용하고,
---   없으면 __LIVEKIT_URL__ 플레이스홀더를 넣습니다. 필요하면 실행 전에 치환하세요.
--- - 재실행 가능하도록 주요 natural key(username, phone, unique fk)를 기준으로 upsert 합니다.
--- TODO: 장기적으로는 prod에서도 APP_SEED_ENABLED를 one-shot으로 켜서 Java seeder를 재사용하는 편이 안전하다.
+-- prod scenario dummy seed
+-- 권역: 김천/안동/영주/상주, 권역별 active 차량 1대
+-- 의사: 내과 2명 + 정형외과/피부과/신경과/안과 각 1명
+-- TODO: 장기적으로는 prod one-shot Java seeder로 대체하고, SQL fallback은 비상용으로만 유지한다.
 
 BEGIN;
 
+DO $$
+DECLARE
+    v_user RECORD;
+    v_patient RECORD;
+    v_vehicle RECORD;
+BEGIN
+    FOR v_user IN
+        SELECT * FROM (VALUES
+            ('seed_prod_admin', 'usr_prd_admin01'),
+            ('seed_prod_doc_im_01', 'usr_prd_doc01'),
+            ('seed_prod_doc_im_02', 'usr_prd_doc02'),
+            ('seed_prod_doc_ortho_01', 'usr_prd_doc03'),
+            ('seed_prod_doc_derm_01', 'usr_prd_doc04'),
+            ('seed_prod_doc_neuro_01', 'usr_prd_doc05'),
+            ('seed_prod_doc_eye_01', 'usr_prd_doc06'),
+            ('seed_prod_guardian_01', 'usr_prd_grd01')
+        ) AS seeded_users(username, public_id)
+    LOOP
+        IF EXISTS (SELECT 1 FROM "user" WHERE username = v_user.username AND public_id <> v_user.public_id) THEN
+            RAISE EXCEPTION 'Username % already exists with a different public_id', v_user.username;
+        END IF;
+    END LOOP;
+
+    FOR v_patient IN
+        SELECT * FROM (VALUES
+            ('01011111111', 'pat_prd_gim_sudo01'),
+            ('01022222222', 'pat_prd_gim_hwang01'),
+            ('01033333333', 'pat_prd_gim_jirye01'),
+            ('01044444444', 'pat_prd_andong01'),
+            ('01055555555', 'pat_prd_yj_marak01'),
+            ('01066666666', 'pat_prd_yj_nam01'),
+            ('01077777777', 'pat_prd_yj_nam02'),
+            ('01088888888', 'pat_prd_sj_oeseo01'),
+            ('01099999999', 'pat_prd_sj_euncheok01'),
+            ('01012341234', 'pat_prd_sj_hwanam01'),
+            ('01023452345', 'pat_prd_sj_hwanam02')
+        ) AS seeded_patients(phone, public_id)
+    LOOP
+        IF EXISTS (SELECT 1 FROM patient WHERE phone = v_patient.phone AND public_id <> v_patient.public_id) THEN
+            RAISE EXCEPTION 'Patient phone % is already used by a different record', v_patient.phone;
+        END IF;
+    END LOOP;
+
+    FOR v_vehicle IN
+        SELECT * FROM (VALUES
+            ('GIMCHEON', 'GIMCHEON-01'),
+            ('ANDONG', 'ANDONG-01'),
+            ('YEONGJU', 'YEONGJU-01'),
+            ('SANGJU', 'SANGJU-01')
+        ) AS seeded_vehicles(region_code, code)
+    LOOP
+        IF EXISTS (
+            SELECT 1 FROM vehicle
+             WHERE region_code = v_vehicle.region_code
+               AND is_active = TRUE
+               AND code <> v_vehicle.code
+        ) THEN
+            RAISE EXCEPTION '% already has another active vehicle', v_vehicle.region_code;
+        END IF;
+    END LOOP;
+END $$;
+
 INSERT INTO "user" (
-    public_id,
-    username,
-    password_hash,
-    name,
-    role,
-    is_active,
-    approval_status,
-    approval_requested_at,
-    approved_by_user_id,
-    approved_at,
-    created_at,
-    updated_at
-)
-VALUES (
-    'usr_seed_admin',
-    'seed_admin',
-    '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.',
-    '로컬 관리자',
-    'ADMIN',
-    TRUE,
-    'APPROVED',
-    NOW(),
-    NULL,
-    NOW(),
-    NOW(),
-    NOW()
+    public_id, username, password_hash, name, role, is_active, approval_status,
+    approval_requested_at, approved_by_user_id, approved_at, created_at, updated_at
+) VALUES (
+    'usr_prd_admin01', 'seed_prod_admin', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.',
+    '운영 더미 관리자', 'ADMIN', TRUE, 'APPROVED', NOW(), NULL, NOW(), NOW(), NOW()
 )
 ON CONFLICT (username) DO UPDATE
 SET password_hash = EXCLUDED.password_hash,
@@ -46,60 +84,16 @@ SET password_hash = EXCLUDED.password_hash,
     approved_at = EXCLUDED.approved_at,
     updated_at = NOW();
 
-CREATE TEMP TABLE seed_doctor (
-    seed_no INT PRIMARY KEY,
-    username TEXT NOT NULL,
-    name TEXT NOT NULL,
-    department TEXT NOT NULL,
-    department_name TEXT NOT NULL,
-    approval_status TEXT NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO seed_doctor (seed_no, username, name, department, department_name, approval_status)
-VALUES
-    (1, 'seed_doc_im_01', '김도현', 'INTERNAL_MEDICINE', '내과', 'APPROVED'),
-    (2, 'seed_doc_im_02', '박지연', 'INTERNAL_MEDICINE', '내과', 'APPROVED'),
-    (3, 'seed_doc_im_03', '이성훈', 'INTERNAL_MEDICINE', '내과', 'APPROVED'),
-    (4, 'seed_doc_im_04', '조은서', 'INTERNAL_MEDICINE', '내과', 'APPROVED'),
-    (5, 'seed_doc_ortho_01', '최준혁', 'ORTHOPEDICS', '정형외과', 'APPROVED'),
-    (6, 'seed_doc_ortho_02', '강민석', 'ORTHOPEDICS', '정형외과', 'APPROVED'),
-    (7, 'seed_doc_ortho_03', '윤서진', 'ORTHOPEDICS', '정형외과', 'APPROVED'),
-    (8, 'seed_doc_derm_01', '임수빈', 'DERMATOLOGY', '피부과', 'APPROVED'),
-    (9, 'seed_doc_derm_02', '한지후', 'DERMATOLOGY', '피부과', 'APPROVED'),
-    (10, 'seed_doc_neuro_01', '정유진', 'NEUROLOGY', '신경과', 'APPROVED'),
-    (11, 'seed_doc_neuro_02', '오태경', 'NEUROLOGY', '신경과', 'APPROVED'),
-    (12, 'seed_doc_eye_01', '장소라', 'OPHTHALMOLOGY', '안과', 'APPROVED'),
-    (13, 'seed_doc_family_pending', '백현우', 'FAMILY_MEDICINE', '가정의학과', 'PENDING'),
-    (14, 'seed_doc_im_pending', '서지훈', 'INTERNAL_MEDICINE', '내과', 'PENDING');
-
 INSERT INTO "user" (
-    public_id,
-    username,
-    password_hash,
-    name,
-    role,
-    is_active,
-    approval_status,
-    approval_requested_at,
-    approved_by_user_id,
-    approved_at,
-    created_at,
-    updated_at
-)
-SELECT
-    'usr_doc_' || LPAD(seed_no::TEXT, 2, '0'),
-    username,
-    '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.',
-    name,
-    'DOCTOR',
-    approval_status = 'APPROVED',
-    approval_status,
-    NOW(),
-    CASE WHEN approval_status = 'APPROVED' THEN (SELECT user_id FROM "user" WHERE username = 'seed_admin') END,
-    CASE WHEN approval_status = 'APPROVED' THEN NOW() END,
-    NOW(),
-    NOW()
-FROM seed_doctor
+    public_id, username, password_hash, name, role, is_active, approval_status,
+    approval_requested_at, approved_by_user_id, approved_at, created_at, updated_at
+) VALUES
+('usr_prd_doc01', 'seed_prod_doc_im_01', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.', '김도현', 'DOCTOR', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('usr_prd_doc02', 'seed_prod_doc_im_02', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.', '박지연', 'DOCTOR', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('usr_prd_doc03', 'seed_prod_doc_ortho_01', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.', '최준혁', 'DOCTOR', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('usr_prd_doc04', 'seed_prod_doc_derm_01', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.', '임수빈', 'DOCTOR', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('usr_prd_doc05', 'seed_prod_doc_neuro_01', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.', '정유진', 'DOCTOR', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('usr_prd_doc06', 'seed_prod_doc_eye_01', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.', '장소라', 'DOCTOR', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW())
 ON CONFLICT (username) DO UPDATE
 SET password_hash = EXCLUDED.password_hash,
     name = EXCLUDED.name,
@@ -110,73 +104,23 @@ SET password_hash = EXCLUDED.password_hash,
     approved_at = EXCLUDED.approved_at,
     updated_at = NOW();
 
-INSERT INTO doctor_profile (
-    public_id,
-    user_id,
-    department,
-    department_name,
-    created_at
-)
-SELECT
-    'doc_seed_' || LPAD(d.seed_no::TEXT, 2, '0'),
-    u.user_id,
-    d.department,
-    d.department_name,
-    NOW()
-FROM seed_doctor d
-JOIN "user" u
-  ON u.username = d.username
+INSERT INTO doctor_profile (public_id, user_id, department, department_name, created_at) VALUES
+('doc_prd_001', (SELECT user_id FROM "user" WHERE username = 'seed_prod_doc_im_01'), 'INTERNAL_MEDICINE', '내과', NOW()),
+('doc_prd_002', (SELECT user_id FROM "user" WHERE username = 'seed_prod_doc_im_02'), 'INTERNAL_MEDICINE', '내과', NOW()),
+('doc_prd_003', (SELECT user_id FROM "user" WHERE username = 'seed_prod_doc_ortho_01'), 'ORTHOPEDICS', '정형외과', NOW()),
+('doc_prd_004', (SELECT user_id FROM "user" WHERE username = 'seed_prod_doc_derm_01'), 'DERMATOLOGY', '피부과', NOW()),
+('doc_prd_005', (SELECT user_id FROM "user" WHERE username = 'seed_prod_doc_neuro_01'), 'NEUROLOGY', '신경과', NOW()),
+('doc_prd_006', (SELECT user_id FROM "user" WHERE username = 'seed_prod_doc_eye_01'), 'OPHTHALMOLOGY', '안과', NOW())
 ON CONFLICT (user_id) DO UPDATE
-SET department = EXCLUDED.department,
-    department_name = EXCLUDED.department_name;
-
-CREATE TEMP TABLE seed_guardian ON COMMIT DROP AS
-WITH constants AS (
-    SELECT
-        ARRAY['김','이','박','최','정','강','조','윤','장','임','한','오']::TEXT[] AS surnames,
-        ARRAY['민지','지훈','수진','현우','은정','준호','혜진','성민','도윤','예진','수현','태현','현정','유진','소연','재훈']::TEXT[] AS given_names
-)
-SELECT
-    gs AS seed_no,
-    'seed_guardian_' || LPAD(gs::TEXT, 2, '0') AS username,
-    constants.surnames[((gs + 2) % array_length(constants.surnames, 1)) + 1]
-        || constants.given_names[((gs - 1) % array_length(constants.given_names, 1)) + 1] AS name,
-    CASE
-        WHEN gs <= 20 THEN 'APPROVED'
-        WHEN gs <= 26 THEN 'PENDING'
-        ELSE 'REJECTED'
-    END AS approval_status
-FROM generate_series(1, 28) AS gs
-CROSS JOIN constants;
+SET department = EXCLUDED.department, department_name = EXCLUDED.department_name;
 
 INSERT INTO "user" (
-    public_id,
-    username,
-    password_hash,
-    name,
-    role,
-    is_active,
-    approval_status,
-    approval_requested_at,
-    approved_by_user_id,
-    approved_at,
-    created_at,
-    updated_at
+    public_id, username, password_hash, name, role, is_active, approval_status,
+    approval_requested_at, approved_by_user_id, approved_at, created_at, updated_at
+) VALUES (
+    'usr_prd_grd01', 'seed_prod_guardian_01', '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.',
+    '김보호', 'GUARDIAN', TRUE, 'APPROVED', NOW(), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()
 )
-SELECT
-    'usr_grd_' || LPAD(seed_no::TEXT, 2, '0'),
-    username,
-    '$2a$10$IH3MU2MFjspMAzlawklnHe77FTWUAbUegt7dJV03R28go2QRGNBb.',
-    name,
-    'GUARDIAN',
-    approval_status = 'APPROVED',
-    approval_status,
-    NOW(),
-    CASE WHEN approval_status <> 'PENDING' THEN (SELECT user_id FROM "user" WHERE username = 'seed_admin') END,
-    CASE WHEN approval_status <> 'PENDING' THEN NOW() END,
-    NOW(),
-    NOW()
-FROM seed_guardian
 ON CONFLICT (username) DO UPDATE
 SET password_hash = EXCLUDED.password_hash,
     name = EXCLUDED.name,
@@ -187,197 +131,137 @@ SET password_hash = EXCLUDED.password_hash,
     approved_at = EXCLUDED.approved_at,
     updated_at = NOW();
 
-CREATE TEMP TABLE seed_patient ON COMMIT DROP AS
-WITH constants AS (
-    SELECT
-        ARRAY['김','이','박','최','정','강','조','윤','장','임','한','오']::TEXT[] AS surnames,
-        ARRAY['영희','순자','말순','춘자','정숙','옥자','미숙','연자','복순','경자','명자','금순']::TEXT[] AS female_names,
-        ARRAY['영수','철수','성호','동수','만수','기동','정호','태수','병철','정남','종수','상호']::TEXT[] AS male_names,
-        ARRAY['장전1길','장전2길','장전3길','황점길','금곡길','황점1길','금곡1길','장전마을길']::TEXT[] AS road_names
-)
-SELECT
-    gs AS seed_no,
-    'pat_seed_' || LPAD(gs::TEXT, 3, '0') AS public_id,
-    constants.surnames[(((gs - 1) % array_length(constants.surnames, 1)) + 1)]
-        || CASE
-            WHEN MOD(gs - 1, 2) = 0 THEN constants.female_names[((((gs - 1) / array_length(constants.surnames, 1)) % array_length(constants.female_names, 1)) + 1)]
-            ELSE constants.male_names[((((gs - 1) / array_length(constants.surnames, 1)) % array_length(constants.male_names, 1)) + 1)]
-        END AS name,
-    MAKE_DATE(
-        CASE
-            WHEN gs <= 16 THEN 1938 + MOD(gs - 1, 9)
-            WHEN gs <= 44 THEN 1947 + MOD(gs - 1, 10)
-            WHEN gs <= 68 THEN 1957 + MOD(gs - 1, 10)
-            WHEN gs <= 76 THEN 1967 + MOD(gs - 1, 10)
-            ELSE 1978 + MOD(gs - 1, 8)
-        END,
-        MOD(gs - 1, 12) + 1,
-        MOD((gs - 1) * 3, 28) + 1
-    ) AS birth_date,
-    'GIMCHEON_JEUNGSAN'::TEXT AS region_code,
-    '경북 김천시 증산면 '
-        || constants.road_names[(((gs - 1) % array_length(constants.road_names, 1)) + 1)]
-        || ' '
-        || (19 + ((gs - 1) * 3))::TEXT
-        || CASE
-            WHEN MOD(gs - 1, 4) = 0 THEN '-' || (MOD(gs - 1, 7) + 1)::TEXT
-            ELSE ''
-        END AS address,
-    '010' || LPAD((51000000 + gs - 1)::TEXT, 8, '0') AS phone,
-    'seed/patients/patient-' || LPAD(gs::TEXT, 2, '0') || '-reference.jpg' AS reference_image_path
-FROM generate_series(1, 80) AS gs
-CROSS JOIN constants;
+INSERT INTO vehicle (
+    public_id, code, region_code, display_name, is_active, operational_status,
+    status_changed_at, status_reason, created_at, updated_at
+) VALUES
+('veh_GIMCHEON_01', 'GIMCHEON-01', 'GIMCHEON', '김천 1호차', TRUE, 'OPERATIONAL', NOW(), NULL, NOW(), NOW()),
+('veh_ANDONG_01', 'ANDONG-01', 'ANDONG', '안동 1호차', TRUE, 'OPERATIONAL', NOW(), NULL, NOW(), NOW()),
+('veh_YEONGJU_01', 'YEONGJU-01', 'YEONGJU', '영주 1호차', TRUE, 'OPERATIONAL', NOW(), NULL, NOW(), NOW()),
+('veh_SANGJU_01', 'SANGJU-01', 'SANGJU', '상주 1호차', TRUE, 'OPERATIONAL', NOW(), NULL, NOW(), NOW())
+ON CONFLICT (code) DO UPDATE
+SET public_id = EXCLUDED.public_id,
+    region_code = EXCLUDED.region_code,
+    display_name = EXCLUDED.display_name,
+    is_active = EXCLUDED.is_active,
+    operational_status = EXCLUDED.operational_status,
+    status_changed_at = EXCLUDED.status_changed_at,
+    status_reason = EXCLUDED.status_reason,
+    updated_at = NOW();
 
 INSERT INTO patient (
-    public_id,
-    name,
-    birth_date,
-    birth_date6,
-    region_code,
-    address,
-    phone,
-    reference_image_path,
-    reference_image_uploaded_by_user_id,
-    reference_image_updated_at,
-    created_at,
-    updated_at
-)
-SELECT
-    public_id,
-    name,
-    birth_date,
-    TO_CHAR(birth_date, 'YYMMDD'),
-    region_code,
-    address,
-    phone,
-    reference_image_path,
-    (SELECT user_id FROM "user" WHERE username = 'seed_admin'),
-    NOW(),
-    NOW(),
-    NOW()
-FROM seed_patient
-ON CONFLICT (phone) DO UPDATE
+    public_id, name, birth_date, birth_date6, gender, region_code, address, phone,
+    reference_image_path, reference_image_uploaded_by_user_id, reference_image_updated_at, created_at, updated_at
+) VALUES
+('pat_prd_gim_sudo01', '홍길동', DATE '1911-11-11', '111111', 'MALE', 'GIMCHEON', '경북 김천시 증산면 수도리 수도길 865-13-1438', '01011111111', 'patients/pat_prd_gim_sudo01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_gim_hwang01', '김철수', DATE '1968-04-15', '680415', 'MALE', 'GIMCHEON', '경북 김천시 증산면 황점리 황점1길 70-100-807', '01022222222', 'patients/pat_prd_gim_hwang01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_gim_jirye01', '박영수', DATE '1957-09-03', '570903', 'MALE', 'GIMCHEON', '경북 김천시 지례면 박곡리 지례예술촌길 390-427', '01033333333', 'patients/pat_prd_gim_jirye01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_andong01', '안순자', DATE '1954-02-18', '540218', 'FEMALE', 'ANDONG', '경북 안동시 임동면 사월리(보마골) 한절골길 356-384', '01044444444', 'patients/pat_prd_andong01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_yj_marak01', '최복례', DATE '1952-08-21', '520821', 'FEMALE', 'YEONGJU', '경북 영주시 단산면 마락리 영단로 1236-1-1522-4', '01055555555', 'patients/pat_prd_yj_marak01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_yj_nam01', '이영희', DATE '1948-03-17', '480317', 'FEMALE', 'YEONGJU', '경북 영주시 부석면 남대리 영부로 847-3-1199-24(남대리)', '01066666666', 'patients/pat_prd_yj_nam01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_yj_nam02', '정말자', DATE '1959-12-09', '591209', 'FEMALE', 'YEONGJU', '경북 영주시 부석면 남대리 영부로890번길 17-236(남대리)', '01077777777', 'patients/pat_prd_yj_nam02/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_sj_oeseo01', '장영호', DATE '1961-07-26', '610726', 'MALE', 'SANGJU', '경북 상주시 외서면 대전2리 갈골 하나동1길, 하나동2길, 송죽동1길, 송죽동2길, 행복동길, 낙원동길', '01088888888', 'patients/pat_prd_sj_oeseo01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_sj_euncheok01', '서금자', DATE '1950-10-12', '501012', 'FEMALE', 'SANGJU', '경북 상주시 은척면 장암2리 수예길 16-132', '01099999999', 'patients/pat_prd_sj_euncheok01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_sj_hwanam01', '윤복순', DATE '1949-05-30', '490530', 'FEMALE', 'SANGJU', '경북 상주시 화남면 동관2리 평온동관로 3791-385', '01012341234', 'patients/pat_prd_sj_hwanam01/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW()),
+('pat_prd_sj_hwanam02', '오정자', DATE '1956-01-08', '560108', 'FEMALE', 'SANGJU', '경북 상주시 화남면 동관2리 비룡동관로 967-1162', '01023452345', 'patients/pat_prd_sj_hwanam02/reference.jpg', (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), NOW(), NOW(), NOW())
+ON CONFLICT (public_id) DO UPDATE
 SET name = EXCLUDED.name,
     birth_date = EXCLUDED.birth_date,
     birth_date6 = EXCLUDED.birth_date6,
+    gender = EXCLUDED.gender,
     region_code = EXCLUDED.region_code,
     address = EXCLUDED.address,
+    phone = EXCLUDED.phone,
     reference_image_path = EXCLUDED.reference_image_path,
     reference_image_uploaded_by_user_id = EXCLUDED.reference_image_uploaded_by_user_id,
     reference_image_updated_at = EXCLUDED.reference_image_updated_at,
     updated_at = NOW();
 
-CREATE TEMP TABLE seed_guardian_link ON COMMIT DROP AS
-WITH relations AS (
-    SELECT ARRAY['배우자','아들','딸','며느리','사위','손자','손녀','조카']::TEXT[] AS names
-)
-SELECT
-    idx + 1 AS seed_no,
-    idx + 1 AS patient_seed_no,
-    (idx % 20) + 1 AS guardian_seed_no,
-    relations.names[(idx % array_length(relations.names, 1)) + 1] AS relation,
-    'APPROVED'::TEXT AS status
-FROM generate_series(0, 23) AS idx
-CROSS JOIN relations
-UNION ALL
-SELECT
-    idx + 25 AS seed_no,
-    idx + 25 AS patient_seed_no,
-    21 + (idx % 6) AS guardian_seed_no,
-    relations.names[((idx + 2) % array_length(relations.names, 1)) + 1] AS relation,
-    'PENDING'::TEXT AS status
-FROM generate_series(0, 7) AS idx
-CROSS JOIN relations
-UNION ALL
-SELECT
-    idx + 33 AS seed_no,
-    idx + 33 AS patient_seed_no,
-    27 + (idx % 2) AS guardian_seed_no,
-    relations.names[((idx + 4) % array_length(relations.names, 1)) + 1] AS relation,
-    'REJECTED'::TEXT AS status
-FROM generate_series(0, 3) AS idx
-CROSS JOIN relations;
-
 INSERT INTO patient_guardian_link (
-    public_id,
-    patient_id,
-    guardian_user_id,
-    approved_by_user_id,
-    relation,
-    status,
-    requested_at,
-    approved_at
-)
-SELECT
-    'link_seed_' || LPAD(l.seed_no::TEXT, 3, '0'),
-    p.patient_id,
-    u.user_id,
-    CASE WHEN l.status <> 'PENDING' THEN (SELECT user_id FROM "user" WHERE username = 'seed_admin') END,
-    l.relation,
-    l.status,
-    NOW(),
-    CASE WHEN l.status <> 'PENDING' THEN NOW() END
-FROM seed_guardian_link l
-JOIN seed_patient sp
-  ON sp.seed_no = l.patient_seed_no
-JOIN patient p
-  ON p.phone = sp.phone
-JOIN seed_guardian sg
-  ON sg.seed_no = l.guardian_seed_no
-JOIN "user" u
-  ON u.username = sg.username
+    public_id, patient_id, guardian_user_id, approved_by_user_id, relation, status, requested_at, approved_at
+) VALUES
+('link_prd_001', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_sudo01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_guardian_01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), '배우자', 'APPROVED', NOW(), NOW()),
+('link_prd_002', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_hwang01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_guardian_01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), '아들', 'APPROVED', NOW(), NOW()),
+('link_prd_003', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_jirye01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_guardian_01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), '딸', 'APPROVED', NOW(), NOW()),
+('link_prd_004', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_andong01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_guardian_01'), (SELECT user_id FROM "user" WHERE username = 'seed_prod_admin'), '자부', 'APPROVED', NOW(), NOW())
 ON CONFLICT (patient_id, guardian_user_id) DO UPDATE
 SET relation = EXCLUDED.relation,
     approved_by_user_id = EXCLUDED.approved_by_user_id,
     status = EXCLUDED.status,
     approved_at = EXCLUDED.approved_at;
 
-CREATE TEMP TABLE seed_journey (
-    seed_no INT PRIMARY KEY,
-    patient_seed_no INT NOT NULL,
-    doctor_username TEXT NOT NULL,
-    date_offset INT NOT NULL,
-    start_time TIME NOT NULL,
-    booking_status TEXT NOT NULL,
-    case_status TEXT,
-    mission_phase TEXT,
-    session_status TEXT,
-    create_summary BOOLEAN NOT NULL,
-    cancel_reason TEXT
-) ON COMMIT DROP;
+DO $$
+DECLARE
+    v_slot RECORD;
+    v_doctor_id BIGINT;
+BEGIN
+    FOR v_slot IN
+        SELECT * FROM (VALUES
+            ('slot_prd_gim_sudo01', 'doc_prd_001', 0, TIME '09:00'),
+            ('slot_prd_gim_hwang01', 'doc_prd_002', 1, TIME '09:30'),
+            ('slot_prd_gim_jirye01', 'doc_prd_003', 2, TIME '10:00'),
+            ('slot_prd_andong01', 'doc_prd_005', 0, TIME '11:00'),
+            ('slot_prd_yj_marak01', 'doc_prd_004', 0, TIME '13:00'),
+            ('slot_prd_yj_nam01', 'doc_prd_002', 1, TIME '14:00'),
+            ('slot_prd_yj_nam02', 'doc_prd_006', 3, TIME '15:00'),
+            ('slot_prd_sj_oeseo01', 'doc_prd_003', 0, TIME '16:00'),
+            ('slot_prd_sj_euncheok01', 'doc_prd_001', 4, TIME '10:30'),
+            ('slot_prd_sj_hwanam01', 'doc_prd_005', 4, TIME '11:00'),
+            ('slot_prd_sj_hwanam02', 'doc_prd_004', 5, TIME '11:30')
+        ) AS seeded_slots(slot_public_id, doctor_public_id, day_offset, start_time)
+    LOOP
+        SELECT doctor_profile_id INTO v_doctor_id FROM doctor_profile WHERE public_id = v_slot.doctor_public_id;
+        IF v_doctor_id IS NULL THEN
+            RAISE EXCEPTION 'Doctor profile % not found after seed upsert', v_slot.doctor_public_id;
+        END IF;
+        IF EXISTS (
+            SELECT 1 FROM schedule_slot
+             WHERE doctor_id = v_doctor_id
+               AND slot_date = CURRENT_DATE + v_slot.day_offset
+               AND start_time = v_slot.start_time
+               AND public_id <> v_slot.slot_public_id
+        ) THEN
+            RAISE EXCEPTION 'Doctor % already has another slot at % %', v_slot.doctor_public_id, CURRENT_DATE + v_slot.day_offset, v_slot.start_time;
+        END IF;
+    END LOOP;
+END $$;
 
-INSERT INTO seed_journey (
-    seed_no, patient_seed_no, doctor_username, date_offset, start_time,
-    booking_status, case_status, mission_phase, session_status, create_summary, cancel_reason
+INSERT INTO schedule_slot (public_id, doctor_id, slot_date, start_time, end_time, is_booked, created_at) VALUES
+('slot_prd_gim_sudo01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_001'), CURRENT_DATE, TIME '09:00', TIME '09:30', TRUE, NOW()),
+('slot_prd_gim_hwang01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_002'), CURRENT_DATE + 1, TIME '09:30', TIME '10:00', TRUE, NOW()),
+('slot_prd_gim_jirye01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_003'), CURRENT_DATE + 2, TIME '10:00', TIME '10:30', TRUE, NOW()),
+('slot_prd_andong01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_005'), CURRENT_DATE, TIME '11:00', TIME '11:30', TRUE, NOW()),
+('slot_prd_yj_marak01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_004'), CURRENT_DATE, TIME '13:00', TIME '13:30', TRUE, NOW()),
+('slot_prd_yj_nam01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_002'), CURRENT_DATE + 1, TIME '14:00', TIME '14:30', TRUE, NOW()),
+('slot_prd_yj_nam02', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_006'), CURRENT_DATE + 3, TIME '15:00', TIME '15:30', TRUE, NOW()),
+('slot_prd_sj_oeseo01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_003'), CURRENT_DATE, TIME '16:00', TIME '16:30', TRUE, NOW()),
+('slot_prd_sj_euncheok01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_001'), CURRENT_DATE + 4, TIME '10:30', TIME '11:00', TRUE, NOW()),
+('slot_prd_sj_hwanam01', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_005'), CURRENT_DATE + 4, TIME '11:00', TIME '11:30', TRUE, NOW()),
+('slot_prd_sj_hwanam02', (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_004'), CURRENT_DATE + 5, TIME '11:30', TIME '12:00', TRUE, NOW())
+ON CONFLICT (public_id) DO UPDATE
+SET doctor_id = EXCLUDED.doctor_id,
+    slot_date = EXCLUDED.slot_date,
+    start_time = EXCLUDED.start_time,
+    end_time = EXCLUDED.end_time,
+    is_booked = EXCLUDED.is_booked;
+
+-- 조회용 미래 슬롯을 2026-04-13까지 유지한다.
+WITH slot_templates AS (
+    SELECT * FROM (VALUES
+        ('doc_prd_001', TIME '09:00', TIME '09:30'),
+        ('doc_prd_002', TIME '09:30', TIME '10:00'),
+        ('doc_prd_003', TIME '10:00', TIME '10:30'),
+        ('doc_prd_005', TIME '11:00', TIME '11:30'),
+        ('doc_prd_004', TIME '13:00', TIME '13:30'),
+        ('doc_prd_002', TIME '14:00', TIME '14:30'),
+        ('doc_prd_006', TIME '15:00', TIME '15:30'),
+        ('doc_prd_003', TIME '16:00', TIME '16:30')
+    ) AS t(doctor_public_id, start_time, end_time)
+),
+future_days AS (
+    SELECT d::date AS slot_date
+      FROM generate_series(CURRENT_DATE + 6, DATE '2026-04-13', INTERVAL '1 day') AS d
 )
-VALUES
-    (1,  1, 'seed_doc_im_01',    -7, '09:00', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (2,  2, 'seed_doc_im_02',    -6, '09:30', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (3,  3, 'seed_doc_ortho_01', -5, '10:00', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (4,  4, 'seed_doc_derm_01',  -4, '10:30', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (5,  5, 'seed_doc_neuro_01', -3, '11:00', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (6,  6, 'seed_doc_eye_01',   -2, '11:30', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (7,  7, 'seed_doc_im_03',    -1, '14:00', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (8,  8, 'seed_doc_ortho_02', -1, '14:30', 'COMPLETED', 'COMPLETED',  'COMPLETED',  'COMPLETED',  TRUE,  NULL),
-    (9,  9, 'seed_doc_ortho_03',  0, '15:00', 'CONFIRMED', 'PREPARING',  'EN_ROUTE',   NULL,         FALSE, NULL),
-    (10, 10,'seed_doc_neuro_01',  0, '15:30', 'CONFIRMED', 'PREPARING',  'ARRIVED',    'READY',      FALSE, NULL),
-    (11, 11,'seed_doc_derm_02',   0, '16:00', 'CONFIRMED', 'IN_PROGRESS','CONSULTING', 'IN_PROGRESS',FALSE, NULL),
-    (12, 12,'seed_doc_im_04',     1, '09:00', 'CONFIRMED', 'PREPARING',  'DISPATCHED', NULL,         FALSE, NULL),
-    (13, 13,'seed_doc_eye_01',    1, '09:30', 'CONFIRMED', 'PREPARING',  'ARRIVED',    'READY',      FALSE, NULL),
-    (14, 14,'seed_doc_ortho_01',  1, '10:00', 'CONFIRMED', 'IN_PROGRESS','CONSULTING', 'IN_PROGRESS',FALSE, NULL),
-    (15, 15,'seed_doc_im_03',     3, '09:00', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (16, 16,'seed_doc_im_04',     4, '09:30', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (17, 17,'seed_doc_ortho_02',  5, '10:00', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (18, 18,'seed_doc_derm_01',   6, '10:30', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (19, 19,'seed_doc_neuro_02',  7, '11:00', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (20, 20,'seed_doc_eye_01',    8, '11:30', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (21, 21,'seed_doc_im_01',     9, '14:00', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (22, 22,'seed_doc_ortho_03', 10, '14:30', 'CONFIRMED', NULL,         NULL,         NULL,         FALSE, NULL),
-    (23, 23,'seed_doc_im_02',     2, '15:00', 'CANCELLED', NULL,         NULL,         NULL,         FALSE, '환자 사정으로 일정 변경'),
-    (24, 24,'seed_doc_derm_02',   3, '15:30', 'CANCELLED', NULL,         NULL,         NULL,         FALSE, '보호자 요청으로 예약 취소'),
-    (25, 25,'seed_doc_neuro_02',  4, '16:00', 'CANCELLED', NULL,         NULL,         NULL,         FALSE, '현장 상황으로 재예약 예정'),
-    (26, 26,'seed_doc_eye_01',    5, '16:30', 'CANCELLED', NULL,         NULL,         NULL,         FALSE, '증상 호전으로 취소');
-
 INSERT INTO schedule_slot (
     public_id,
     doctor_id,
@@ -388,76 +272,41 @@ INSERT INTO schedule_slot (
     created_at
 )
 SELECT
-    'slot_seed_' || LPAD(j.seed_no::TEXT, 3, '0'),
+    'slot_prd_future_' || st.doctor_public_id || '_' || to_char(fd.slot_date, 'YYYYMMDD') || '_' || replace(st.start_time::text, ':', ''),
     dp.doctor_profile_id,
-    CURRENT_DATE + j.date_offset,
-    j.start_time,
-    (j.start_time + INTERVAL '30 minutes')::TIME,
-    j.booking_status <> 'CANCELLED',
+    fd.slot_date,
+    st.start_time,
+    st.end_time,
+    FALSE,
     NOW()
-FROM seed_journey j
-JOIN "user" u
-  ON u.username = j.doctor_username
-JOIN doctor_profile dp
-  ON dp.user_id = u.user_id
-ON CONFLICT (public_id) DO UPDATE
-SET doctor_id = EXCLUDED.doctor_id,
-    slot_date = EXCLUDED.slot_date,
-    start_time = EXCLUDED.start_time,
-    end_time = EXCLUDED.end_time,
-    is_booked = EXCLUDED.is_booked;
+  FROM slot_templates st
+  JOIN doctor_profile dp
+    ON dp.public_id = st.doctor_public_id
+  CROSS JOIN future_days fd
+ WHERE NOT EXISTS (
+    SELECT 1
+      FROM schedule_slot ss
+     WHERE ss.doctor_id = dp.doctor_profile_id
+       AND ss.slot_date = fd.slot_date
+       AND ss.start_time = st.start_time
+ );
 
 INSERT INTO intake_session (
-    public_id,
-    patient_id,
-    caller_number,
-    channel,
-    status,
-    completion_reason,
-    ended_at,
-    last_activity_at,
-    selected_department,
-    selected_department_name,
-    selection_reason,
-    selection_confidence_level,
-    selection_is_emergency,
-    offered_slot_ids_json,
-    selection_updated_at,
-    created_at
-)
-SELECT
-    'ints_seed_' || LPAD(j.seed_no::TEXT, 3, '0'),
-    p.patient_id,
-    p.phone,
-    'PHONE',
-    'COMPLETED',
-    CASE WHEN j.booking_status = 'CANCELLED' THEN 'EXISTING_BOOKING_CHECKED' ELSE 'BOOKING_CREATED' END,
-    (CURRENT_DATE + j.date_offset + j.start_time) - INTERVAL '55 minutes',
-    (CURRENT_DATE + j.date_offset + j.start_time) - INTERVAL '50 minutes',
-    dp.department,
-    dp.department_name,
-    CASE dp.department
-        WHEN 'INTERNAL_MEDICINE' THEN '어지럼과 혈압 변동으로 내과 상담 요청'
-        WHEN 'ORTHOPEDICS' THEN '무릎 통증과 보행 불편으로 정형외과 상담 요청'
-        WHEN 'DERMATOLOGY' THEN '가려움과 발진이 반복되어 피부과 상담 요청'
-        WHEN 'NEUROLOGY' THEN '두통과 어지럼이 반복되어 신경과 상담 요청'
-        WHEN 'OPHTHALMOLOGY' THEN '시야 흐림과 눈 충혈로 안과 상담 요청'
-        ELSE '증상 확인을 위해 진료 예약을 진행함'
-    END,
-    'HIGH',
-    FALSE,
-    '["slot_seed_' || LPAD(j.seed_no::TEXT, 3, '0') || '"]',
-    (CURRENT_DATE + j.date_offset + j.start_time) - INTERVAL '50 minutes',
-    NOW()
-FROM seed_journey j
-JOIN seed_patient sp
-  ON sp.seed_no = j.patient_seed_no
-JOIN patient p
-  ON p.phone = sp.phone
-JOIN "user" u
-  ON u.username = j.doctor_username
-JOIN doctor_profile dp
-  ON dp.user_id = u.user_id
+    public_id, patient_id, caller_number, channel, status, completion_reason, ended_at, last_activity_at,
+    selected_department, selected_department_name, selection_reason, selection_confidence_level,
+    selection_is_emergency, offered_slot_ids_json, selection_updated_at, created_at
+) VALUES
+('ints_prd_gim_sudo01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_sudo01'), '01011111111', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW() - INTERVAL '70 minutes', NOW() - INTERVAL '65 minutes', 'INTERNAL_MEDICINE', '내과', '김천 수도리 권역 차량 단말 본인인증 검증용 예약', 'HIGH', FALSE, '["slot_prd_gim_sudo01"]', NOW() - INTERVAL '65 minutes', NOW()),
+('ints_prd_gim_hwang01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_hwang01'), '01022222222', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'INTERNAL_MEDICINE', '내과', '김천 황점리 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_gim_hwang01"]', NOW(), NOW()),
+('ints_prd_gim_jirye01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_jirye01'), '01033333333', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'ORTHOPEDICS', '정형외과', '김천 지례 권역 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_gim_jirye01"]', NOW(), NOW()),
+('ints_prd_andong01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_andong01'), '01044444444', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW() - INTERVAL '60 minutes', NOW() - INTERVAL '55 minutes', 'NEUROLOGY', '신경과', '안동 임동면 본인인증 진행중 시나리오 검증용 예약', 'HIGH', FALSE, '["slot_prd_andong01"]', NOW() - INTERVAL '55 minutes', NOW()),
+('ints_prd_yj_marak01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_marak01'), '01055555555', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW() - INTERVAL '50 minutes', NOW() - INTERVAL '45 minutes', 'DERMATOLOGY', '피부과', '영주 단산면 active mission 검증용 예약', 'HIGH', FALSE, '["slot_prd_yj_marak01"]', NOW() - INTERVAL '45 minutes', NOW()),
+('ints_prd_yj_nam01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_nam01'), '01066666666', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'INTERNAL_MEDICINE', '내과', '영주 남대리 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_yj_nam01"]', NOW(), NOW()),
+('ints_prd_yj_nam02', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_nam02'), '01077777777', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'OPHTHALMOLOGY', '안과', '영주 남대리 안과 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_yj_nam02"]', NOW(), NOW()),
+('ints_prd_sj_oeseo01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_oeseo01'), '01088888888', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW() - INTERVAL '40 minutes', NOW() - INTERVAL '35 minutes', 'ORTHOPEDICS', '정형외과', '상주 외서면 화상진료 진행중 시나리오 검증용 예약', 'HIGH', FALSE, '["slot_prd_sj_oeseo01"]', NOW() - INTERVAL '35 minutes', NOW()),
+('ints_prd_sj_euncheok01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_euncheok01'), '01099999999', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'INTERNAL_MEDICINE', '내과', '상주 은척면 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_sj_euncheok01"]', NOW(), NOW()),
+('ints_prd_sj_hwanam01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_hwanam01'), '01012341234', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'NEUROLOGY', '신경과', '상주 화남면 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_sj_hwanam01"]', NOW(), NOW()),
+('ints_prd_sj_hwanam02', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_hwanam02'), '01023452345', 'PHONE', 'COMPLETED', 'BOOKING_CREATED', NOW(), NOW(), 'DERMATOLOGY', '피부과', '상주 화남면 피부과 미래 예약 조회용 예약', 'HIGH', FALSE, '["slot_prd_sj_hwanam02"]', NOW(), NOW())
 ON CONFLICT (public_id) DO UPDATE
 SET patient_id = EXCLUDED.patient_id,
     caller_number = EXCLUDED.caller_number,
@@ -475,48 +324,20 @@ SET patient_id = EXCLUDED.patient_id,
     selection_updated_at = EXCLUDED.selection_updated_at;
 
 INSERT INTO booking (
-    public_id,
-    patient_id,
-    intake_session_id,
-    slot_id,
-    doctor_id,
-    channel,
-    appointment_date,
-    start_time,
-    end_time,
-    status,
-    cancel_reason,
-    cancelled_at,
-    created_at,
-    updated_at
-)
-SELECT
-    'bk_seed_' || LPAD(j.seed_no::TEXT, 3, '0'),
-    p.patient_id,
-    i.intake_session_id,
-    s.slot_id,
-    s.doctor_id,
-    'PHONE',
-    s.slot_date,
-    s.start_time,
-    s.end_time,
-    j.booking_status,
-    j.cancel_reason,
-    CASE
-        WHEN j.booking_status = 'CANCELLED' THEN (s.slot_date + s.start_time) - INTERVAL '35 minutes'
-        ELSE NULL
-    END,
-    NOW(),
-    NOW()
-FROM seed_journey j
-JOIN seed_patient sp
-  ON sp.seed_no = j.patient_seed_no
-JOIN patient p
-  ON p.phone = sp.phone
-JOIN schedule_slot s
-  ON s.public_id = 'slot_seed_' || LPAD(j.seed_no::TEXT, 3, '0')
-JOIN intake_session i
-  ON i.public_id = 'ints_seed_' || LPAD(j.seed_no::TEXT, 3, '0')
+    public_id, patient_id, intake_session_id, slot_id, doctor_id, channel,
+    appointment_date, start_time, end_time, status, cancel_reason, cancelled_at, created_at, updated_at
+) VALUES
+('bk_prd_gim_sudo01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_sudo01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_gim_sudo01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_gim_sudo01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_001'), 'PHONE', CURRENT_DATE, TIME '09:00', TIME '09:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_gim_hwang01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_hwang01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_gim_hwang01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_gim_hwang01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_002'), 'PHONE', CURRENT_DATE + 1, TIME '09:30', TIME '10:00', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_gim_jirye01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_jirye01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_gim_jirye01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_gim_jirye01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_003'), 'PHONE', CURRENT_DATE + 2, TIME '10:00', TIME '10:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_andong01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_andong01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_andong01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_andong01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_005'), 'PHONE', CURRENT_DATE, TIME '11:00', TIME '11:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_yj_marak01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_marak01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_yj_marak01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_yj_marak01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_004'), 'PHONE', CURRENT_DATE, TIME '13:00', TIME '13:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_yj_nam01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_nam01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_yj_nam01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_yj_nam01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_002'), 'PHONE', CURRENT_DATE + 1, TIME '14:00', TIME '14:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_yj_nam02', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_nam02'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_yj_nam02'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_yj_nam02'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_006'), 'PHONE', CURRENT_DATE + 3, TIME '15:00', TIME '15:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_sj_oeseo01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_oeseo01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_oeseo01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_sj_oeseo01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_003'), 'PHONE', CURRENT_DATE, TIME '16:00', TIME '16:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_sj_euncheok01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_euncheok01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_euncheok01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_sj_euncheok01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_001'), 'PHONE', CURRENT_DATE + 4, TIME '10:30', TIME '11:00', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_sj_hwanam01', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_hwanam01'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_hwanam01'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_sj_hwanam01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_005'), 'PHONE', CURRENT_DATE + 4, TIME '11:00', TIME '11:30', 'CONFIRMED', NULL, NULL, NOW(), NOW()),
+('bk_prd_sj_hwanam02', (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_hwanam02'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_hwanam02'), (SELECT slot_id FROM schedule_slot WHERE public_id = 'slot_prd_sj_hwanam02'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_004'), 'PHONE', CURRENT_DATE + 5, TIME '11:30', TIME '12:00', 'CONFIRMED', NULL, NULL, NOW(), NOW())
 ON CONFLICT (public_id) DO UPDATE
 SET patient_id = EXCLUDED.patient_id,
     intake_session_id = EXCLUDED.intake_session_id,
@@ -532,28 +353,19 @@ SET patient_id = EXCLUDED.patient_id,
     updated_at = NOW();
 
 INSERT INTO care_case (
-    public_id,
-    booking_id,
-    patient_id,
-    doctor_id,
-    intake_session_id,
-    status,
-    created_at,
-    updated_at
-)
-SELECT
-    'case_seed_' || LPAD(j.seed_no::TEXT, 3, '0'),
-    b.booking_id,
-    b.patient_id,
-    b.doctor_id,
-    b.intake_session_id,
-    j.case_status,
-    NOW(),
-    NOW()
-FROM seed_journey j
-JOIN booking b
-  ON b.public_id = 'bk_seed_' || LPAD(j.seed_no::TEXT, 3, '0')
-WHERE j.case_status IS NOT NULL
+    public_id, booking_id, patient_id, doctor_id, intake_session_id, status, created_at, updated_at
+) VALUES
+('case_prd_gim_sudo01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_gim_sudo01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_sudo01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_001'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_gim_sudo01'), 'PREPARING', NOW(), NOW()),
+('case_prd_gim_hwang01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_gim_hwang01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_hwang01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_002'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_gim_hwang01'), 'CREATED', NOW(), NOW()),
+('case_prd_gim_jirye01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_gim_jirye01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_gim_jirye01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_003'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_gim_jirye01'), 'CREATED', NOW(), NOW()),
+('case_prd_andong01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_andong01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_andong01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_005'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_andong01'), 'IN_PROGRESS', NOW(), NOW()),
+('case_prd_yj_marak01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_yj_marak01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_marak01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_004'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_yj_marak01'), 'PREPARING', NOW(), NOW()),
+('case_prd_yj_nam01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_yj_nam01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_nam01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_002'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_yj_nam01'), 'CREATED', NOW(), NOW()),
+('case_prd_yj_nam02', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_yj_nam02'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_yj_nam02'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_006'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_yj_nam02'), 'CREATED', NOW(), NOW()),
+('case_prd_sj_oeseo01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_sj_oeseo01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_oeseo01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_003'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_oeseo01'), 'IN_PROGRESS', NOW(), NOW()),
+('case_prd_sj_euncheok01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_sj_euncheok01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_euncheok01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_001'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_euncheok01'), 'CREATED', NOW(), NOW()),
+('case_prd_sj_hwanam01', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_sj_hwanam01'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_hwanam01'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_005'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_hwanam01'), 'CREATED', NOW(), NOW()),
+('case_prd_sj_hwanam02', (SELECT booking_id FROM booking WHERE public_id = 'bk_prd_sj_hwanam02'), (SELECT patient_id FROM patient WHERE public_id = 'pat_prd_sj_hwanam02'), (SELECT doctor_profile_id FROM doctor_profile WHERE public_id = 'doc_prd_004'), (SELECT intake_session_id FROM intake_session WHERE public_id = 'ints_prd_sj_hwanam02'), 'CREATED', NOW(), NOW())
 ON CONFLICT (booking_id) DO UPDATE
 SET patient_id = EXCLUDED.patient_id,
     doctor_id = EXCLUDED.doctor_id,
@@ -562,51 +374,14 @@ SET patient_id = EXCLUDED.patient_id,
     updated_at = NOW();
 
 INSERT INTO mission (
-    public_id,
-    case_id,
-    vehicle_id,
-    destination,
-    dispatched_at,
-    estimated_arrival_time,
-    phase,
-    previous_phase,
-    latitude,
-    longitude,
-    completed_at,
-    created_at,
-    updated_at
-)
-SELECT
-    'ms_seed_' || LPAD(j.seed_no::TEXT, 3, '0'),
-    c.case_id,
-    'VEH-' || LPAD(j.seed_no::TEXT, 3, '0'),
-    p.address,
-    (b.appointment_date + b.start_time) - INTERVAL '40 minutes',
-    (b.appointment_date + b.start_time) - INTERVAL '10 minutes',
-    j.mission_phase,
-    CASE j.mission_phase
-        WHEN 'EN_ROUTE' THEN 'DISPATCHED'
-        WHEN 'ARRIVED' THEN 'EN_ROUTE'
-        WHEN 'CONSULTING' THEN 'VERIFYING'
-        WHEN 'COMPLETED' THEN 'RETURNING'
-        ELSE NULL
-    END,
-    ROUND((36.1080000 + (j.seed_no * 0.0007))::NUMERIC, 7),
-    ROUND((128.0500000 + (j.seed_no * 0.0005))::NUMERIC, 7),
-    CASE
-        WHEN j.mission_phase = 'COMPLETED' THEN (b.appointment_date + b.start_time) + INTERVAL '55 minutes'
-        ELSE NULL
-    END,
-    NOW(),
-    NOW()
-FROM seed_journey j
-JOIN care_case c
-  ON c.public_id = 'case_seed_' || LPAD(j.seed_no::TEXT, 3, '0')
-JOIN booking b
-  ON b.booking_id = c.booking_id
-JOIN patient p
-  ON p.patient_id = c.patient_id
-WHERE j.mission_phase IS NOT NULL
+    public_id, case_id, vehicle_id, destination, dispatched_at, estimated_arrival_time, phase, previous_phase,
+    latitude, longitude, completed_at, last_telemetry_source_event_id, last_telemetry_seq_no, last_telemetry_at,
+    created_at, updated_at
+) VALUES
+('ms_prd_gim_sudo01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_gim_sudo01'), (SELECT public_id FROM vehicle WHERE code = 'GIMCHEON-01'), (SELECT address FROM patient WHERE public_id = 'pat_prd_gim_sudo01'), NOW() - INTERVAL '50 minutes', NOW() - INTERVAL '20 minutes', 'ARRIVED', 'EN_ROUTE', 36.1115000, 128.0708000, NULL, NULL, NULL, NULL, NOW(), NOW()),
+('ms_prd_andong01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_andong01'), (SELECT public_id FROM vehicle WHERE code = 'ANDONG-01'), (SELECT address FROM patient WHERE public_id = 'pat_prd_andong01'), NOW() - INTERVAL '60 minutes', NOW() - INTERVAL '25 minutes', 'VERIFYING', 'ARRIVED', 36.6987000, 128.8223000, NULL, NULL, NULL, NULL, NOW(), NOW()),
+('ms_prd_yj_marak01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_yj_marak01'), (SELECT public_id FROM vehicle WHERE code = 'YEONGJU-01'), (SELECT address FROM patient WHERE public_id = 'pat_prd_yj_marak01'), NOW() - INTERVAL '45 minutes', NOW() - INTERVAL '10 minutes', 'ARRIVED', 'EN_ROUTE', 36.8049000, 128.6240000, NULL, NULL, NULL, NULL, NOW(), NOW()),
+('ms_prd_sj_oeseo01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_sj_oeseo01'), (SELECT public_id FROM vehicle WHERE code = 'SANGJU-01'), (SELECT address FROM patient WHERE public_id = 'pat_prd_sj_oeseo01'), NOW() - INTERVAL '55 minutes', NOW() - INTERVAL '15 minutes', 'CONSULTING', 'VERIFYING', 36.4109000, 128.1591000, NULL, NULL, NULL, NULL, NOW(), NOW())
 ON CONFLICT (case_id) DO UPDATE
 SET vehicle_id = EXCLUDED.vehicle_id,
     destination = EXCLUDED.destination,
@@ -617,72 +392,19 @@ SET vehicle_id = EXCLUDED.vehicle_id,
     latitude = EXCLUDED.latitude,
     longitude = EXCLUDED.longitude,
     completed_at = EXCLUDED.completed_at,
+    last_telemetry_source_event_id = EXCLUDED.last_telemetry_source_event_id,
+    last_telemetry_seq_no = EXCLUDED.last_telemetry_seq_no,
+    last_telemetry_at = EXCLUDED.last_telemetry_at,
     updated_at = NOW();
 
 INSERT INTO consultation_session (
-    public_id,
-    case_id,
-    status,
-    room_id,
-    livekit_url,
-    doctor_connection_state,
-    patient_connection_state,
-    doctor_joined_at,
-    patient_joined_at,
-    started_at,
-    ended_at,
-    duration_minutes,
-    created_at
-)
-SELECT
-    'ses_seed_' || LPAD(j.seed_no::TEXT, 3, '0'),
-    c.case_id,
-    j.session_status,
-    'seed-room-' || LPAD(j.seed_no::TEXT, 3, '0'),
-    COALESCE(
-        NULLIF((SELECT livekit_url
-                FROM consultation_session
-                WHERE livekit_url IS NOT NULL AND livekit_url <> ''
-                ORDER BY session_id DESC
-                LIMIT 1), ''),
-        '__LIVEKIT_URL__'
-    ),
-    CASE
-        WHEN j.session_status IN ('IN_PROGRESS', 'COMPLETED') THEN 'CONNECTED'
-        ELSE 'DISCONNECTED'
-    END,
-    CASE
-        WHEN j.session_status IN ('IN_PROGRESS', 'COMPLETED') THEN 'CONNECTED'
-        ELSE 'DISCONNECTED'
-    END,
-    CASE
-        WHEN j.session_status IN ('IN_PROGRESS', 'COMPLETED') THEN (b.appointment_date + b.start_time) + INTERVAL '3 minutes'
-        ELSE NULL
-    END,
-    CASE
-        WHEN j.session_status IN ('IN_PROGRESS', 'COMPLETED') THEN (b.appointment_date + b.start_time) + INTERVAL '4 minutes'
-        ELSE NULL
-    END,
-    CASE
-        WHEN j.session_status IN ('IN_PROGRESS', 'COMPLETED') THEN (b.appointment_date + b.start_time) + INTERVAL '5 minutes'
-        ELSE NULL
-    END,
-    CASE
-        WHEN j.session_status = 'COMPLETED' THEN (b.appointment_date + b.start_time) + INTERVAL '22 minutes'
-        ELSE NULL
-    END,
-    CASE
-        WHEN j.session_status = 'COMPLETED' THEN 17
-        WHEN j.session_status = 'IN_PROGRESS' THEN 9
-        ELSE NULL
-    END,
-    NOW()
-FROM seed_journey j
-JOIN care_case c
-  ON c.public_id = 'case_seed_' || LPAD(j.seed_no::TEXT, 3, '0')
-JOIN booking b
-  ON b.booking_id = c.booking_id
-WHERE j.session_status IS NOT NULL
+    public_id, case_id, status, room_id, livekit_url, doctor_connection_state, patient_connection_state,
+    doctor_joined_at, patient_joined_at, started_at, ended_at, duration_minutes, created_at
+) VALUES
+('ses_prd_gim_sudo01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_gim_sudo01'), 'READY', 'prod-room-gim-01', COALESCE(NULLIF((SELECT livekit_url FROM consultation_session WHERE livekit_url IS NOT NULL AND livekit_url <> '' ORDER BY session_id DESC LIMIT 1), ''), '__SET_LIVEKIT_URL__'), 'DISCONNECTED', 'DISCONNECTED', NULL, NULL, NULL, NULL, NULL, NOW()),
+('ses_prd_andong01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_andong01'), 'READY', 'prod-room-andong-01', COALESCE(NULLIF((SELECT livekit_url FROM consultation_session WHERE livekit_url IS NOT NULL AND livekit_url <> '' ORDER BY session_id DESC LIMIT 1), ''), '__SET_LIVEKIT_URL__'), 'DISCONNECTED', 'DISCONNECTED', NULL, NULL, NULL, NULL, NULL, NOW()),
+('ses_prd_yj_marak01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_yj_marak01'), 'READY', 'prod-room-yeongju-01', COALESCE(NULLIF((SELECT livekit_url FROM consultation_session WHERE livekit_url IS NOT NULL AND livekit_url <> '' ORDER BY session_id DESC LIMIT 1), ''), '__SET_LIVEKIT_URL__'), 'DISCONNECTED', 'DISCONNECTED', NULL, NULL, NULL, NULL, NULL, NOW()),
+('ses_prd_sj_oeseo01', (SELECT case_id FROM care_case WHERE public_id = 'case_prd_sj_oeseo01'), 'IN_PROGRESS', 'prod-room-sangju-01', COALESCE(NULLIF((SELECT livekit_url FROM consultation_session WHERE livekit_url IS NOT NULL AND livekit_url <> '' ORDER BY session_id DESC LIMIT 1), ''), '__SET_LIVEKIT_URL__'), 'CONNECTED', 'CONNECTED', NOW() - INTERVAL '20 minutes', NOW() - INTERVAL '19 minutes', NOW() - INTERVAL '18 minutes', NULL, NULL, NOW())
 ON CONFLICT (case_id) DO UPDATE
 SET status = EXCLUDED.status,
     room_id = EXCLUDED.room_id,
@@ -694,131 +416,5 @@ SET status = EXCLUDED.status,
     started_at = EXCLUDED.started_at,
     ended_at = EXCLUDED.ended_at,
     duration_minutes = EXCLUDED.duration_minutes;
-
-INSERT INTO consultation_summary (
-    session_id,
-    summary_note,
-    is_prescription_issued,
-    prescription_note,
-    needs_follow_up,
-    created_at
-)
-SELECT
-    s.session_id,
-    CASE dp.department
-        WHEN 'INTERNAL_MEDICINE' THEN '혈압과 복용 약을 점검했고 현재 처방 유지 및 경과 관찰을 안내했습니다.'
-        WHEN 'ORTHOPEDICS' THEN '관절 통증은 퇴행성 변화 가능성이 있어 활동량 조절과 찜질을 안내했습니다.'
-        WHEN 'DERMATOLOGY' THEN '피부 자극 회피와 연고 사용법, 재내원 기준을 설명했습니다.'
-        WHEN 'NEUROLOGY' THEN '어지럼과 두통은 생활 관리와 복약 지침을 중심으로 설명했습니다.'
-        WHEN 'OPHTHALMOLOGY' THEN '안구 건조와 충혈 증상 완화를 위한 점안제 사용법을 안내했습니다.'
-        ELSE '진료 후 경과 관찰과 복약 지도를 안내했습니다.'
-    END,
-    CASE
-        WHEN dp.department IN ('DERMATOLOGY', 'OPHTHALMOLOGY') THEN TRUE
-        WHEN MOD(j.seed_no, 3) <> 0 THEN TRUE
-        ELSE FALSE
-    END,
-    CASE
-        WHEN dp.department = 'INTERNAL_MEDICINE' THEN '혈압약 또는 소화기 증상 완화 약 7일분 처방'
-        WHEN dp.department = 'ORTHOPEDICS' THEN '소염진통제와 근이완제 5일분 처방'
-        WHEN dp.department = 'DERMATOLOGY' THEN '연고와 항히스타민제 사용법 안내'
-        WHEN dp.department = 'NEUROLOGY' THEN '두통 조절 약과 생활 관리 지침 안내'
-        WHEN dp.department = 'OPHTHALMOLOGY' THEN '점안제와 인공눈물 사용법 안내'
-        ELSE NULL
-    END,
-    CASE
-        WHEN dp.department IN ('NEUROLOGY', 'ORTHOPEDICS') THEN TRUE
-        WHEN MOD(j.seed_no, 4) = 0 THEN TRUE
-        ELSE FALSE
-    END,
-    NOW()
-FROM seed_journey j
-JOIN consultation_session s
-  ON s.public_id = 'ses_seed_' || LPAD(j.seed_no::TEXT, 3, '0')
-JOIN care_case c
-  ON c.case_id = s.case_id
-JOIN doctor_profile dp
-  ON dp.doctor_profile_id = c.doctor_id
-WHERE j.create_summary IS TRUE
-ON CONFLICT (session_id) DO UPDATE
-SET summary_note = EXCLUDED.summary_note,
-    is_prescription_issued = EXCLUDED.is_prescription_issued,
-    prescription_note = EXCLUDED.prescription_note,
-    needs_follow_up = EXCLUDED.needs_follow_up;
-
-CREATE TEMP TABLE seed_intake_only (
-    seed_no INT PRIMARY KEY,
-    patient_seed_no INT NOT NULL,
-    department TEXT NOT NULL,
-    department_name TEXT NOT NULL,
-    selection_reason TEXT NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO seed_intake_only (seed_no, patient_seed_no, department, department_name, selection_reason)
-VALUES
-    (27, 27, 'INTERNAL_MEDICINE', '내과', '기침과 미열이 이어져 내과 상담만 진행'),
-    (28, 28, 'ORTHOPEDICS', '정형외과', '무릎 통증 상담 후 가족과 일정 재조율 예정'),
-    (29, 29, 'DERMATOLOGY', '피부과', '가려움 증상 상담 후 추후 예약 예정'),
-    (30, 30, 'NEUROLOGY', '신경과', '두통 상담 후 기존 예약 여부만 확인'),
-    (31, 31, 'OPHTHALMOLOGY', '안과', '시야 흐림 상담 후 추후 예약 예정'),
-    (32, 32, 'INTERNAL_MEDICINE', '내과', '혈압 상담만 진행하고 예약은 보류'),
-    (33, 33, 'ORTHOPEDICS', '정형외과', '허리 통증 상담 후 가족 확인 대기'),
-    (34, 34, 'DERMATOLOGY', '피부과', '피부 증상 상담 후 약 복용 여부 검토 중');
-
-INSERT INTO intake_session (
-    public_id,
-    patient_id,
-    caller_number,
-    channel,
-    status,
-    completion_reason,
-    ended_at,
-    last_activity_at,
-    selected_department,
-    selected_department_name,
-    selection_reason,
-    selection_confidence_level,
-    selection_is_emergency,
-    offered_slot_ids_json,
-    selection_updated_at,
-    created_at
-)
-SELECT
-    'ints_seed_' || LPAD(i.seed_no::TEXT, 3, '0'),
-    p.patient_id,
-    p.phone,
-    'PHONE',
-    'COMPLETED',
-    'EXISTING_BOOKING_CHECKED',
-    NOW() - INTERVAL '10 minutes',
-    NOW() - INTERVAL '12 minutes',
-    i.department,
-    i.department_name,
-    i.selection_reason,
-    'HIGH',
-    FALSE,
-    '[]',
-    NOW() - INTERVAL '12 minutes',
-    NOW()
-FROM seed_intake_only i
-JOIN seed_patient sp
-  ON sp.seed_no = i.patient_seed_no
-JOIN patient p
-  ON p.phone = sp.phone
-ON CONFLICT (public_id) DO UPDATE
-SET patient_id = EXCLUDED.patient_id,
-    caller_number = EXCLUDED.caller_number,
-    channel = EXCLUDED.channel,
-    status = EXCLUDED.status,
-    completion_reason = EXCLUDED.completion_reason,
-    ended_at = EXCLUDED.ended_at,
-    last_activity_at = EXCLUDED.last_activity_at,
-    selected_department = EXCLUDED.selected_department,
-    selected_department_name = EXCLUDED.selected_department_name,
-    selection_reason = EXCLUDED.selection_reason,
-    selection_confidence_level = EXCLUDED.selection_confidence_level,
-    selection_is_emergency = EXCLUDED.selection_is_emergency,
-    offered_slot_ids_json = EXCLUDED.offered_slot_ids_json,
-    selection_updated_at = EXCLUDED.selection_updated_at;
 
 COMMIT;

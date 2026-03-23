@@ -8,6 +8,8 @@ import java.util.List;
 public record DeviceTerminalPrincipal(
         String subject,
         String terminalId,
+        String vehicleId,
+        String regionCode,
         List<String> scopes
 ) {
 
@@ -19,6 +21,14 @@ public record DeviceTerminalPrincipal(
 
     public boolean hasScope(String requiredScope) {
         return scopes != null && scopes.contains(requiredScope);
+    }
+
+    public boolean hasVehicleBinding() {
+        return vehicleId != null && !vehicleId.isBlank();
+    }
+
+    public boolean hasRegionBinding() {
+        return regionCode != null && !regionCode.isBlank();
     }
 
     public String actorRole() {

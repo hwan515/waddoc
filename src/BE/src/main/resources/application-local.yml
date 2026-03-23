@@ -22,11 +22,9 @@ jwt:
   access-token-expiry: 900
   refresh-token-expiry: 604800
   mission-terminal-token-expiry: ${MISSION_TERMINAL_TOKEN_EXPIRY:1800}
-  device-terminal-token-expiry: ${DEVICE_TERMINAL_TOKEN_EXPIRY:1800}
 
 robot-terminal:
-  bootstrap-id: ${ROBOT_TERMINAL_BOOTSTRAP_ID:robot-terminal-01}
-  bootstrap-key: ${ROBOT_TERMINAL_BOOTSTRAP_KEY:robot-terminal-key}
+  registry: ${ROBOT_TERMINAL_REGISTRY:robot-terminal-01|change-me|veh_GIMCHEON_01|GIMCHEON}
 
 ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}

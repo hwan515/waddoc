@@ -9,5 +9,7 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     Optional<Vehicle> findByPublicId(String publicId);
 
+    Optional<Vehicle> findByCode(String code);
+
     Optional<Vehicle> findByRegionCodeAndIsActiveTrue(String regionCode);
 }

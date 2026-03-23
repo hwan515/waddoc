@@ -26,11 +26,14 @@ import java.util.List;
 @Getter
 public class JwtTokenProvider {
 
+    private static final long DEVICE_TERMINAL_TOKEN_EXPIRY_SECONDS = 1800L;
     private static final String ROLE_CLAIM = "role";
     private static final String TOKEN_TYPE_CLAIM = "tokenType";
     private static final String MISSION_ID_CLAIM = "missionId";
     private static final String CASE_ID_CLAIM = "caseId";
     private static final String TERMINAL_ID_CLAIM = "terminalId";
+    private static final String VEHICLE_ID_CLAIM = "vehicleId";
+    private static final String REGION_CODE_CLAIM = "regionCode";
     private static final String SCOPES_CLAIM = "scopes";
     private static final String MISSION_TERMINAL_TOKEN_TYPE = "MISSION_TERMINAL";
     private static final String DEVICE_TERMINAL_TOKEN_TYPE = "DEVICE_TERMINAL";
@@ -46,9 +49,6 @@ public class JwtTokenProvider {
 
     @Value("${jwt.mission-terminal-token-expiry:1800}")
     private long missionTerminalTokenExpiry;
-
-    @Value("${jwt.device-terminal-token-expiry:1800}")
-    private long deviceTerminalTokenExpiry;
 
     private SecretKey secretKey;
 
@@ -99,19 +99,25 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public String createDeviceTerminalToken(String terminalId, List<String> scopes) {
+    public String createDeviceTerminalToken(String terminalId, String vehicleId, String regionCode, List<String> scopes) {
         Instant now = Instant.now();
-        Instant expiry = now.plusSeconds(deviceTerminalTokenExpiry);
+        Instant expiry = now.plusSeconds(DEVICE_TERMINAL_TOKEN_EXPIRY_SECONDS);
 
-        return Jwts.builder()
+        io.jsonwebtoken.JwtBuilder builder = Jwts.builder()
                 .subject("device-terminal:" + terminalId)
                 .claim(TOKEN_TYPE_CLAIM, DEVICE_TERMINAL_TOKEN_TYPE)
                 .claim(TERMINAL_ID_CLAIM, terminalId)
                 .claim(SCOPES_CLAIM, scopes)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
-                .signWith(secretKey)
-                .compact();
+                .signWith(secretKey);
+        if (vehicleId != null && !vehicleId.isBlank()) {
+            builder.claim(VEHICLE_ID_CLAIM, vehicleId);
+        }
+        if (regionCode != null && !regionCode.isBlank()) {
+            builder.claim(REGION_CODE_CLAIM, regionCode);
+        }
+        return builder.compact();
     }
 
     public boolean validateToken(String token) {
@@ -175,7 +181,7 @@ public class JwtTokenProvider {
     }
 
     public long getDeviceTerminalTokenExpiry() {
-        return deviceTerminalTokenExpiry;
+        return DEVICE_TERMINAL_TOKEN_EXPIRY_SECONDS;
     }
 
     private Object buildPrincipal(Claims claims) {
@@ -192,6 +198,8 @@ public class JwtTokenProvider {
             return new DeviceTerminalPrincipal(
                     claims.getSubject(),
                     claims.get(TERMINAL_ID_CLAIM, String.class),
+                    claims.get(VEHICLE_ID_CLAIM, String.class),
+                    claims.get(REGION_CODE_CLAIM, String.class),
                     getScopes(claims)
             );
         }
