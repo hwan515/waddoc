@@ -49,7 +49,8 @@ public class MissionTerminalTokenService {
         // 차량 단말은 본인확인과 환자 토큰 발급 범위만 갖도록 최소 권한으로 발급한다.
         List<String> scopes = List.of(
                 MissionTerminalScopes.IDENTITY_CHECK,
-                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                MissionTerminalScopes.VITALS_WRITE
         );
         String terminalToken = jwtTokenProvider.createMissionTerminalToken(
                 mission.getPublicId(),

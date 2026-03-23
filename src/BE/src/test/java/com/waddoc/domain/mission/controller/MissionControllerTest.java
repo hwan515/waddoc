@@ -8,12 +8,15 @@ import com.waddoc.domain.mission.dto.MissionDetailResponse;
 import com.waddoc.domain.mission.dto.MissionIdentityCheckResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
 import com.waddoc.domain.mission.dto.MissionSummaryResponse;
+import com.waddoc.domain.mission.dto.UpsertMissionVitalMeasurementResponse;
 import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.mission.service.MissionIdentityCheckService;
 import com.waddoc.domain.mission.service.MissionQueryService;
 import com.waddoc.domain.mission.service.MissionTerminalTokenService;
+import com.waddoc.domain.mission.service.MissionVitalMeasurementService;
+import com.waddoc.domain.vital.dto.VitalMeasurementResponse;
 import com.waddoc.global.error.GlobalExceptionHandler;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,6 +68,9 @@ class MissionControllerTest {
 
     @MockBean
     private ConsultationPatientTokenService consultationPatientTokenService;
+
+    @MockBean
+    private MissionVitalMeasurementService missionVitalMeasurementService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
@@ -236,7 +243,7 @@ class MissionControllerTest {
                         .caseId("case_T7nLp4")
                         .terminalToken("mission-terminal-token")
                         .expiresIn(1800)
-                        .scopes(List.of("mission:identity-check", "session:issue-patient-token"))
+                        .scopes(List.of("mission:identity-check", "session:issue-patient-token", "mission:vitals-write"))
                         .build());
 
         mockMvc.perform(post("/api/v1/missions/{missionId}/terminal/token", "ms_F2gHn6"))
@@ -244,7 +251,8 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.missionId").value("ms_F2gHn6"))
                 .andExpect(jsonPath("$.caseId").value("case_T7nLp4"))
                 .andExpect(jsonPath("$.terminalToken").value("mission-terminal-token"))
-                .andExpect(jsonPath("$.scopes[0]").value("mission:identity-check"));
+                .andExpect(jsonPath("$.scopes[0]").value("mission:identity-check"))
+                .andExpect(jsonPath("$.scopes[2]").value("mission:vitals-write"));
     }
 
     @Test
@@ -265,5 +273,38 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.sessionId").value("ses_P8mQr2"))
                 .andExpect(jsonPath("$.patientToken").value("patient-token"))
                 .andExpect(jsonPath("$.room.roomId").value("room_ses_P8mQr2"));
+    }
+
+    @Test
+    void upsertMissionVitals_returnsMergedVitals() throws Exception {
+        when(missionVitalMeasurementService.upsert(eq("ms_F2gHn6"), any(), isNull()))
+                .thenReturn(UpsertMissionVitalMeasurementResponse.builder()
+                        .missionId("ms_F2gHn6")
+                        .caseId("case_T7nLp4")
+                        .vitals(VitalMeasurementResponse.builder()
+                                .caseId("case_T7nLp4")
+                                .temperature(new BigDecimal("36.7"))
+                                .heartRate(72)
+                                .spO2(98)
+                                .measuredAt(java.time.LocalDateTime.of(2026, 3, 23, 14, 23, 10))
+                                .build())
+                        .build());
+
+        mockMvc.perform(put("/api/v1/missions/{missionId}/vitals", "ms_F2gHn6")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "temperature": 36.7,
+                                  "heartRate": 72,
+                                  "spO2": 98
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.missionId").value("ms_F2gHn6"))
+                .andExpect(jsonPath("$.caseId").value("case_T7nLp4"))
+                .andExpect(jsonPath("$.vitals.temperature").value(36.7))
+                .andExpect(jsonPath("$.vitals.heartRate").value(72))
+                .andExpect(jsonPath("$.vitals.spO2").value(98))
+                .andExpect(jsonPath("$.vitals.measuredAt").value("2026-03-23T14:23:10"));
     }
 }

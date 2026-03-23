@@ -61,7 +61,11 @@ class MissionTerminalTokenServiceTest {
         when(jwtTokenProvider.createMissionTerminalToken(
                 eq("ms_test123"),
                 eq("case_test123"),
-                eq(List.of(MissionTerminalScopes.IDENTITY_CHECK, MissionTerminalScopes.ISSUE_PATIENT_TOKEN))
+                eq(List.of(
+                        MissionTerminalScopes.IDENTITY_CHECK,
+                        MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                        MissionTerminalScopes.VITALS_WRITE
+                ))
         )).thenReturn("mission-terminal-token");
         when(jwtTokenProvider.getMissionTerminalTokenExpiry()).thenReturn(1800L);
 
@@ -73,7 +77,8 @@ class MissionTerminalTokenServiceTest {
         assertThat(response.getExpiresIn()).isEqualTo(1800L);
         assertThat(response.getScopes()).containsExactly(
                 MissionTerminalScopes.IDENTITY_CHECK,
-                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                MissionTerminalScopes.VITALS_WRITE
         );
         verify(accessControlService).assertAssignedDoctorOrAdmin(doctor, careCase);
         verify(auditLogService).log(any(), any(), any(), any(), any(), any(), any());

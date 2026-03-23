@@ -8,6 +8,7 @@ import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
 import com.waddoc.domain.mission.dto.MissionIdentityCheckResponse;
 import com.waddoc.domain.mission.dto.MissionListResponse;
+import com.waddoc.domain.mission.dto.UpsertMissionVitalMeasurementResponse;
 import com.waddoc.domain.mission.dto.UpdateMissionPhaseRequest;
 import com.waddoc.domain.mission.dto.UpdateMissionPhaseResponse;
 import com.waddoc.domain.mission.entity.MissionPhase;
@@ -15,6 +16,8 @@ import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.mission.service.MissionIdentityCheckService;
 import com.waddoc.domain.mission.service.MissionQueryService;
 import com.waddoc.domain.mission.service.MissionTerminalTokenService;
+import com.waddoc.domain.mission.service.MissionVitalMeasurementService;
+import com.waddoc.domain.vital.dto.UpsertVitalMeasurementRequest;
 import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,6 +51,7 @@ public class MissionController {
     private final MissionQueryService missionQueryService;
     private final MissionTerminalTokenService missionTerminalTokenService;
     private final ConsultationPatientTokenService consultationPatientTokenService;
+    private final MissionVitalMeasurementService missionVitalMeasurementService;
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -117,6 +122,18 @@ public class MissionController {
     ) {
         return ResponseEntity.ok(
                 consultationPatientTokenService.issuePatientTokenByMission(missionId, authentication)
+        );
+    }
+
+    @PutMapping("/{missionId}/vitals")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MISSION_TERMINAL')")
+    public ResponseEntity<UpsertMissionVitalMeasurementResponse> upsertMissionVitals(
+            @PathVariable String missionId,
+            @Valid @RequestBody UpsertVitalMeasurementRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(
+                missionVitalMeasurementService.upsert(missionId, request, authentication)
         );
     }
 }
