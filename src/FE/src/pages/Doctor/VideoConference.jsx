@@ -4,11 +4,72 @@ import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
-import { generateECGData, mockConsultationDetails, mockVitals } from '../../mockdata/consultations';
 import apiClient from '../../utils/api';
 
+const EMPTY_VITALS = {
+    caseId: null,
+    temperature: null,
+    bloodPressureSys: null,
+    bloodPressureDia: null,
+    heartRate: null,
+    spO2: null,
+    ecgWaveform: null,
+    ecgSamplingHz: null,
+    ecgDurationSeconds: null,
+    measuredAt: null,
+    createdAt: null,
+    updatedAt: null,
+};
+
+const DEMO_CONSULTATION_DETAILS = {
+    caseId: 'test-room',
+    patientName: '데모 환자',
+    patientId: 'demo-patient',
+    age: 34,
+    gender: 'MALE',
+    symptoms: '테스트용 진료입니다.',
+    recentVisits: '최근 진료 기록 없음',
+    department: '내과',
+    bloodType: '확인 불가',
+    allergies: '데이터 없음',
+    medicalHistory: '데이터 없음',
+    doctorName: '데모 의사',
+};
+
+const DEMO_VITALS = {
+    ...EMPTY_VITALS,
+    temperature: 36.7,
+    bloodPressureSys: 128,
+    bloodPressureDia: 82,
+    heartRate: 72,
+    spO2: 98,
+    ecgWaveform: [0.12, 0.18, 0.11, -0.05, 0.45, 1.1, 0.38, -0.12, 0.08, 0.1, 0.14, 0.22, 0.12, -0.08, 0.5, 1.05, 0.33, -0.1, 0.07, 0.09],
+    ecgSamplingHz: 25,
+    ecgDurationSeconds: 8,
+    measuredAt: new Date().toISOString(),
+};
+
+const normalizeVitals = (vitals) => ({
+    ...EMPTY_VITALS,
+    ...(vitals || {}),
+});
+
+const createFallbackDetails = (caseId) => ({
+    caseId: caseId || null,
+    patientName: '알 수 없음',
+    patientId: null,
+    age: '-',
+    gender: null,
+    symptoms: '문진 내용이 없습니다.',
+    recentVisits: '최근 진료 기록 없음',
+    department: '내과',
+    bloodType: '확인 불가',
+    allergies: '데이터 없음',
+    medicalHistory: '데이터 없음',
+    doctorName: '담당의 미확인',
+});
+
 const VideoConference = () => {
-    // eslint-disable-next-line no-unused-vars
     const { id } = useParams();
     const navigate = useNavigate();
 
@@ -19,10 +80,10 @@ const VideoConference = () => {
 
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
-    const [ecgData, setEcgData] = useState(generateECGData(50));
 
     // API 데이터 상태
     const [consultationDetails, setConsultationDetails] = useState(null);
+    const [vitals, setVitals] = useState(EMPTY_VITALS);
     const [isLoading, setIsLoading] = useState(true);
 
     // 진료 내역 데이터 조회
@@ -30,7 +91,8 @@ const VideoConference = () => {
         const fetchCaseDetails = async () => {
             if (!id || id === 'test-room' || id.startsWith('RV_')) {
                 // 테스트용 방일 경우 mock 활용
-                setConsultationDetails(mockConsultationDetails);
+                setConsultationDetails(DEMO_CONSULTATION_DETAILS);
+                setVitals(DEMO_VITALS);
                 setIsLoading(false);
                 return;
             }
@@ -60,11 +122,14 @@ const VideoConference = () => {
                     department: intake.departmentName || '내과',
                     bloodType: pt.bloodType ? pt.bloodType.replace('_PLUS', '+').replace('_MINUS', '-') : '확인 불가',
                     allergies: '데이터 없음',
-                    medicalHistory: '데이터 없음'
+                    medicalHistory: '데이터 없음',
+                    doctorName: caseData.doctor?.name || '담당의 미확인',
                 });
+                setVitals(normalizeVitals(caseData.vitals));
             } catch (error) {
                 console.error("Failed to fetch case details:", error);
-                setConsultationDetails(mockConsultationDetails); // 에러 시 더미 데이터 폴백 추가
+                setConsultationDetails(createFallbackDetails(id));
+                setVitals(EMPTY_VITALS);
             } finally {
                 setIsLoading(false);
             }
@@ -73,38 +138,6 @@ const VideoConference = () => {
         fetchCaseDetails();
     }, [id]);
 
-    // 강제 화면 송출을 위해 임시 Ref 유지 (PreJoin용)
-    const localVideoRef = null;
-
-    // 카메라/마이크 On/Off 상태 동기화 (LiveKitRoom에서 props로 제어됨)
-    // PreJoinRoom에서 미디어 초기화를 담당하도록 변경 가능하지만, 현재는 LiveKitRoom 진입 전 상태로만 사용
-    useEffect(() => {
-        // initCamera(videoEnabled, micEnabled);
-        return () => {
-            // cleanupMedia();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-
-    // 심전도 차트 실시간 업데이트
-    useEffect(() => {
-        if (!isJoined) return;
-
-        const ecgInterval = setInterval(() => {
-            setEcgData(prev => {
-                const newData = [...prev.slice(1)];
-                const lastTime = prev[prev.length - 1].time;
-                newData.push({
-                    time: lastTime + 1,
-                    value: lastTime % 10 === 0 ? 90 : lastTime % 10 === 1 ? -30 : lastTime % 10 === 2 ? 70 : Math.random() * 10 - 5
-                });
-                return newData;
-            });
-        }, 100);
-
-        return () => clearInterval(ecgInterval);
-    }, [isJoined]);
 
     const handleEndCall = async (summaryData) => {
         if (sessionId && summaryData) {
@@ -188,8 +221,7 @@ const VideoConference = () => {
         >
             <ConsultationRoom
                 details={consultationDetails}
-                vitals={mockVitals}
-                ecgData={ecgData}
+                vitals={vitals}
                 micEnabled={micEnabled}
                 setMicEnabled={setMicEnabled}
                 videoEnabled={videoEnabled}

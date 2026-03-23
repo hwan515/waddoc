@@ -1,23 +1,20 @@
 import { useState, useEffect } from 'react';
 import {
-    Mic, MicOff, Video, VideoOff, Settings, LogOut,
+    Mic, MicOff, Video, VideoOff,
     Eye, EyeOff
 } from 'lucide-react';
 import { useTracks, useLocalParticipant, VideoTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import EcgWaveform from './EcgWaveform';
 
 const ConsultationRoom = ({
     details,
     vitals,
-    ecgData,
     micEnabled,
     setMicEnabled,
     videoEnabled,
     setVideoEnabled,
     onEndCall,
-    localVideoRef,
-    remoteVideoRef,
-    localStream,
     role = 'DOCTOR'
 }) => {
     // 1. 상태 변수 설정
@@ -77,6 +74,18 @@ const ConsultationRoom = ({
     const filteredMeds = mockMedicines.filter(m => 
         m.name.includes(searchQuery) || m.code.includes(searchQuery)
     );
+
+    const hasValue = (value) => value !== null && value !== undefined && value !== '';
+    const measuredAtText = vitals?.measuredAt
+        ? new Date(vitals.measuredAt).toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+        })
+        : '미측정';
+    const waveform = Array.isArray(vitals?.ecgWaveform) ? vitals.ecgWaveform : [];
 
     const handleEndCallClick = () => {
         if (role === 'DOCTOR') {
@@ -181,28 +190,56 @@ const ConsultationRoom = ({
 
                     {/* 우측 상단 오버레이: 생체 정보 (Vitals) */}
                     {showVitals && (
-                        <div className="absolute top-10 right-2 w-64 bg-white/90 backdrop-blur-md border 2 border-slate-400 shadow-xl z-20 flex flex-col text-xs">
+                        <div className="absolute top-10 right-2 w-[26rem] max-h-[calc(100%-4rem)] overflow-y-auto bg-white/90 backdrop-blur-md border-2 border-slate-400 shadow-xl z-20 flex flex-col text-xs">
                             <div className="bg-[#4472C4] text-white px-2 py-1 font-bold text-center border-b border-slate-400">
-                                📈 실시간 환자 생체정보
+                                📈 환자 생체정보
                             </div>
                             <div className="p-2 space-y-2">
+                                <div className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-700">
+                                    측정 시각: <span className="font-bold">{measuredAtText}</span>
+                                </div>
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                     <span className="font-bold text-slate-700">체온 (Temp)</span>
-                                    <span className="font-extrabold text-blue-700">{vitals.temperature} <span className="text-[10px] text-slate-500 font-normal">°C</span></span>
+                                    {hasValue(vitals?.temperature) ? (
+                                        <span className="font-extrabold text-blue-700">{vitals.temperature} <span className="text-[10px] text-slate-500 font-normal">°C</span></span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                     <span className="font-bold text-slate-700">혈압 (BP)</span>
-                                    <span className="font-extrabold text-slate-800">{vitals.bloodPressureSys}/{vitals.bloodPressureDia}</span>
+                                    {hasValue(vitals?.bloodPressureSys) && hasValue(vitals?.bloodPressureDia) ? (
+                                        <span className="font-extrabold text-slate-800">{vitals.bloodPressureSys}/{vitals.bloodPressureDia}</span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                     <span className="font-bold text-slate-700">심박수 (HR)</span>
-                                    <span className="font-extrabold text-red-600 flex items-center gap-1">
-                                        {vitals.heartRate} <span className="text-[10px] text-slate-500 font-normal">bpm</span>
-                                    </span>
+                                    {hasValue(vitals?.heartRate) ? (
+                                        <span className="font-extrabold text-red-600 flex items-center gap-1">
+                                            {vitals.heartRate} <span className="text-[10px] text-slate-500 font-normal">bpm</span>
+                                        </span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="font-bold text-slate-700">산소포화도 (SpO2)</span>
-                                    <span className="font-extrabold text-green-700">{vitals.spO2} <span className="text-[10px] text-slate-500 font-normal">%</span></span>
+                                    {hasValue(vitals?.spO2) ? (
+                                        <span className="font-extrabold text-green-700">{vitals.spO2} <span className="text-[10px] text-slate-500 font-normal">%</span></span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
+                                </div>
+                                <div className="border-t border-slate-200 pt-2">
+                                    <div className="mb-2 text-[11px] font-bold text-slate-700">측정 시점 ECG</div>
+                                    <EcgWaveform
+                                        waveform={waveform}
+                                        samplingHz={vitals?.ecgSamplingHz ?? 25}
+                                        durationSeconds={vitals?.ecgDurationSeconds ?? 8}
+                                        compact
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -252,7 +289,7 @@ const ConsultationRoom = ({
                         </div>
 
                         <div className="flex-1 overflow-y-auto bg-white">
-                            {filteredMeds.map((med, idx) => {
+                            {filteredMeds.map((med) => {
                                 const isChecked = selectedMeds.includes(med.code);
                                 return (
                                     <div 

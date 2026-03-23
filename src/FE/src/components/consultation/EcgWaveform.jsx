@@ -3,6 +3,7 @@ const EcgWaveform = ({
     samplingHz = 25,
     durationSeconds = 8,
     className = '',
+    compact = false,
 }) => {
     if (!waveform.length) {
         return (
@@ -13,8 +14,8 @@ const EcgWaveform = ({
     }
 
     const width = 960;
-    const height = 240;
-    const padding = 16;
+    const height = compact ? 168 : 240;
+    const padding = compact ? 12 : 16;
     const minValue = Math.min(...waveform);
     const maxValue = Math.max(...waveform);
     const safeMin = minValue === maxValue ? minValue - 1 : minValue;
@@ -29,13 +30,13 @@ const EcgWaveform = ({
     }).join(' ');
 
     return (
-        <div className={`rounded-3xl border border-white/10 bg-slate-950/60 p-4 shadow-inner ${className}`}>
-            <div className="mb-3 flex items-center justify-between gap-3 text-xs text-slate-300">
+        <div className={`rounded-3xl border border-white/10 bg-slate-950/60 ${compact ? 'p-3' : 'p-4'} shadow-inner ${className}`}>
+            <div className={`mb-3 flex items-center justify-between gap-3 text-slate-300 ${compact ? 'text-[11px]' : 'text-xs'}`}>
                 <span className="font-semibold tracking-[0.25em] uppercase text-[#B9D6F2]">심전도 파형</span>
                 <span>{samplingHz}Hz · {durationSeconds}초 · {waveform.length}개 샘플</span>
             </div>
 
-            <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full rounded-2xl bg-[#020817]">
+            <svg viewBox={`0 0 ${width} ${height}`} className={`${compact ? 'h-36' : 'h-56'} w-full rounded-2xl bg-[#020817]`}>
                 {Array.from({ length: 7 }).map((_, index) => {
                     const x = padding + (index / 6) * (width - padding * 2);
                     return (
