@@ -98,26 +98,39 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
 
                     {/* 실시간 카메라 영상 스트리밍 영역 목업 */}
                     <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-                        {selectedVehicleId ? (
-                            <>
-                                {/* 카메라 목업 배경 */}
-                                <div className="absolute inset-0 bg-[#1a1c23]">
-                                    {/* HUD 라인 */}
-                                    <div className="absolute inset-0 opacity-20" style={{
-                                        backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
-                                        backgroundSize: '40px 40px'
-                                    }}></div>
-                                    <div className="absolute top-1/2 left-1/4 right-1/4 h-px bg-green-500/30"></div>
-                                    <div className="absolute left-1/2 top-1/4 bottom-1/4 w-px bg-green-500/30"></div>
-                                </div>
-                                <div className="relative z-10 text-center">
-                                    <Video className="w-10 h-10 text-slate-500 mx-auto mb-2 opacity-50" />
-                                    <p className="text-slate-400 text-sm font-medium">실시간 주행 카메라 (추후 연동)</p>
-                                </div>
-                            </>
-                        ) : (
-                            <p className="text-slate-500 text-sm font-medium">리스트에서 차량을 선택해주세요.</p>
+                        {false && (
+                            selectedVehicleId ? (
+                                <>
+                                    {/* 카메라 목업 배경 */}
+                                    <div className="absolute inset-0 bg-[#1a1c23]">
+                                        {/* HUD 라인 */}
+                                        <div className="absolute inset-0 opacity-20" style={{
+                                            backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
+                                            backgroundSize: '40px 40px'
+                                        }}></div>
+                                        <div className="absolute top-1/2 left-1/4 right-1/4 h-px bg-green-500/30"></div>
+                                        <div className="absolute left-1/2 top-1/4 bottom-1/4 w-px bg-green-500/30"></div>
+                                    </div>
+                                    <div className="relative z-10 text-center">
+                                        <Video className="w-10 h-10 text-slate-500 mx-auto mb-2 opacity-50" />
+                                        <p className="text-slate-400 text-sm font-medium">실시간 주행 카메라 (추후 연동)</p>
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-slate-500 text-sm font-medium">리스트에서 차량을 선택해주세요.</p>
+                            )
                         )}
+
+                        {/* 무조건 즉시 띄우는 스트리밍 영상 영역 (HTML 플레이어 지원을 위해 iframe 적용) */}
+                        <div className="absolute inset-0 z-20 w-full h-full bg-black">
+                            <iframe
+                                src="/unity_cam/"
+                                title="Camera stream"
+                                className="w-full h-full border-none"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                            ></iframe>
+                        </div>
                     </div>
                 </div>
             </div>
