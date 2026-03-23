@@ -1,32 +1,47 @@
 import json
 import math
-import threading
-import sys
 import time
 import heapq
-
-import matplotlib.pyplot as plt
+from datetime import datetime, timezone
+from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Bool, Int32
+
+try:
+    from ament_index_python.packages import get_package_share_directory
+except ImportError:
+    get_package_share_directory = None
 
 
 class DijkstraSplineFollower(Node):
     def __init__(self):
         super().__init__('dijkstra_spline_follower')
 
-        self.sub = self.create_subscription(
+        self.sub_odom = self.create_subscription(
             Odometry, '/odom', self.odom_callback, 10
         )
+        self.sub_estop = self.create_subscription(
+            Bool, '/ec2_cmd/e_stop', self.estop_callback, 1
+        )
+        self.sub_target = self.create_subscription(
+            Int32, '/ec2_cmd/target_waypoint', self.target_waypoint_callback, 1
+        )
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.pub_state_stop = self.create_publisher(Int32, '/cmd_state/e_stop', 1)
+        self.pub_state_waypoint = self.create_publisher(
+            Int32, '/cmd_state/target_waypoint', 1
+        )
         self.timer = self.create_timer(0.05, self.control_loop)
 
         self.current_x = 0.0
         self.current_z = 0.0
         self.current_yaw = 0.0
         self.has_odom = False
+        self.estop_active = False
 
         self.waypoints = {}
         self.edges = {}
@@ -78,13 +93,15 @@ class DijkstraSplineFollower(Node):
         # spline 샘플링
         self.samples_per_segment = 12
 
-        self.load_map(
-            '/home/user/S14P21A603/src/ros2_docker/workspace/unity_ros2_ws/workspace/src/lane_follow_pkg/TopologicalMap.json'
+        default_route_export_path = self.resolve_route_export_path(
+            'spline_detect_route.json'
         )
+        self.declare_parameter('route_export_path', str(default_route_export_path))
+        self.route_export_path = Path(str(self.get_parameter('route_export_path').value))
+        self.route_export_seq = 0
 
-        self.input_thread = threading.Thread(target=self.wait_for_input)
-        self.input_thread.daemon = True
-        self.input_thread.start()
+        map_path = self.resolve_map_path()
+        self.load_map(str(map_path))
 
     def normalize_angle(self, angle):
         while angle > math.pi:
@@ -104,6 +121,126 @@ class DijkstraSplineFollower(Node):
     def dist_xy(self, x1, z1, x2, z2):
         return math.sqrt((x1 - x2) ** 2 + (z1 - z2) ** 2)
 
+    def resolve_map_path(self):
+        candidates = []
+
+        if get_package_share_directory is not None:
+            try:
+                candidates.append(
+                    Path(get_package_share_directory('lane_follow_pkg')) / 'TopologicalMap.json'
+                )
+            except Exception:
+                pass
+
+        candidates.append(Path(__file__).resolve().parents[1] / 'TopologicalMap.json')
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        return candidates[-1]
+
+    def resolve_route_export_path(self, filename):
+        return Path('/tmp/lane_follow_pkg') / filename
+
+    def goal_id_to_state_value(self, goal_id):
+        if not goal_id:
+            return 0
+        try:
+            return int(str(goal_id).split('_')[-1])
+        except (TypeError, ValueError):
+            return 0
+
+    def build_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
+        path_waypoints = []
+        for wp_id in path_ids:
+            coords = self.waypoints.get(wp_id)
+            if coords is None:
+                continue
+            path_waypoints.append({
+                'id': wp_id,
+                'x': float(coords['x']),
+                'z': float(coords['z']),
+            })
+
+        trajectory_points = [
+            {'index': idx, 'x': float(x), 'z': float(z)}
+            for idx, (x, z) in enumerate(trajectory)
+        ]
+
+        start_wp = self.waypoints.get(start_id)
+        goal_wp = self.waypoints.get(goal_id)
+
+        bound_points = [(self.current_x, self.current_z)]
+        if start_wp is not None:
+            bound_points.append((float(start_wp['x']), float(start_wp['z'])))
+        if goal_wp is not None:
+            bound_points.append((float(goal_wp['x']), float(goal_wp['z'])))
+        bound_points.extend((float(p['x']), float(p['z'])) for p in trajectory_points)
+
+        xs = [p[0] for p in bound_points]
+        zs = [p[1] for p in bound_points]
+
+        return {
+            'route_version': self.route_export_seq,
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'source_node': self.get_name(),
+            'planner_type': 'spline',
+            'start_waypoint_id': start_id,
+            'goal_waypoint_id': goal_id,
+            'target_waypoint_value': int(state_value),
+            'current_pose': {
+                'x': float(self.current_x),
+                'z': float(self.current_z),
+                'yaw': float(self.current_yaw),
+            },
+            'start_waypoint': None if start_wp is None else {
+                'id': start_id,
+                'x': float(start_wp['x']),
+                'z': float(start_wp['z']),
+            },
+            'goal_waypoint': None if goal_wp is None else {
+                'id': goal_id,
+                'x': float(goal_wp['x']),
+                'z': float(goal_wp['z']),
+            },
+            'path_waypoint_ids': list(path_ids),
+            'path_waypoints': path_waypoints,
+            'trajectory_point_count': len(trajectory_points),
+            'trajectory': trajectory_points,
+            'bounds': {
+                'min_x': float(min(xs)),
+                'max_x': float(max(xs)),
+                'min_z': float(min(zs)),
+                'max_z': float(max(zs)),
+                'width': float(max(xs) - min(xs)),
+                'height': float(max(zs) - min(zs)),
+            },
+        }
+
+    def export_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
+        try:
+            self.route_export_seq += 1
+            payload = self.build_route_snapshot(
+                start_id,
+                goal_id,
+                state_value,
+                path_ids,
+                trajectory,
+            )
+            self.route_export_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.route_export_path.parent / f'{self.route_export_path.name}.tmp'
+            tmp_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding='utf-8',
+            )
+            tmp_path.replace(self.route_export_path)
+            self.get_logger().info(
+                f'route json saved: {self.route_export_path} (version={self.route_export_seq})'
+            )
+        except Exception as e:
+            self.get_logger().error(f'Route export failed: {e}')
+
     def load_map(self, filepath):
         try:
             with open(filepath, 'r') as f:
@@ -121,6 +258,20 @@ class DijkstraSplineFollower(Node):
         except Exception as e:
             self.get_logger().error(f"Map load failed: {e}")
 
+    def publish_int_state(self, publisher, value):
+        msg = Int32()
+        msg.data = value
+        publisher.publish(msg)
+
+    def clear_navigation(self):
+        self.path = []
+        self.trajectory = []
+        self.goal_wp_id = None
+        self.clear_tracking_state()
+
+    def stop_vehicle(self):
+        self.cmd_pub.publish(Twist())
+
     def odom_callback(self, msg):
         pos = msg.pose.pose.position
         q = msg.pose.pose.orientation
@@ -136,6 +287,18 @@ class DijkstraSplineFollower(Node):
         self.current_yaw = self.normalize_angle(yaw + math.pi)
 
         self.has_odom = True
+
+    def estop_callback(self, msg):
+        self.estop_active = bool(msg.data)
+        self.publish_int_state(self.pub_state_stop, int(self.estop_active))
+
+        if self.estop_active:
+            self.get_logger().warn("EMERGENCY STOP!")
+            self.clear_navigation()
+            self.stop_vehicle()
+            self.publish_int_state(self.pub_state_waypoint, 0)
+        else:
+            self.get_logger().info("EMERGENCY STOP 해제")
 
     def calculate_distance_between_waypoints(self, id1, id2):
         x1, z1 = self.waypoints[id1]['x'], self.waypoints[id1]['z']
@@ -284,6 +447,12 @@ class DijkstraSplineFollower(Node):
         return filtered
 
     def plot_trajectory(self):
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            self.get_logger().warn("matplotlib 미설치로 trajectory plot 생략")
+            return
+
         if not self.trajectory:
             print("trajectory 없음")
             return
@@ -408,58 +577,74 @@ class DijkstraSplineFollower(Node):
 
         return best
 
-    def wait_for_input(self):
-        while rclpy.ok():
-            sys.stdout.write("\nEnter Final Target Waypoint Number: ")
-            sys.stdout.flush()
+    def target_waypoint_callback(self, msg):
+        goal_id = f"Waypoint_{msg.data}"
 
-            line = sys.stdin.readline().strip()
-            if not line:
-                continue
+        if self.estop_active:
+            self.get_logger().warn("E-STOP 상태에서는 목표 waypoint 명령을 무시합니다.")
+            return
 
-            goal_id = f"Waypoint_{line}"
+        if goal_id not in self.waypoints:
+            self.get_logger().error(f"존재하지 않는 웨이포인트: {goal_id}")
+            return
 
-            if goal_id not in self.waypoints:
-                self.get_logger().info(f"존재하지 않는 웨이포인트: {goal_id}")
-                continue
+        if not self.has_odom:
+            self.get_logger().info("Odom 수신 대기 중...")
+            return
 
-            if not self.has_odom:
-                self.get_logger().info("Odom 수신 대기 중...")
-                continue
+        if self.goal_wp_id == goal_id and self.trajectory:
+            self.get_logger().info(f"이미 {goal_id}로 주행 중입니다.")
+            return
 
-            start_id = self.choose_better_start_waypoint(goal_id)
-            self.get_logger().info(f"선택된 시작 waypoint: {start_id}")
+        if self.goal_wp_id is not None and self.trajectory:
+            self.get_logger().info(
+                f"기존 목표 {self.goal_wp_id}에서 새 목표 {goal_id}로 경로를 재계산합니다."
+            )
+        else:
+            self.get_logger().info(f"목표 구역 수신: {msg.data}")
 
-            path = self.find_path_dijkstra(start_id, goal_id)
-            if not path:
-                self.get_logger().error("경로 생성 실패")
-                continue
+        start_id = self.choose_better_start_waypoint(goal_id)
+        if start_id is None:
+            self.get_logger().error("시작 웨이포인트를 찾지 못했습니다.")
+            return
 
-            if len(path) >= 2 and path[0] == start_id:
-                path.pop(0)
+        self.get_logger().info(f"선택된 시작 waypoint: {start_id}")
 
-            if not path:
-                path = [goal_id]
+        path = self.find_path_dijkstra(start_id, goal_id)
+        if not path:
+            self.get_logger().error("경로 생성 실패")
+            return
 
-            self.path = path
-            self.goal_wp_id = goal_id
-            self.trajectory = self.build_spline_trajectory(self.path)
-            self.clear_tracking_state()
+        if len(path) >= 2 and path[0] == start_id:
+            path.pop(0)
 
-            if not self.trajectory:
-                self.get_logger().error("trajectory 생성 실패")
-                continue
+        if not path:
+            path = [goal_id]
 
-            self.get_logger().info(f"생성된 waypoint 경로: {' -> '.join(self.path)}")
-            self.get_logger().info(f"trajectory point 수: {len(self.trajectory)}")
+        trajectory = self.build_spline_trajectory(path)
+        if not trajectory:
+            self.get_logger().error("trajectory 생성 실패")
+            return
 
-            self.plot_trajectory()
+        self.path = path
+        self.goal_wp_id = goal_id
+        self.trajectory = trajectory
+        self.clear_tracking_state()
+        self.publish_int_state(self.pub_state_waypoint, msg.data)
+        self.export_route_snapshot(start_id, goal_id, msg.data, self.path, self.trajectory)
+
+        self.get_logger().info(f"생성된 waypoint 경로: {' -> '.join(self.path)}")
+        self.get_logger().info(f"trajectory point 수: {len(self.trajectory)}")
 
     def control_loop(self):
         if not self.has_odom:
             return
 
         twist = Twist()
+
+        if self.estop_active:
+            self.cmd_pub.publish(twist)
+            return
 
         if not self.trajectory:
             self.cmd_pub.publish(twist)
@@ -468,11 +653,9 @@ class DijkstraSplineFollower(Node):
         goal_dist = self.get_goal_distance()
         if goal_dist < self.goal_tolerance:
             self.get_logger().info("최종 목적지 도착!")
-            self.trajectory = []
-            self.path = []
-            self.goal_wp_id = None
-            self.clear_tracking_state()
-            self.cmd_pub.publish(Twist())
+            self.clear_navigation()
+            self.publish_int_state(self.pub_state_waypoint, 0)
+            self.stop_vehicle()
             return
 
         self.closest_traj_idx = self.find_closest_trajectory_index()
@@ -484,11 +667,9 @@ class DijkstraSplineFollower(Node):
         end_dist = self.dist_xy(self.current_x, self.current_z, end_x, end_z)
         if lookahead_idx >= len(self.trajectory) - 1 and end_dist < self.traj_reach_tolerance:
             self.get_logger().info("trajectory 끝점 도달")
-            self.trajectory = []
-            self.path = []
-            self.goal_wp_id = None
-            self.clear_tracking_state()
-            self.cmd_pub.publish(Twist())
+            self.clear_navigation()
+            self.publish_int_state(self.pub_state_waypoint, 0)
+            self.stop_vehicle()
             return
 
         dx = tx - self.current_x

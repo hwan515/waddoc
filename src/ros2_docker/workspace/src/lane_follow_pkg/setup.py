@@ -9,7 +9,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, ['package.xml', 'TopologicalMap.json']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -21,6 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'lane_detect = lane_follow_pkg.lane_detect:main',
+            'spline_detect = lane_follow_pkg.spline_detect:main',
+            'vision_detect = lane_follow_pkg.vision_detect:main',
         ],
     },
 )

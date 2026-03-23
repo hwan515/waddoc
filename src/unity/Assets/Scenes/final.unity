@@ -1492,6 +1492,7 @@ GameObject:
   - component: {fileID: 330585545}
   - component: {fileID: 330585544}
   - component: {fileID: 330585547}
+  - component: {fileID: 330585548}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1546,7 +1547,7 @@ Camera:
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 0
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
@@ -1566,13 +1567,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalPosition: {x: 2000, y: 500, z: 2000}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!114 &330585547
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1617,6 +1618,25 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &330585548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57c0c53af513f70bfa2f7cdfde8e30b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MinimapCapture
+  captureCamera: {fileID: 330585545}
+  targetTexture: {fileID: 8400000, guid: 63ca4acf43ddc7e1fb5c8dbf9002ba74, type: 2}
+  captureOnStart: 1
+  captureKey: 112
+  fileName: minimap.png
+  addTimestampToFileName: 0
+  useTransparentBackground: 0
 --- !u!1001 &337509250
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -4471,6 +4491,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 660100435830309433, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: publishHz
+      value: 10
+      objectReference: {fileID: 0}
     - target: {fileID: 3930560712417103104, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
       propertyPath: m_Name
       value: RAY
@@ -4514,6 +4538,22 @@ PrefabInstance:
     - target: {fileID: 4915329333886698617, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8711221941355147786, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: steerResponse
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 8711221941355147786, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: invertSteering
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8711221941355147786, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: maxSteerAngleLowSpeed
+      value: 35
+      objectReference: {fileID: 0}
+    - target: {fileID: 8711221941355147786, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: maxSteerAngleHighSpeed
+      value: 35
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

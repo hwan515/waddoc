@@ -57,6 +57,7 @@ chmod +x setup.sh  # (이미 실행 권한이 있다면 생략 가능)
 docker compose up -d
 ```
 > *최초 실행 시 이미지를 다운로드하고 패키지를 설치하므로 일정 시간이 소요될 수 있습니다.*
+> *이 환경은 CycloneDDS discovery 충돌을 피하기 위해 `ROS_LOCALHOST_ONLY=1` 로 동작합니다. Unity는 ROS TCP(10000)로 붙기 때문에 이 설정과 충돌하지 않습니다.*
 
 ### 컨테이너 내부 접속 (터미널)
 실행된 컨테이너 내부로 들어가 작업하려면 다음 명령어를 사용합니다:
@@ -65,6 +66,7 @@ docker compose up -d
 docker exec -it ros2_dev_env bash
 ```
 > *컨테이너에 접속하면 자동으로 ROS 2 환경(`source /opt/ros/humble/setup.bash`)이 로드되며, 작업 디렉토리(`/root/workspace`)에서 바로 시작할 수 있습니다.*
+> *워크스페이스를 `colcon build` 한 뒤 새 터미널을 열었는데 `ros2 topic list` 에서 기대한 토픽이 안 보이면, 먼저 `source /root/workspace/install/setup.bash`, `export ROS_DOMAIN_ID=0`, `export ROS_LOCALHOST_ONLY=1`, `ros2 daemon stop && ros2 daemon start` 를 순서대로 실행해 같은 그래프를 보게 맞춰 주세요.*
 
 ### 컨테이너 종료
 작업을 마치고 컨테이너를 중지하려면 다음 명령어를 입력합니다. (파일은 `workspace/`에 그대로 남습니다.)
