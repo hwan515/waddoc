@@ -148,13 +148,14 @@ services:
     expose:
       - "7880"
     ports:
-      - "8881:7881" # TCP (클라이언트 시그널링)
-      - "8882:7882/udp" # UDP (미디어 스트림)
-      - "8478:3478/udp" # TURN 서버
+      - "8881:8881" # TCP fallback for WebRTC media
+      - "8882:8882/udp" # UDP media
+      - "8478:8478/udp" # TURN UDP
+      - "8600-8699:8600-8699/udp" # TURN relay range
     volumes:
       - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}"
     restart: unless-stopped
     networks:
       - waddoc-net

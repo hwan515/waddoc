@@ -5,6 +5,7 @@ import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -23,6 +24,7 @@ public class DoctorNotificationSseService {
 
     static final long STREAM_TIMEOUT_MILLIS = 60 * 60 * 1000L;
     static final long DEFAULT_RECONNECT_DELAY_MILLIS = 3_000L;
+    static final long HEARTBEAT_INTERVAL_MILLIS = 25_000L;
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
@@ -85,6 +87,28 @@ public class DoctorNotificationSseService {
                 emitter.completeWithError(e);
             }
         });
+    }
+
+    @Scheduled(fixedDelay = HEARTBEAT_INTERVAL_MILLIS)
+    void sendHeartbeat() {
+        if (emittersByDoctorId.isEmpty()) {
+            return;
+        }
+
+        emittersByDoctorId.forEach((doctorProfileId, connections) ->
+                connections.forEach((connectionId, emitter) -> {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .id(UUID.randomUUID().toString())
+                                .name("ping")
+                                .data(new ConnectedEvent(OffsetDateTime.now(KST))));
+                    } catch (Exception e) {
+                        log.warn("Doctor SSE heartbeat failed. doctorId={}, connectionId={}",
+                                doctorProfileId, connectionId, e);
+                        removeEmitter(doctorProfileId, connectionId);
+                        emitter.completeWithError(e);
+                    }
+                }));
     }
 
     int countConnections(String doctorProfileId) {

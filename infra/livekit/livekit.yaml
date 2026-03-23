@@ -1,10 +1,12 @@
 port: 7880
 rtc:
   use_external_ip: true
-  udp_port: 7882
-  tcp_port: 7881
+  udp_port: 8882
+  tcp_port: 8881
 turn:
   enabled: true
   domain: j14a603.p.ssafy.io
   tls_port: 0
-  udp_port: 3478
+  udp_port: 8478
+  relay_range_start: 8600
+  relay_range_end: 8699
