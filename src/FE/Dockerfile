@@ -10,11 +10,7 @@ COPY . .
 
 # Vite 빌드 시 API 프록시 경로 주입 (nginx에서 /api → spring-api로 프록시)
 ARG VITE_API_URL=/api
-ARG VITE_ROBOT_TERMINAL_ID=
-ARG VITE_ROBOT_TERMINAL_KEY=
 ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID}
-ENV VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY}
 RUN npm run build
 
 # Nginx로 정적 파일 서빙
@@ -22,5 +18,8 @@ FROM nginx:alpine
 RUN rm /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY public/runtime-config.js /usr/share/nginx/html/runtime-config.js
+COPY docker-entrypoint.d/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]

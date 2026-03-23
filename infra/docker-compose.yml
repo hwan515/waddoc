@@ -18,6 +18,9 @@ services:
     build: ../src/FE
     expose:
       - "3000"
+    environment:
+      - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
+      - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
     networks:
       - waddoc-net
 

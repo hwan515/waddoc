@@ -27,6 +27,9 @@ services:
     image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "3000"
+    environment:
+      - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
+      - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
     restart: unless-stopped
     networks:
       - waddoc-net

@@ -2,9 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import apiClient from '../../utils/api';
-
-const TERMINAL_ID = import.meta.env.VITE_ROBOT_TERMINAL_ID || '';
-const TERMINAL_KEY = import.meta.env.VITE_ROBOT_TERMINAL_KEY || '';
+import { getRobotTerminalConfig } from '../../utils/runtimeConfig';
 
 const Setup = () => {
     const navigate = useNavigate();
@@ -13,10 +11,11 @@ const Setup = () => {
     const [candidates, setCandidates] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const { terminalId, terminalKey } = useMemo(() => getRobotTerminalConfig(), []);
 
     const hasTerminalConfig = useMemo(
-        () => Boolean(TERMINAL_ID.trim() && TERMINAL_KEY.trim()),
-        []
+        () => Boolean(terminalId.trim() && terminalKey.trim()),
+        [terminalId, terminalKey]
     );
 
     const extractApiErrorMessage = (error, fallbackMessage) => {
@@ -36,8 +35,8 @@ const Setup = () => {
 
     const bootstrapDeviceTerminal = async () => {
         const response = await apiClient.post('/terminal/bootstrap-token', {
-            terminalId: TERMINAL_ID,
-            terminalKey: TERMINAL_KEY,
+            terminalId,
+            terminalKey,
         });
 
         const deviceTerminalToken = response?.data?.deviceTerminalToken;
@@ -84,7 +83,7 @@ const Setup = () => {
 
     const handleLookup = async () => {
         if (!hasTerminalConfig) {
-            setErrorMsg('차량 단말 설정이 없습니다. VITE_ROBOT_TERMINAL_ID, VITE_ROBOT_TERMINAL_KEY를 확인해주세요.');
+            setErrorMsg('차량 단말 설정이 없습니다. runtime-config.js 또는 로컬 환경 변수를 확인해주세요.');
             return;
         }
         if (!/^\d{4}$/.test(phoneLast4)) {
