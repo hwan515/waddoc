@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import blood1 from '../../../assets/blood_1.png';
@@ -10,21 +10,16 @@ import {
     upsertMissionVitals,
 } from '../../../utils/vitalsApi';
 
-const Blood = () => {
+const BloodMeasurementCard = ({ onRetry }) => {
     const navigate = useNavigate();
     const [measurement, setMeasurement] = useState(null);
     const [saveStatus, setSaveStatus] = useState('measuring');
     const [errorMsg, setErrorMsg] = useState('');
-    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
         let isCancelled = false;
         let revealTimeoutId = null;
         let navigateTimeoutId = null;
-
-        setMeasurement(null);
-        setSaveStatus('measuring');
-        setErrorMsg('');
 
         revealTimeoutId = window.setTimeout(async () => {
             const nextMeasurement = createBloodMeasurement();
@@ -69,15 +64,55 @@ const Blood = () => {
             window.clearTimeout(revealTimeoutId);
             window.clearTimeout(navigateTimeoutId);
         };
-    }, [navigate, retryKey]);
+    }, [navigate]);
 
     const statusMessage = saveStatus === 'measuring'
-        ? '혈압과 심박수를 측정하고 있습니다. \n잠시만 기다려주세요.'
+        ? '혈압과 심박수를 측정하고 있습니다.\n잠시만 기다려주세요.'
         : saveStatus === 'saving'
             ? '혈압과 심박수가 측정되었습니다.\n저장 중입니다.'
             : saveStatus === 'saved'
                 ? '혈압과 심박수가 저장되었습니다.\n5초 뒤 산소포화도 측정 단계로 이동합니다.'
-                : '혈압 저장에 실패했습니다. 다시 시도해주세요.';
+                : '혈압 저장에 실패했습니다.\n다시 시도해주세요.';
+
+    return (
+        <div className="w-full max-w-md rounded-3xl border border-white/15 bg-white/10 px-6 py-5 text-center backdrop-blur-md shadow-lg">
+            {measurement ? (
+                <>
+                    <div className="text-4xl font-black text-white">
+                        {measurement.bloodPressureSys}
+                        <span className="mx-2 text-slate-400">/</span>
+                        {measurement.bloodPressureDia}
+                        <span className="ml-2 text-lg font-semibold text-slate-300">mmHg</span>
+                    </div>
+                    <div className="mt-2 text-lg font-semibold text-[#B9D6F2]">
+                        심박수 {measurement.heartRate} bpm
+                    </div>
+                </>
+            ) : (
+                <div className="flex justify-center">
+                    <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
+                </div>
+            )}
+            <p className="mt-4 whitespace-pre-line text-lg font-semibold leading-relaxed text-slate-200 md:text-xl">{statusMessage}</p>
+            {errorMsg && (
+                <p className="mt-4 rounded-2xl border border-red-300/40 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+                    {errorMsg}
+                </p>
+            )}
+            {saveStatus === 'error' && (
+                <button
+                    onClick={onRetry}
+                    className="mt-4 rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
+                >
+                    혈압 저장 다시 시도
+                </button>
+            )}
+        </div>
+    );
+};
+
+const Blood = () => {
+    const [retryKey, setRetryKey] = useState(0);
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-[#061A40] font-sans relative overflow-y-auto text-white">
@@ -113,39 +148,7 @@ const Blood = () => {
                     <span className="text-[#B9D6F2]">혈압계</span> 사용 방법
                 </h1>
 
-                <div className="w-full max-w-md rounded-3xl border border-white/15 bg-white/10 px-6 py-5 text-center backdrop-blur-md shadow-lg">
-                    {measurement ? (
-                        <>
-                            <div className="text-4xl font-black text-white">
-                                {measurement.bloodPressureSys}
-                                <span className="mx-2 text-slate-400">/</span>
-                                {measurement.bloodPressureDia}
-                                <span className="ml-2 text-lg font-semibold text-slate-300">mmHg</span>
-                            </div>
-                            <div className="mt-2 text-lg font-semibold text-[#B9D6F2]">
-                                심박수 {measurement.heartRate} bpm
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex justify-center">
-                            <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
-                        </div>
-                    )}
-                    <p className="mt-4 whitespace-pre-line text-lg font-semibold leading-relaxed text-slate-200 md:text-xl">{statusMessage}</p>
-                    {errorMsg && (
-                        <p className="mt-4 rounded-2xl border border-red-300/40 bg-red-400/10 px-4 py-3 text-sm text-red-100">
-                            {errorMsg}
-                        </p>
-                    )}
-                    {saveStatus === 'error' && (
-                        <button
-                            onClick={() => setRetryKey((prev) => prev + 1)}
-                            className="mt-4 rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
-                        >
-                            혈압 저장 다시 시도
-                        </button>
-                    )}
-                </div>
+                <BloodMeasurementCard key={retryKey} onRetry={() => setRetryKey((prev) => prev + 1)} />
 
                 <div className="w-full max-w-6xl mt-8 mb-8 flex flex-col justify-center">
                     <div className="flex flex-row items-stretch justify-center gap-6 w-full">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import ecg from '../../../assets/ecg.png';
@@ -9,21 +9,16 @@ import {
     upsertMissionVitals,
 } from '../../../utils/vitalsApi';
 
-const Ecg = () => {
+const EcgMeasurementCard = ({ onRetry }) => {
     const navigate = useNavigate();
     const [measurement, setMeasurement] = useState(null);
     const [saveStatus, setSaveStatus] = useState('measuring');
     const [errorMsg, setErrorMsg] = useState('');
-    const [retryKey, setRetryKey] = useState(0);
 
     useEffect(() => {
         let isCancelled = false;
         let revealTimeoutId = null;
         let navigateTimeoutId = null;
-
-        setMeasurement(null);
-        setSaveStatus('measuring');
-        setErrorMsg('');
 
         revealTimeoutId = window.setTimeout(async () => {
             const nextMeasurement = createEcgMeasurement();
@@ -68,15 +63,51 @@ const Ecg = () => {
             window.clearTimeout(revealTimeoutId);
             window.clearTimeout(navigateTimeoutId);
         };
-    }, [navigate, retryKey]);
+    }, [navigate]);
 
     const statusMessage = saveStatus === 'measuring'
-        ? '심전도를 측정하고 있습니다. 잠시만 기다려주세요.'
+        ? '심전도를 측정하고 있습니다.\n잠시만 기다려주세요.'
         : saveStatus === 'saving'
             ? '심전도 파형이 측정되었습니다.\n저장 중입니다.'
             : saveStatus === 'saved'
                 ? '심전도 파형이 저장되었습니다.\n5초 뒤 비대면진료실로 이동합니다.'
-                : '심전도 저장에 실패했습니다. 다시 시도해주세요.';
+                : '심전도 저장에 실패했습니다.\n다시 시도해주세요.';
+
+    return (
+        <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 shadow-lg backdrop-blur-sm">
+            <div className="mb-4 text-center">
+                <p className="whitespace-pre-line text-lg font-semibold leading-relaxed text-slate-200 md:text-xl">{statusMessage}</p>
+            </div>
+            {measurement ? (
+                <EcgWaveform
+                    waveform={measurement.ecgWaveform}
+                    samplingHz={measurement.ecgSamplingHz}
+                    durationSeconds={measurement.ecgDurationSeconds}
+                />
+            ) : (
+                <div className="flex h-80 items-center justify-center rounded-3xl border border-white/10 bg-slate-950/60">
+                    <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
+                </div>
+            )}
+            {errorMsg && (
+                <p className="mt-4 rounded-2xl border border-red-300/40 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+                    {errorMsg}
+                </p>
+            )}
+            {saveStatus === 'error' && (
+                <button
+                    onClick={onRetry}
+                    className="mt-4 w-full rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
+                >
+                    심전도 저장 다시 시도
+                </button>
+            )}
+        </div>
+    );
+};
+
+const Ecg = () => {
+    const [retryKey, setRetryKey] = useState(0);
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-[#061A40] font-sans relative overflow-y-auto text-white">
@@ -123,35 +154,7 @@ const Ecg = () => {
                             </p>
                         </div>
 
-                        <div className="flex-1 bg-white/5 border border-white/10 rounded-3xl p-6 shadow-lg backdrop-blur-sm">
-                            <div className="mb-4 text-center">
-                                <p className="whitespace-pre-line text-lg font-semibold leading-relaxed text-slate-200 md:text-xl">{statusMessage}</p>
-                            </div>
-                            {measurement ? (
-                                <EcgWaveform
-                                    waveform={measurement.ecgWaveform}
-                                    samplingHz={measurement.ecgSamplingHz}
-                                    durationSeconds={measurement.ecgDurationSeconds}
-                                />
-                            ) : (
-                                <div className="flex h-80 items-center justify-center rounded-3xl border border-white/10 bg-slate-950/60">
-                                    <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
-                                </div>
-                            )}
-                            {errorMsg && (
-                                <p className="mt-4 rounded-2xl border border-red-300/40 bg-red-400/10 px-4 py-3 text-sm text-red-100">
-                                    {errorMsg}
-                                </p>
-                            )}
-                            {saveStatus === 'error' && (
-                                <button
-                                    onClick={() => setRetryKey((prev) => prev + 1)}
-                                    className="mt-4 w-full rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
-                                >
-                                    심전도 저장 다시 시도
-                                </button>
-                            )}
-                        </div>
+                        <EcgMeasurementCard key={retryKey} onRetry={() => setRetryKey((prev) => prev + 1)} />
                     </div>
                 </div>
             </main>
