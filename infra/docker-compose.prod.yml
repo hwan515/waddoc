@@ -58,6 +58,7 @@ services:
       - AI_IDV_URL=${AI_IDV_URL:-https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
+      # 더미 데이터 추가
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-false}
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
       - CONSULTATION_IDENTITY_CHECK_BYPASS_ENABLED=${CONSULTATION_IDENTITY_CHECK_BYPASS_ENABLED:-false} # AI IDV 서버 미준비 시에만 임시로 본인 확인을 우회
