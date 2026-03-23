@@ -806,6 +806,20 @@
   },
   "missionId": "ms_F2gHn6",
   "sessionId": null,
+  "vitals": {
+    "caseId": "case_T7nLp4",
+    "temperature": 36.7,
+    "bloodPressureSys": 128,
+    "bloodPressureDia": 82,
+    "heartRate": 72,
+    "spO2": 98,
+    "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
+    "ecgSamplingHz": 25,
+    "ecgDurationSeconds": 8,
+    "measuredAt": "2026-03-23T14:23:10",
+    "createdAt": "2026-03-23T14:15:00",
+    "updatedAt": "2026-03-23T14:23:10"
+  },
   "createdAt": "2026-03-10T10:05:00+09:00"
 }
 ```
@@ -819,6 +833,19 @@
 | `patient.gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
 | `patient.phone` | string | 환자 전화번호 |
 | `patient.address` | string | 환자 주소 |
+| `vitals` | object \| null | 현재 케이스 기준 최신 생체데이터. 아직 측정 전이면 `null` |
+| `vitals.caseId` | string | 생체데이터가 연결된 케이스 공개 ID |
+| `vitals.temperature` | number \| null | 체온 |
+| `vitals.bloodPressureSys` | integer \| null | 수축기 혈압 |
+| `vitals.bloodPressureDia` | integer \| null | 이완기 혈압 |
+| `vitals.heartRate` | integer \| null | 심박수 |
+| `vitals.spO2` | integer \| null | 산소포화도 |
+| `vitals.ecgWaveform` | number[] \| null | 측정 시점 ECG sample waveform. 실시간 스트림 아님 |
+| `vitals.ecgSamplingHz` | integer \| null | ECG 샘플링 주파수 |
+| `vitals.ecgDurationSeconds` | integer \| null | ECG 샘플 길이(초) |
+| `vitals.measuredAt` | string \| null | 마지막 측정 시각 |
+| `vitals.createdAt` | string \| null | 해당 케이스 생체데이터 row 생성 시각 |
+| `vitals.updatedAt` | string \| null | 마지막 partial upsert 시각 |
 
 ---
 
@@ -1277,6 +1304,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 > 차량 태블릿은 선택한 mission과 환자 입력값을 서버에 다시 전달해 claim을 요청한다.
 > 서버는 같은 날짜/환자 정보/mission phase를 재검증한 뒤, 해당 mission 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급한다.
+> claim 성공 후 차량 태블릿은 `current_mission_id`와 `terminalToken`을 저장해, 이후 본인 확인/활력징후 저장/환자 참가 토큰 발급까지 같은 토큰을 재사용한다.
 
 **Request Body**
 ```json
@@ -1295,7 +1323,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
   "expiresIn": 1800,
   "scopes": [
     "mission:identity-check",
-    "session:issue-patient-token"
+    "session:issue-patient-token",
+    "mission:vitals-write"
   ]
 }
 ```
@@ -1315,14 +1344,15 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/missions/{missionId}/identity-check` |
-| Auth | Bearer Token (MISSION_TERMINAL) |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
 
-> 차량 태블릿은 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로만 호출한다.
+> 차량 태블릿 플로우에서는 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로 호출하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
 > `진료 시작` 버튼은 환자 세션 생성이 아니라, 미션 단계 전환과 본인 확인/현장 진료 준비 시작을 의미한다.
 > 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
 > GPU 서버 내부 응답 필수 필드: `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`
 > Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
 > 검증 성공 시 서버는 별도 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 차량 태블릿은 활력징후 단계로 이동한다.
+> 이후 차량 태블릿은 같은 `MISSION_TERMINAL` 토큰으로 `PUT /api/v1/missions/{missionId}/vitals`를 단계별 반복 호출한다.
 
 **Request Body** (`multipart/form-data`)
 
@@ -1334,7 +1364,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 **Response** `200 OK`
 ```json
 {
-  "missionId": "mis_K9pQr1",
+  "missionId": "ms_K9pQr1",
   "patientId": "pat_T7nLp4",
   "status": "VERIFIED",
   "verifiedAt": "2026-03-11T09:58:00+09:00",
@@ -1381,15 +1411,79 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.4 환자 토큰 발급 (차량 태블릿 — 미션 단말 토큰)
+### 9.4 활력징후 저장 (차량 태블릿 — 미션 단말 토큰)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `PUT` |
+| Path | `/api/v1/missions/{missionId}/vitals` |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
+
+> 차량 태블릿 플로우에서는 mission claim에서 발급받은 같은 `MISSION_TERMINAL` 토큰으로 체온/혈압/심박수/SpO2/ECG sample을 단계별 저장하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
+> 서버는 `missionId -> case -> vital_measurement` 순서로 대상을 해석하며, 첫 저장이면 row를 생성하고 이후에는 같은 `case_id` row를 partial upsert 한다.
+> 허용 미션 phase는 `ARRIVED`, `VERIFYING`, `CONSULTING` 이다.
+> `measuredAt`은 선택 입력이며, 생략하면 서버 현재 시각을 사용한다.
+> `ecgWaveform`은 측정 시점 sample waveform이며 실시간 스트림이 아니다.
+
+**Request Body**
+```json
+{
+  "temperature": 36.7,
+  "bloodPressureSys": 128,
+  "bloodPressureDia": 82,
+  "heartRate": 72,
+  "spO2": 98,
+  "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
+  "ecgSamplingHz": 25,
+  "ecgDurationSeconds": 8,
+  "measuredAt": "2026-03-23T14:23:10"
+}
+```
+
+> 각 측정 단계에서는 필요한 필드만 보내도 된다. 예를 들어 체온 단계에서는 `{ "temperature": 36.7 }`, ECG 단계에서는 waveform 관련 필드만 보내는 식으로 같은 endpoint를 반복 호출한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "vitals": {
+    "caseId": "case_T7nLp4",
+    "temperature": 36.7,
+    "bloodPressureSys": 128,
+    "bloodPressureDia": 82,
+    "heartRate": 72,
+    "spO2": 98,
+    "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
+    "ecgSamplingHz": 25,
+    "ecgDurationSeconds": 8,
+    "measuredAt": "2026-03-23T14:23:10",
+    "createdAt": "2026-03-23T14:15:00",
+    "updatedAt": "2026-03-23T14:23:10"
+  }
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 400 | `INVALID_INPUT` | 빈 body이거나 저장 가능한 측정 필드가 없음 |
+| 403 | `AUTH_FORBIDDEN` | 미션 범위가 맞지 않거나 `mission:vitals-write` scope가 없음 |
+| 403 | `MISSION_NOT_READY` | 미션이 활력징후 저장 가능한 준비 상태가 아님 |
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+
+---
+
+### 9.5 환자 토큰 발급 (차량 태블릿 — 미션 단말 토큰)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/missions/{missionId}/participants/patient/token` |
-| Auth | Bearer Token (MISSION_TERMINAL) |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
 
-> 차량 태블릿은 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청한다.
+> 차량 태블릿 플로우에서는 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
 > 이 API는 `missionId -> case -> consultationSession -> patient` 순서로 대상 세션을 서버에서 해석하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
 
 **Response** `200 OK`
@@ -1415,7 +1509,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.5 세션 토큰 재발급
+### 9.6 세션 토큰 재발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1460,7 +1554,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.6 세션 상태 조회
+### 9.7 세션 상태 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1497,7 +1591,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.7 진료 종료 및 요약 기록
+### 9.8 진료 종료 및 요약 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1534,7 +1628,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.8 LiveKit Webhook 수신 (서버 간)
+### 9.9 LiveKit Webhook 수신 (서버 간)
 
 | 항목 | 값 |
 |------|-----|

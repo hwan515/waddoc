@@ -166,6 +166,22 @@ erDiagram
         timestamp updated_at
     }
 
+    VITAL_MEASUREMENT {
+        bigint vital_measurement_id PK
+        bigint case_id FK UK
+        decimal temperature "체온"
+        int blood_pressure_sys "수축기 혈압"
+        int blood_pressure_dia "이완기 혈압"
+        int heart_rate "심박수"
+        int spo2 "산소포화도"
+        jsonb ecg_waveform_json "측정 시점 ECG 샘플 파형"
+        int ecg_sampling_hz "ECG 샘플링 주파수"
+        int ecg_duration_seconds "ECG 샘플 길이(초)"
+        timestamp measured_at "마지막 측정 시각"
+        timestamp created_at
+        timestamp updated_at
+    }
+
     %% ============ 화상진료 세션 ============
     CONSULTATION_SESSION {
         bigint session_id PK
@@ -217,6 +233,7 @@ erDiagram
 
     CARE_CASE ||--o{ DISPATCH_OUTBOX : "enqueues dispatch"
     CARE_CASE ||--o| MISSION : "has mission"
+    CARE_CASE ||--o| VITAL_MEASUREMENT : "stores latest vitals"
     CARE_CASE ||--o| CONSULTATION_SESSION : "has session"
     VEHICLE ||--o{ MISSION : "serves (logical)"
 
@@ -264,6 +281,7 @@ erDiagram
 | `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
 | `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
 | `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조한다 |
+| `VITAL_MEASUREMENT` | 진료 케이스별 최신 생체데이터 1건. 로봇 측정 단계마다 같은 `case_id` row를 partial upsert 하며, 체온/혈압/심박수/SpO2와 측정 시점 ECG sample, `measured_at`, `created_at`, `updated_at`을 함께 관리 |
 
 ### 2.6 화상진료 세션 도메인
 
@@ -310,6 +328,7 @@ USER    ←1:N→ USER                      (의사/보호자 계정 승인)
 PATIENT → INTAKE_SESSION (과 선택·슬롯 스냅샷 포함)    (기본 전화 예약 흐름)
 
 PATIENT → BOOKING → CARE_CASE → DISPATCH_OUTBOX → MISSION   (예약 확정 → 자동 배차)
+                               → VITAL_MEASUREMENT          (로봇 측정 최신값 저장)
                                → CONSULTATION_SESSION → CONSULTATION_SUMMARY
 
 VEHICLE → MISSION                                           (권역 차량 배정)
@@ -329,6 +348,7 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `PATIENT_GUARDIAN_LINK` | `UNIQUE (patient_id, guardian_user_id)` | 동일 보호자-환자 조합의 중복 가입 이력 방지 |
 | `BOOKING` | `UNIQUE (slot_id)` WHERE `status != 'CANCELLED'` | 동일 슬롯 이중 예약 방지 (부분 unique) |
 | `CARE_CASE` | `UNIQUE (booking_id)` | 예약-케이스 1:1 보장 |
+| `VITAL_MEASUREMENT` | `UNIQUE (case_id)` | 케이스별 최신 생체데이터 1건 보장 |
 | `VEHICLE` | `UNIQUE (public_id)`, `UNIQUE (code)` | 외부 노출 ID와 운영 코드 유일성 보장 |
 | `VEHICLE` | `UNIQUE (region_code)` WHERE `is_active = true` | 동일 권역의 활성 차량 1대 보장 |
 | `DISPATCH_OUTBOX` | `INDEX (status, created_at)` WHERE `status = 'PENDING'` | 최초 배차 relay 스캔 최적화 |
