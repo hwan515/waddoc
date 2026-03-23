@@ -16,7 +16,7 @@ public class DoctorNotificationConsumer {
 
     private static final String DOCTOR_NOTIFICATION_EVENT_NAME = "notification";
 
-    private final DoctorNotificationSseService doctorNotificationSseService;
+    private final DoctorNotificationRedisPublisher doctorNotificationRedisPublisher;
 
     @KafkaListener(topics = KafkaTopics.DOCTOR_NOTIFICATIONS_TOPIC, groupId = "doctor-notification-group")
     public void consume(
@@ -29,16 +29,7 @@ public class DoctorNotificationConsumer {
             return;
         }
 
-        // SSE 연결이 없는 의사는 실시간 휘발성 알림을 굳이 발행하지 않는다.
-        if (!doctorNotificationSseService.hasConnections(targetDoctorId)) {
-            log.info(
-                    "Doctor notification skipped. reason=no-active-connection, doctorId={}, bookingId={}",
-                    targetDoctorId,
-                    payload.getBookingId()
-            );
-            return;
-        }
-
-        doctorNotificationSseService.sendToDoctor(targetDoctorId, DOCTOR_NOTIFICATION_EVENT_NAME, payload);
+        // Redis Pub/Sub로 모든 인스턴스에 브로드캐스트 — 로컬 SSE 연결이 있는 인스턴스가 전달한다.
+        doctorNotificationRedisPublisher.publish(targetDoctorId, DOCTOR_NOTIFICATION_EVENT_NAME, payload);
     }
 }
