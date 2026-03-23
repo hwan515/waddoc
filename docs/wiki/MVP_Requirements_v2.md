@@ -83,7 +83,7 @@ MVP 핵심 흐름:
 - 케이스 생성
 - 미션/운영 상태 관리
 - 의사 / 관리자 / 보호자 웹 로그인
-- Access Token(메모리) + Refresh Token(HttpOnly 쿠키) 인증
+- Access Token(localStorage via Zustand) + Refresh Token(HttpOnly 쿠키) 인증
 - 보호자/의사 회원가입 신청 및 관리자 승인
 - GPU 서버 기반 본인 확인 (차량 촬영 얼굴 사진 + 기존 기준 이미지 + 신분증 이미지 비교)
 - 1:1 화상진료 세션 생성 및 참여 (LiveKit WebRTC + TURN)
@@ -616,7 +616,7 @@ MVP 핵심 흐름:
 - 케이스 생성
 - 의사 / 관리자 / 보호자 로그인
 - 보호자 회원가입 신청 및 관리자 승인
-- Access Token(메모리) + Refresh Token(쿠키) 인증
+- Access Token(localStorage) + Refresh Token(쿠키) 인증
 - GPU 기반 본인 확인
 - 1:1 화상진료 세션 생성 (LiveKit + TURN)
 - 진료 요약, 처방 여부, 재진 필요 여부 기록

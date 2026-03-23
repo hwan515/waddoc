@@ -32,6 +32,7 @@ erDiagram
         varchar name
         date birth_date "원본 생년월일 (YYYY-MM-DD)"
         char birth_date6 "조회용 6자리 (YYMMDD)"
+        enum gender "MALE | FEMALE | UNKNOWN"
         varchar region_code "지역 코드 (ex: ULLEUNG)"
         varchar address
         varchar phone UK "환자 휴대전화 번호 (01012345678)"
@@ -86,8 +87,14 @@ erDiagram
         varchar completion_reason "BOOKING_CREATED | NO_INPUT_TIMEOUT | USER_HANGUP | EXISTING_BOOKING_CHECKED"
         timestamp created_at
         timestamp ended_at
+        timestamp last_activity_at "무활동 타임아웃 추적용"
         varchar selected_department "선택된 진료과 코드"
         varchar selected_department_name "선택된 진료과 한글명"
+        varchar selection_reason "선택 사유"
+        enum selection_confidence_level "HIGH | MEDIUM | LOW"
+        boolean selection_is_emergency "응급 여부"
+        jsonb offered_slot_ids_json "안내된 슬롯 ID 스냅샷"
+        timestamp selection_updated_at "진료과 선택 갱신 시각"
     }
 
     %% ============ 예약 ============
@@ -314,6 +321,8 @@ erDiagram
 > **이중 ID 전략**: 내부 PK는 `bigint` 자동 증가. 외부 API에는 `public_id`(접두사 + nanoid, 예: `pat_V1StGXR8`)를 노출한다. PK 추론을 방지하고 API 가독성을 높인다.
 >
 > **PATIENT.phone 정책**: 전화번호는 전역 unique 제약을 적용한다. 1번호=1환자 원칙이며, 가족 공용번호 사용은 허용하지 않는다. 보호자 회원가입 및 전화 예약 식별은 이 컬럼을 기준으로 환자를 찾는다.
+>
+> **추가 인증 주체**: `USER.role` 외에 JWT `tokenType` claim으로 `MISSION_TERMINAL`(미션 터미널 — 차량 태블릿)과 `DEVICE_TERMINAL`(디바이스 터미널 — 부트스트랩 인증)을 구분한다. 이들은 DB 엔티티가 아니라 JWT 기반 임시 인증 주체다.
 
 ---
 

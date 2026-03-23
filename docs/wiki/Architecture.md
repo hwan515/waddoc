@@ -14,7 +14,7 @@
 | 파일 전달 표준화 | IDV/OCR 이미지 전달은 DEV/PROD 공통 multipart 전송. 공유 디렉터리 방식 미사용 |
 | 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 완료 후 room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
-| JWT 분리 저장 | Access Token = 메모리(JS 변수), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
+| JWT 분리 저장 | Access Token = localStorage(Zustand persist), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
 | 이중 ID | 내부 PK는 bigint 자동 증가, 외부 API에는 `public_id`(접두사 + nanoid) 노출. PK 추론 방지, API 가독성 향상 |
 | 이벤트 버스 분리 | SMS, 의사 SSE 알림, 미션 텔레메트리, 배차 재시도는 Kafka 토픽으로 비동기 분리 |
 | 환자 SMS 알림 | 환자는 계정이 없으므로 예약 결과/취소 알림은 SOLAPI SMS 게이트웨이로 발송. 개발환경은 Mock |
@@ -26,10 +26,10 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                        Clients                          │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────────┐ │
-│  │ 전화     │  │ 의사 웹  │  │ 관리자 │  │ 보호자    │ │
-│  │ 시뮬레이터│  │          │  │ 웹     │  │ 웹(읽기)  │ │
-│  └────┬─────┘  └────┬─────┘  └───┬────┘  └─────┬─────┘ │
+│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────────┐  ┌──────────┐ │
+│  │ 전화     │  │ 의사 웹  │  │ 관리자 │  │ 보호자    │  │ 차량     │ │
+│  │ 시뮬레이터│  │          │  │ 웹     │  │ 웹(읽기)  │  │ 터미널FE │ │
+│  └────┬─────┘  └────┬─────┘  └───┬────┘  └─────┬─────┘  └────┬─────┘ │
 │       └──────────────┴────────────┴─────────────┘       │
 └───────────────────────────┬─────────────────────────────┘
                             │ HTTPS
@@ -74,8 +74,8 @@
 
 ### 2.1 Kafka 이벤트 흐름
 
-- `sms.requests` → `SmsConsumer` → `SmsService`
-- `doctor.notifications` → `DoctorNotificationConsumer` → 활성 SSE 연결에만 전달
+- `sms.requests` → `SmsConsumer` → `SmsService` (실패 시 `sms.requests.DLT`에 적재)
+- `doctor.notifications` → `DoctorNotificationConsumer` → Redis Pub/Sub publish → `RedisMessageListenerContainer` → 활성 SSE 연결에 전달 (다중 인스턴스 대응)
 - `mission.telemetry` → `MissionTelemetryConsumer` → `MISSION` 위치/단계 반영
 - `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 `MISSION` 자동 생성
 - `dispatch.retry` → `DispatchRetryConsumer` → 동일 권역 배차 재평가 트리거
@@ -151,6 +151,7 @@ services:
   # === Cache ===
   redis:
     image: redis:7-alpine
+    command: redis-server --notify-keyspace-events Ex
     expose:
       - "6379"
     volumes:
@@ -964,7 +965,8 @@ ABANDONED 시:
 │                                                      │
 │  ┌─────────────────┐    ┌──────────────────────────┐ │
 │  │ Access Token    │    │ Refresh Token            │ │
-│  │ (JS 메모리 변수) │    │ (HttpOnly Secure Cookie) │ │
+│  │ (localStorage   │    │ (HttpOnly Secure Cookie) │ │
+│  │  via Zustand)   │    │                          │ │
 │  │ 수명: 15분      │    │ 수명: 7일               │ │
 │  └────────┬────────┘    └──────────┬───────────────┘ │
 │           │                        │                 │
@@ -985,7 +987,7 @@ ABANDONED 시:
 
 | 결정 | 이유 |
 |------|------|
-| Access Token → JS 메모리 | XSS로 localStorage 탈취 방지. 탭 닫으면 소멸 |
+| Access Token → localStorage (Zustand persist) | Zustand 상태 관리로 새로고침 시에도 유지. `auth-storage` 키 사용 |
 | Refresh Token → HttpOnly 쿠키 | JS 접근 불가, 브라우저가 자동 전송 |
 | API → Authorization 헤더 | 쿠키가 아닌 헤더 전송이므로 **CSRF 방어 부담 없음** |
 | Auth 전용 쿠키 | Path를 `/api/v1/auth`로 제한하여 auth 하위 경로(login, refresh, logout)에만 쿠키 전송 |
@@ -994,11 +996,11 @@ ABANDONED 시:
 
 | 항목 | Access Token | Refresh Token |
 |------|-------------|---------------|
-| 저장 위치 | JS 메모리 (변수) | HttpOnly Secure Cookie |
+| 저장 위치 | localStorage (Zustand persist) | HttpOnly Secure Cookie |
 | 수명 | 15분 | 7일 |
 | 전송 방식 | `Authorization: Bearer {token}` | 쿠키 자동 전송 |
 | 갱신 | `/api/v1/auth/refresh` 호출 | 로그인 시 발급 |
-| Payload | userId, role, iat, exp | userId, tokenFamily, iat, exp |
+| Payload | userId, role, iat, exp | userId, role, iat, exp |
 | 서명 | HS256 (공유 시크릿) | HS256 (공유 시크릿) |
 
 ### 8.4 쿠키 설정
@@ -1019,7 +1021,7 @@ Set-Cookie: refresh_token={token};
    POST /api/v1/auth/login { username, password }
    → 응답 Body: { accessToken, expiresIn, user: {...} }
    → 응답 Cookie: refresh_token (HttpOnly)
-   → React: accessToken을 메모리 변수에 저장
+   → React: accessToken을 Zustand store (localStorage)에 저장
 
 2. API 호출
    GET /api/v1/bookings
@@ -1030,34 +1032,34 @@ Set-Cookie: refresh_token={token};
    POST /api/v1/auth/refresh
    Cookie: refresh_token={RT}  (브라우저 자동 전송)
    → Spring: RT 검증 → 새 AT 발급 (Body) + 새 RT 발급 (Cookie)
-   → React: 새 accessToken으로 메모리 변수 교체
+   → React: 새 accessToken으로 Zustand store 교체
 
 4. 로그아웃
    POST /api/v1/auth/logout
-   → Spring: Refresh Token DB에서 무효화
+   → Spring: Redis에서 Refresh Token 무효화
    → 응답: refresh_token 쿠키 삭제 (Max-Age=0)
-   → React: 메모리의 accessToken 삭제
+   → React: Zustand store에서 accessToken 삭제
 ```
 
 ### 8.6 Refresh Token 보안
 
 | 정책 | 구현 |
 |------|------|
-| DB 저장 | Refresh Token을 해시하여 `AUTH_SESSION` 테이블에 저장 |
-| Token Rotation | 갱신 시 새 RT 발급 + 이전 RT 무효화 |
-| Token Family | 탈취 감지용. 같은 family의 이미 사용된 RT로 갱신 시도 시 family 전체 무효화 |
-| 강제 무효화 | 관리자가 특정 사용자의 모든 세션 강제 로그아웃 가능 |
-| 동시 세션 | 기기별 세션 관리. Redis에 활성 세션 목록 유지 |
+| Redis 저장 | Refresh Token을 `refresh:{token}` 키로 Redis에 저장 (TTL 7일). DB 기반 세션 테이블은 사용하지 않음 |
+| Token Rotation | 갱신 시 새 RT 발급 + 이전 RT Redis에서 삭제 |
+| 강제 무효화 | 관리자가 특정 사용자의 모든 세션 강제 로그아웃 가능 (Redis 키 삭제) |
 
 ### 8.7 역할별 인증 정리
 
 | 대상 | 인증 방식 | 토큰 |
 |------|----------|------|
-| 의사 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
-| 관리자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
-| 보호자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
+| 의사 | ID/PW 로그인 | Access(localStorage) + Refresh(쿠키) |
+| 관리자 | ID/PW 로그인 | Access(localStorage) + Refresh(쿠키) |
+| 보호자 | ID/PW 로그인 | Access(localStorage) + Refresh(쿠키) |
 | 환자 | 계정 없음 | 본인확인 완료 후 LiveKit Room Token만 |
 | 환자 (인테이크) | 계정 없음 | `intakeSessionId`(nanoid)를 capability token으로 사용 |
+| 미션 터미널 | 미션 기반 토큰 | JWT tokenType=MISSION_TERMINAL (missionId, caseId, scopes 포함, 30분) |
+| 디바이스 터미널 | 부트스트랩 토큰 | JWT tokenType=DEVICE_TERMINAL (terminalId, vehicleId, regionCode 포함, 30분) |
 
 ### 8.8 공개 인테이크 세션 접근 제어
 
@@ -1078,7 +1080,7 @@ Set-Cookie: refresh_token={token};
 CSRF 공격 조건: 브라우저가 쿠키를 자동으로 인증에 사용할 때 위험
 
 본 구조에서:
-- 모든 API 인증 = Authorization 헤더 (JS 메모리에서 직접 세팅)
+- 모든 API 인증 = Authorization 헤더 (Zustand store에서 직접 세팅)
 - 쿠키(Refresh Token)는 /api/v1/auth 하위 경로에만 전송 (login, refresh, logout)
 - SameSite=Strict로 크로스사이트에서 쿠키 미전송
 
@@ -1150,13 +1152,16 @@ Spring Boot → Kafka(sms.requests) → SmsConsumer → SOLAPI SDK → 환자 SM
 추상화 레이어 (Spring Boot):
 
 interface SmsService {
-    SmsResult send(String recipientPhone, String senderPhone, String messageBody);
+    void send(String to, String message);
+    String getContactNumber();
 }
 
+@ConditionalOnProperty(prefix = "sms", name = "provider", havingValue = "mock", matchIfMissing = true)
 class MockSmsService implements SmsService {
     // 개발: 로그만 기록, 실제 발송 안 함
 }
 
+@ConditionalOnProperty(prefix = "sms", name = "provider", havingValue = "solapi")
 class SolapiSmsService implements SmsService {
     // 배포: SOLAPI SDK로 실제 SMS 발송
 }
@@ -1167,6 +1172,7 @@ class SolapiSmsService implements SmsService {
 sms:
   provider: mock
   sender-number: "01000000000"
+  contact-number: "01000000000"
 
 # application-prod.yml
 sms:
