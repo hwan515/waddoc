@@ -5,6 +5,7 @@ import com.waddoc.domain.dispatch.entity.DispatchOutboxStatus;
 import com.waddoc.domain.dispatch.event.DispatchRequestMessage;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
 import com.waddoc.global.config.KafkaTopics;
+import com.waddoc.global.lock.RedisDistributedLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -21,13 +22,25 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class DispatchOutboxRelay {
 
+    private static final String LOCK_KEY = "lock:outbox-relay";
+    private static final long LOCK_TTL_SECONDS = 30;
+
     private final DispatchOutboxRepository dispatchOutboxRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final RedisDistributedLock redisDistributedLock;
 
     @Scheduled(fixedDelayString = "${dispatch.outbox-relay-interval-ms:1000}")
     public void relay() {
-        relayPendingOutboxes();
-        relayRetryPendingOutboxes();
+        String lockValue = redisDistributedLock.tryLock(LOCK_KEY, LOCK_TTL_SECONDS);
+        if (lockValue == null) {
+            return;
+        }
+        try {
+            relayPendingOutboxes();
+            relayRetryPendingOutboxes();
+        } finally {
+            redisDistributedLock.unlock(LOCK_KEY, lockValue);
+        }
     }
 
     private void relayPendingOutboxes() {
