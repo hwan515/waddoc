@@ -1,6 +1,7 @@
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
 
+
 using RosMessageTypes.Std;
 using RosMessageTypes.Nav;
 using RosMessageTypes.Geometry;
@@ -70,22 +71,25 @@ public class VehicleStatePublisher : MonoBehaviour
 
     void PublishOdom(TimeMsg stamp)
     {
-        Vector3 unityPos = transform.position;
-        Quaternion unityRot = transform.rotation;
+        Vector3 unityPos = rb != null ? rb.position : transform.position;
+        Quaternion unityRot = rb != null ? rb.rotation : transform.rotation;
 
-        Vector3 unityVel = rb != null ? rb.linearVelocity : Vector3.zero;
-        Vector3 unityAngVel = rb != null ? rb.angularVelocity : Vector3.zero;
+        Vector3 unityVelWorld = rb != null ? rb.linearVelocity : Vector3.zero;
+        Vector3 unityAngVelWorld = rb != null ? rb.angularVelocity : Vector3.zero;
 
-        // Unity -> ROS position
+        Transform refTf = rb != null ? rb.transform : transform;
+
+        Vector3 unityVelLocal = refTf.InverseTransformDirection(unityVelWorld);
+        Vector3 unityAngVelLocal = refTf.InverseTransformDirection(unityAngVelWorld);
+
+        unityVelLocal.z *= -1.0f;
+        unityAngVelLocal.z *= -1.0f; 
+
         Vector3 rosPos = UnityToRosPosition(unityPos);
-
-        // Unity -> ROS linear velocity
-        Vector3 rosVel = UnityToRosVector(unityVel);
-
-        // yaw만 우선 맞춘 angular.z 근사
-        Vector3 rosAngVel = UnityToRosVector(unityAngVel);
-
         Quaternion rosQuat = UnityToRosQuaternion(unityRot);
+
+        Vector3 rosVel = UnityToRosVector(unityVelLocal);
+        Vector3 rosAngVel = UnityToRosVector(unityAngVelLocal);
 
         HeaderMsg header = new HeaderMsg();
         header.frame_id = odomFrame;
@@ -118,8 +122,11 @@ public class VehicleStatePublisher : MonoBehaviour
 
     void PublishTF(TimeMsg stamp)
     {
-        Vector3 rosPos = UnityToRosPosition(transform.position);
-        Quaternion rosQuat = UnityToRosQuaternion(transform.rotation);
+        Vector3 unityPos = rb != null ? rb.position : transform.position;
+        Quaternion unityRot = rb != null ? rb.rotation : transform.rotation;
+
+        Vector3 rosPos = UnityToRosPosition(unityPos);
+        Quaternion rosQuat = UnityToRosQuaternion(unityRot);
 
         HeaderMsg header = new HeaderMsg();
         header.frame_id = odomFrame;
@@ -147,8 +154,6 @@ public class VehicleStatePublisher : MonoBehaviour
         float flSteer = wcFL != null ? wcFL.steerAngle : 0f;
         float frSteer = wcFR != null ? wcFR.steerAngle : 0f;
 
-        // 간단히 배열로 보냄:
-        // [fl_rpm, fr_rpm, rl_rpm, rr_rpm, fl_steer_deg, fr_steer_deg]
         Float32MultiArrayMsg wheelMsg = new Float32MultiArrayMsg(
             new MultiArrayLayoutMsg(),
             new float[] { flRpm, frRpm, rlRpm, rrRpm, flSteer, frSteer }
@@ -159,8 +164,6 @@ public class VehicleStatePublisher : MonoBehaviour
 
     Vector3 UnityToRosPosition(Vector3 unity)
     {
-        // Unity: x right, y up, z forward
-        // ROS:   x forward, y left, z up
         return new Vector3(unity.z, -unity.x, unity.y);
     }
 
@@ -171,8 +174,6 @@ public class VehicleStatePublisher : MonoBehaviour
 
     Quaternion UnityToRosQuaternion(Quaternion q)
     {
-        // 실전에서 가장 많이 쓰는 간단 변환
-        // Unity(x,y,z,w) -> ROS(z,-x,y,w)
         return new Quaternion(q.z, -q.x, q.y, q.w);
     }
 }
