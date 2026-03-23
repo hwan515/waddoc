@@ -112,7 +112,7 @@ const LegacyEMRDashboard = () => {
     // API를 통한 백엔드 케이스(예약) 초기 로드
     useEffect(() => {
         syncAssignedCases();
-    }, [syncAssignedCases]);
+    }, []);
 
     // SSE 연결이 늦게 붙은 경우 누락된 신규 예약을 한 번 더 동기화한다.
     useEffect(() => {
@@ -120,7 +120,7 @@ const LegacyEMRDashboard = () => {
             return;
         }
         syncAssignedCases();
-    }, [isConnected, syncAssignedCases]);
+    }, [isConnected]);
 
     // 시계 업데이트
     useEffect(() => {
