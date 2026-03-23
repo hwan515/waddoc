@@ -11,6 +11,8 @@ import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.domain.vital.dto.VitalMeasurementResponse;
+import com.waddoc.domain.vital.repository.VitalMeasurementRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
@@ -33,6 +35,7 @@ public class CareCaseQueryService {
     private final CareCaseRepository careCaseRepository;
     private final MissionRepository missionRepository;
     private final ConsultationSessionRepository consultationSessionRepository;
+    private final VitalMeasurementRepository vitalMeasurementRepository;
     private final AccessControlService accessControlService;
 
     public CaseDetailResponse getCaseDetail(String caseId, AuthenticatedUser authenticatedUser) {
@@ -45,7 +48,10 @@ public class CareCaseQueryService {
         // 미션/세션은 아직 생성 전일 수 있으므로 없으면 null로 내려준다.
         Mission mission = missionRepository.findByCareCase(careCase).orElse(null);
         ConsultationSession session = consultationSessionRepository.findByCareCase(careCase).orElse(null);
-        return CaseDetailResponse.of(careCase, mission, session);
+        VitalMeasurementResponse vitals = vitalMeasurementRepository.findByCareCase(careCase)
+                .map(VitalMeasurementResponse::from)
+                .orElse(null);
+        return CaseDetailResponse.of(careCase, mission, session, vitals);
     }
 
     public DoctorCaseListResponse getAssignedCases(
