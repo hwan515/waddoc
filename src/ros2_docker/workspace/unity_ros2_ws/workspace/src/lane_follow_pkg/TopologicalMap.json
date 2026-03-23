@@ -1,0 +1,2312 @@
+{
+    "waypoints": [
+        {
+            "id": "Waypoint_65",
+            "x": 2102.0,
+            "y": 10.600000381469727,
+            "z": 1463.0,
+            "connected_to": [
+                "Waypoint_60",
+                "Waypoint_66"
+            ]
+        },
+        {
+            "id": "Waypoint_98",
+            "x": 3749.0,
+            "y": 25.600000381469728,
+            "z": 334.0,
+            "connected_to": [
+                "Waypoint_97",
+                "Waypoint_99"
+            ]
+        },
+        {
+            "id": "Waypoint_45",
+            "x": 1152.0,
+            "y": 10.600000381469727,
+            "z": 1033.0,
+            "connected_to": [
+                "Waypoint_44",
+                "Waypoint_46"
+            ]
+        },
+        {
+            "id": "Waypoint_9",
+            "x": 561.0,
+            "y": 10.600000381469727,
+            "z": 1592.0,
+            "connected_to": [
+                "Waypoint_8",
+                "Waypoint_10"
+            ]
+        },
+        {
+            "id": "Waypoint_198",
+            "x": 2094.0,
+            "y": 25.600000381469728,
+            "z": 2597.89990234375,
+            "connected_to": [
+                "Waypoint_197",
+                "Waypoint_199"
+            ]
+        },
+        {
+            "id": "Waypoint_181",
+            "x": 1055.0,
+            "y": 25.600000381469728,
+            "z": 1977.5999755859375,
+            "connected_to": [
+                "Waypoint_180",
+                "Waypoint_182"
+            ]
+        },
+        {
+            "id": "Waypoint_171",
+            "x": 1348.0,
+            "y": 25.600000381469728,
+            "z": 2485.0,
+            "connected_to": [
+                "Waypoint_170",
+                "Waypoint_172"
+            ]
+        },
+        {
+            "id": "Waypoint_221",
+            "x": 3104.0,
+            "y": 25.600000381469728,
+            "z": 495.0,
+            "connected_to": [
+                "Waypoint_220",
+                "Waypoint_222",
+                "Waypoint_85"
+            ]
+        },
+        {
+            "id": "Waypoint_2",
+            "x": 895.0,
+            "y": 7.599999904632568,
+            "z": 549.0,
+            "connected_to": [
+                "Waypoint_1",
+                "Waypoint_3"
+            ]
+        },
+        {
+            "id": "Waypoint_56",
+            "x": 2041.0,
+            "y": 10.600000381469727,
+            "z": 1129.0,
+            "connected_to": [
+                "Waypoint_55",
+                "Waypoint_57"
+            ]
+        },
+        {
+            "id": "Waypoint_189",
+            "x": 1383.4000244140625,
+            "y": 25.600000381469728,
+            "z": 2160.39990234375,
+            "connected_to": [
+                "Waypoint_188",
+                "Waypoint_190"
+            ]
+        },
+        {
+            "id": "Waypoint_109",
+            "x": 3500.0,
+            "y": 25.600000381469728,
+            "z": 716.0,
+            "connected_to": [
+                "Waypoint_108",
+                "Waypoint_110"
+            ]
+        },
+        {
+            "id": "Waypoint_123",
+            "x": 2649.0,
+            "y": 25.600000381469728,
+            "z": 1730.0,
+            "connected_to": [
+                "Waypoint_122",
+                "Waypoint_124"
+            ]
+        },
+        {
+            "id": "Waypoint_148",
+            "x": 2122.0,
+            "y": 25.600000381469728,
+            "z": 2519.0,
+            "connected_to": [
+                "Waypoint_147",
+                "Waypoint_149"
+            ]
+        },
+        {
+            "id": "Waypoint_23",
+            "x": 939.0,
+            "y": 10.600000381469727,
+            "z": 1872.300048828125,
+            "connected_to": [
+                "Waypoint_22",
+                "Waypoint_24"
+            ]
+        },
+        {
+            "id": "Waypoint_92",
+            "x": 3500.0,
+            "y": 25.600000381469728,
+            "z": 253.0,
+            "connected_to": [
+                "Waypoint_91",
+                "Waypoint_93"
+            ]
+        },
+        {
+            "id": "Waypoint_185",
+            "x": 973.0999755859375,
+            "y": 25.600000381469728,
+            "z": 1913.4000244140625,
+            "connected_to": [
+                "Waypoint_184",
+                "Waypoint_186"
+            ]
+        },
+        {
+            "id": "Waypoint_222",
+            "x": 3095.60009765625,
+            "y": 25.600000381469728,
+            "z": 472.79998779296877,
+            "connected_to": [
+                "Waypoint_221",
+                "Waypoint_223"
+            ]
+        },
+        {
+            "id": "Waypoint_134",
+            "x": 2164.0,
+            "y": 25.600000381469728,
+            "z": 1988.0,
+            "connected_to": [
+                "Waypoint_133",
+                "Waypoint_135"
+            ]
+        },
+        {
+            "id": "Waypoint_225",
+            "x": 3140.39990234375,
+            "y": 25.600000381469728,
+            "z": 390.5,
+            "connected_to": [
+                "Waypoint_224",
+                "Waypoint_90"
+            ]
+        },
+        {
+            "id": "Waypoint_150",
+            "x": 2121.0,
+            "y": 25.600000381469728,
+            "z": 2612.0,
+            "connected_to": [
+                "Waypoint_149",
+                "Waypoint_151"
+            ]
+        },
+        {
+            "id": "Waypoint_136",
+            "x": 2098.0,
+            "y": 25.600000381469728,
+            "z": 2213.0,
+            "connected_to": [
+                "Waypoint_135",
+                "Waypoint_137",
+                "Waypoint_147"
+            ]
+        },
+        {
+            "id": "Waypoint_3",
+            "x": 872.0,
+            "y": 7.599999904632568,
+            "z": 691.0,
+            "connected_to": [
+                "Waypoint_2",
+                "Waypoint_4"
+            ]
+        },
+        {
+            "id": "Waypoint_100",
+            "x": 3821.0,
+            "y": 25.600000381469728,
+            "z": 502.0,
+            "connected_to": [
+                "Waypoint_99",
+                "Waypoint_101"
+            ]
+        },
+        {
+            "id": "Waypoint_13",
+            "x": 562.0,
+            "y": 10.600000381469727,
+            "z": 1712.5,
+            "connected_to": [
+                "Waypoint_12",
+                "Waypoint_14"
+            ]
+        },
+        {
+            "id": "Waypoint_127",
+            "x": 2540.0,
+            "y": 25.600000381469728,
+            "z": 1947.0,
+            "connected_to": [
+                "Waypoint_126",
+                "Waypoint_128"
+            ]
+        },
+        {
+            "id": "Waypoint_114",
+            "x": 3112.0,
+            "y": 25.600000381469728,
+            "z": 1572.0,
+            "connected_to": [
+                "Waypoint_113",
+                "Waypoint_115"
+            ]
+        },
+        {
+            "id": "Waypoint_140",
+            "x": 2222.0,
+            "y": 25.600000381469728,
+            "z": 2390.0,
+            "connected_to": [
+                "Waypoint_139",
+                "Waypoint_141"
+            ]
+        },
+        {
+            "id": "Waypoint_55",
+            "x": 1992.0,
+            "y": 10.600000381469727,
+            "z": 1077.0,
+            "connected_to": [
+                "Waypoint_54",
+                "Waypoint_56"
+            ]
+        },
+        {
+            "id": "Waypoint_186",
+            "x": 973.2999877929688,
+            "y": 25.600000381469728,
+            "z": 1893.9000244140625,
+            "connected_to": [
+                "Waypoint_185",
+                "Waypoint_187"
+            ]
+        },
+        {
+            "id": "Waypoint_30",
+            "x": 1261.0,
+            "y": 10.600000381469727,
+            "z": 1484.0,
+            "connected_to": [
+                "Waypoint_29",
+                "Waypoint_31"
+            ]
+        },
+        {
+            "id": "Waypoint_4",
+            "x": 841.0,
+            "y": 10.600000381469727,
+            "z": 853.0,
+            "connected_to": [
+                "Waypoint_3",
+                "Waypoint_5"
+            ]
+        },
+        {
+            "id": "Waypoint_87",
+            "x": 3073.0,
+            "y": 10.600000381469727,
+            "z": 398.0,
+            "connected_to": [
+                "Waypoint_86",
+                "Waypoint_88"
+            ]
+        },
+        {
+            "id": "Waypoint_59",
+            "x": 2086.0,
+            "y": 10.600000381469727,
+            "z": 1322.0,
+            "connected_to": [
+                "Waypoint_58",
+                "Waypoint_60"
+            ]
+        },
+        {
+            "id": "Waypoint_48",
+            "x": 1249.0,
+            "y": 10.600000381469727,
+            "z": 962.0,
+            "connected_to": [
+                "Waypoint_47",
+                "Waypoint_49"
+            ]
+        },
+        {
+            "id": "Waypoint_46",
+            "x": 1178.0,
+            "y": 10.600000381469727,
+            "z": 1002.0,
+            "connected_to": [
+                "Waypoint_45",
+                "Waypoint_47"
+            ]
+        },
+        {
+            "id": "Waypoint_167",
+            "x": 1424.0,
+            "y": 25.600000381469728,
+            "z": 2200.0,
+            "connected_to": [
+                "Waypoint_166",
+                "Waypoint_168"
+            ]
+        },
+        {
+            "id": "Waypoint_145",
+            "x": 2138.800048828125,
+            "y": 25.600000381469728,
+            "z": 2432.300048828125,
+            "connected_to": [
+                "Waypoint_144",
+                "Waypoint_146"
+            ]
+        },
+        {
+            "id": "Waypoint_31",
+            "x": 1283.0,
+            "y": 10.600000381469727,
+            "z": 1454.0,
+            "connected_to": [
+                "Waypoint_30",
+                "Waypoint_32"
+            ]
+        },
+        {
+            "id": "Waypoint_116",
+            "x": 3061.0,
+            "y": 25.600000381469728,
+            "z": 1652.0,
+            "connected_to": [
+                "Waypoint_115",
+                "Waypoint_117"
+            ]
+        },
+        {
+            "id": "Waypoint_173",
+            "x": 1233.0,
+            "y": 25.600000381469728,
+            "z": 3242.0,
+            "connected_to": [
+                "Waypoint_172"
+            ]
+        },
+        {
+            "id": "Waypoint_102",
+            "x": 3822.0,
+            "y": 25.600000381469728,
+            "z": 605.0,
+            "connected_to": [
+                "Waypoint_101",
+                "Waypoint_103"
+            ]
+        },
+        {
+            "id": "Waypoint_42",
+            "x": 1109.0,
+            "y": 10.600000381469727,
+            "z": 1138.0,
+            "connected_to": [
+                "Waypoint_41",
+                "Waypoint_43"
+            ]
+        },
+        {
+            "id": "Waypoint_99",
+            "x": 3786.0,
+            "y": 25.600000381469728,
+            "z": 403.0,
+            "connected_to": [
+                "Waypoint_98",
+                "Waypoint_100"
+            ]
+        },
+        {
+            "id": "Waypoint_28",
+            "x": 1105.0,
+            "y": 10.600000381469727,
+            "z": 1665.0,
+            "connected_to": [
+                "Waypoint_27",
+                "Waypoint_29"
+            ]
+        },
+        {
+            "id": "Waypoint_200",
+            "x": 2010.5,
+            "y": 25.600000381469728,
+            "z": 2672.699951171875,
+            "connected_to": [
+                "Waypoint_156",
+                "Waypoint_201"
+            ]
+        },
+        {
+            "id": "Waypoint_52",
+            "x": 1745.0,
+            "y": 10.600000381469727,
+            "z": 988.0,
+            "connected_to": [
+                "Waypoint_51",
+                "Waypoint_53"
+            ]
+        },
+        {
+            "id": "Waypoint_193",
+            "x": 1443.9000244140625,
+            "y": 25.600000381469728,
+            "z": 2186.199951171875,
+            "connected_to": [
+                "Waypoint_192",
+                "Waypoint_165"
+            ]
+        },
+        {
+            "id": "Waypoint_215",
+            "x": 3391.300048828125,
+            "y": 25.600000381469728,
+            "z": 789.0,
+            "connected_to": [
+                "Waypoint_214",
+                "Waypoint_216"
+            ]
+        },
+        {
+            "id": "Waypoint_226",
+            "x": 3321.699951171875,
+            "y": 25.600000381469728,
+            "z": 796.2000122070313,
+            "connected_to": [
+                "Waypoint_218",
+                "Waypoint_227"
+            ]
+        },
+        {
+            "id": "Waypoint_5",
+            "x": 809.0,
+            "y": 10.600000381469727,
+            "z": 1025.0,
+            "connected_to": [
+                "Waypoint_4",
+                "Waypoint_6"
+            ]
+        },
+        {
+            "id": "Waypoint_165",
+            "x": 1479.0,
+            "y": 25.600000381469728,
+            "z": 2209.0,
+            "connected_to": [
+                "Waypoint_164",
+                "Waypoint_166",
+                "Waypoint_193"
+            ]
+        },
+        {
+            "id": "Waypoint_169",
+            "x": 1387.0,
+            "y": 25.600000381469728,
+            "z": 2232.0,
+            "connected_to": [
+                "Waypoint_169",
+                "Waypoint_169"
+            ]
+        },
+        {
+            "id": "Waypoint_85",
+            "x": 3010.0,
+            "y": 10.600000381469727,
+            "z": 402.0,
+            "connected_to": [
+                "Waypoint_84",
+                "Waypoint_86",
+                "Waypoint_221"
+            ]
+        },
+        {
+            "id": "Waypoint_133",
+            "x": 2182.0,
+            "y": 25.600000381469728,
+            "z": 1941.0,
+            "connected_to": [
+                "Waypoint_132",
+                "Waypoint_134",
+                "Waypoint_210"
+            ]
+        },
+        {
+            "id": "Waypoint_160",
+            "x": 1891.0,
+            "y": 25.600000381469728,
+            "z": 2608.0,
+            "connected_to": [
+                "Waypoint_159",
+                "Waypoint_161"
+            ]
+        },
+        {
+            "id": "Waypoint_81",
+            "x": 2837.0,
+            "y": 10.600000381469727,
+            "z": 326.0,
+            "connected_to": [
+                "Waypoint_80",
+                "Waypoint_82"
+            ]
+        },
+        {
+            "id": "Waypoint_7",
+            "x": 665.0,
+            "y": 10.600000381469727,
+            "z": 1363.0,
+            "connected_to": [
+                "Waypoint_6",
+                "Waypoint_8"
+            ]
+        },
+        {
+            "id": "Waypoint_210",
+            "x": 2239.800048828125,
+            "y": 10.600000381469727,
+            "z": 1758.0999755859375,
+            "connected_to": [
+                "Waypoint_209",
+                "Waypoint_211",
+                "Waypoint_73",
+                "Waypoint_133"
+            ]
+        },
+        {
+            "id": "Waypoint_101",
+            "x": 3828.0,
+            "y": 25.600000381469728,
+            "z": 559.0,
+            "connected_to": [
+                "Waypoint_100",
+                "Waypoint_102"
+            ]
+        },
+        {
+            "id": "Waypoint_93",
+            "x": 3567.0,
+            "y": 25.600000381469728,
+            "z": 238.0,
+            "connected_to": [
+                "Waypoint_92",
+                "Waypoint_94"
+            ]
+        },
+        {
+            "id": "Waypoint_108",
+            "x": 3539.0,
+            "y": 25.600000381469728,
+            "z": 701.0,
+            "connected_to": [
+                "Waypoint_107",
+                "Waypoint_109"
+            ]
+        },
+        {
+            "id": "Waypoint_76",
+            "x": 2333.0,
+            "y": 10.600000381469727,
+            "z": 1422.0,
+            "connected_to": [
+                "Waypoint_75",
+                "Waypoint_77"
+            ]
+        },
+        {
+            "id": "Waypoint_96",
+            "x": 3691.0,
+            "y": 25.600000381469728,
+            "z": 261.0,
+            "connected_to": [
+                "Waypoint_95",
+                "Waypoint_97"
+            ]
+        },
+        {
+            "id": "Waypoint_104",
+            "x": 3773.0,
+            "y": 25.600000381469728,
+            "z": 662.0,
+            "connected_to": [
+                "Waypoint_103",
+                "Waypoint_105"
+            ]
+        },
+        {
+            "id": "Waypoint_142",
+            "x": 2466.0,
+            "y": 25.600000381469728,
+            "z": 2419.0,
+            "connected_to": [
+                "Waypoint_141"
+            ]
+        },
+        {
+            "id": "Waypoint_143",
+            "x": 2190.0,
+            "y": 25.600000381469728,
+            "z": 2395.0,
+            "connected_to": [
+                "Waypoint_140",
+                "Waypoint_144"
+            ]
+        },
+        {
+            "id": "Waypoint_20",
+            "x": 850.2000122070313,
+            "y": 10.600000381469727,
+            "z": 1874.4000244140625,
+            "connected_to": [
+                "Waypoint_19",
+                "Waypoint_21",
+                "Waypoint_183"
+            ]
+        },
+        {
+            "id": "Waypoint_120",
+            "x": 2917.0,
+            "y": 25.600000381469728,
+            "z": 1692.0,
+            "connected_to": [
+                "Waypoint_119",
+                "Waypoint_121"
+            ]
+        },
+        {
+            "id": "Waypoint_51",
+            "x": 1564.0,
+            "y": 10.600000381469727,
+            "z": 970.0,
+            "connected_to": [
+                "Waypoint_50",
+                "Waypoint_52"
+            ]
+        },
+        {
+            "id": "Waypoint_29",
+            "x": 1160.0,
+            "y": 10.600000381469727,
+            "z": 1592.0,
+            "connected_to": [
+                "Waypoint_28",
+                "Waypoint_30"
+            ]
+        },
+        {
+            "id": "Waypoint_125",
+            "x": 2600.0,
+            "y": 25.600000381469728,
+            "z": 1897.0,
+            "connected_to": [
+                "Waypoint_124",
+                "Waypoint_126"
+            ]
+        },
+        {
+            "id": "Waypoint_89",
+            "x": 3136.0,
+            "y": 10.600000381469727,
+            "z": 368.0,
+            "connected_to": [
+                "Waypoint_88",
+                "Waypoint_90"
+            ]
+        },
+        {
+            "id": "Waypoint_151",
+            "x": 2095.699951171875,
+            "y": 26.700000762939454,
+            "z": 2786.89990234375,
+            "connected_to": [
+                "Waypoint_150",
+                "Waypoint_152",
+                "Waypoint_205"
+            ]
+        },
+        {
+            "id": "Waypoint_69",
+            "x": 2164.0,
+            "y": 10.600000381469727,
+            "z": 1587.0,
+            "connected_to": [
+                "Waypoint_68",
+                "Waypoint_70"
+            ]
+        },
+        {
+            "id": "Waypoint_196",
+            "x": 2062.699951171875,
+            "y": 25.600000381469728,
+            "z": 2635.0,
+            "connected_to": [
+                "Waypoint_195",
+                "Waypoint_197"
+            ]
+        },
+        {
+            "id": "Waypoint_176",
+            "x": 1311.0,
+            "y": 25.600000381469728,
+            "z": 2038.0,
+            "connected_to": [
+                "Waypoint_175",
+                "Waypoint_177"
+            ]
+        },
+        {
+            "id": "Waypoint_8",
+            "x": 613.0,
+            "y": 10.600000381469727,
+            "z": 1483.0,
+            "connected_to": [
+                "Waypoint_7",
+                "Waypoint_9"
+            ]
+        },
+        {
+            "id": "Waypoint_37",
+            "x": 1237.0,
+            "y": 10.600000381469727,
+            "z": 1302.0,
+            "connected_to": [
+                "Waypoint_36",
+                "Waypoint_38"
+            ]
+        },
+        {
+            "id": "Waypoint_229",
+            "x": 3320.300048828125,
+            "y": 25.600000381469728,
+            "z": 911.7000122070313,
+            "connected_to": [
+                "Waypoint_228",
+                "Waypoint_112"
+            ]
+        },
+        {
+            "id": "Waypoint_61",
+            "x": 2043.0,
+            "y": 10.600000381469727,
+            "z": 1464.0,
+            "connected_to": [
+                "Waypoint_60",
+                "Waypoint_62"
+            ]
+        },
+        {
+            "id": "Waypoint_129",
+            "x": 2480.0,
+            "y": 25.600000381469728,
+            "z": 1951.0,
+            "connected_to": [
+                "Waypoint_128",
+                "Waypoint_130"
+            ]
+        },
+        {
+            "id": "Waypoint_227",
+            "x": 3330.10009765625,
+            "y": 25.600000381469728,
+            "z": 830.2000122070313,
+            "connected_to": [
+                "Waypoint_226",
+                "Waypoint_228"
+            ]
+        },
+        {
+            "id": "Waypoint_57",
+            "x": 2075.0,
+            "y": 10.600000381469727,
+            "z": 1186.0,
+            "connected_to": [
+                "Waypoint_56",
+                "Waypoint_58"
+            ]
+        },
+        {
+            "id": "Waypoint_220",
+            "x": 3187.300048828125,
+            "y": 25.600000381469728,
+            "z": 586.0,
+            "connected_to": [
+                "Waypoint_219",
+                "Waypoint_221"
+            ]
+        },
+        {
+            "id": "Waypoint_197",
+            "x": 2079.5,
+            "y": 25.600000381469728,
+            "z": 2618.300048828125,
+            "connected_to": [
+                "Waypoint_196",
+                "Waypoint_198"
+            ]
+        },
+        {
+            "id": "Waypoint_149",
+            "x": 2123.0,
+            "y": 25.600000381469728,
+            "z": 2547.39990234375,
+            "connected_to": [
+                "Waypoint_148",
+                "Waypoint_150",
+                "Waypoint_199"
+            ]
+        },
+        {
+            "id": "Waypoint_34",
+            "x": 1292.0,
+            "y": 10.600000381469727,
+            "z": 1373.0,
+            "connected_to": [
+                "Waypoint_33",
+                "Waypoint_35"
+            ]
+        },
+        {
+            "id": "Waypoint_67",
+            "x": 2139.0,
+            "y": 10.600000381469727,
+            "z": 1550.0,
+            "connected_to": [
+                "Waypoint_66",
+                "Waypoint_68"
+            ]
+        },
+        {
+            "id": "Waypoint_174",
+            "x": 1353.9000244140625,
+            "y": 25.600000381469728,
+            "z": 2083.60009765625,
+            "connected_to": [
+                "Waypoint_175",
+                "Waypoint_188"
+            ]
+        },
+        {
+            "id": "Waypoint_1",
+            "x": 915.0,
+            "y": 7.599999904632568,
+            "z": 384.0,
+            "connected_to": [
+                "Waypoint_2"
+            ]
+        },
+        {
+            "id": "Waypoint_50",
+            "x": 1384.0,
+            "y": 10.600000381469727,
+            "z": 955.0,
+            "connected_to": [
+                "Waypoint_49",
+                "Waypoint_51"
+            ]
+        },
+        {
+            "id": "Waypoint_178",
+            "x": 1259.0,
+            "y": 25.600000381469728,
+            "z": 2023.0,
+            "connected_to": [
+                "Waypoint_177",
+                "Waypoint_179"
+            ]
+        },
+        {
+            "id": "Waypoint_153",
+            "x": 1834.0,
+            "y": 25.600000381469728,
+            "z": 3358.0,
+            "connected_to": [
+                "Waypoint_152",
+                "Waypoint_154"
+            ]
+        },
+        {
+            "id": "Waypoint_24",
+            "x": 957.0,
+            "y": 10.600000381469727,
+            "z": 1862.9000244140625,
+            "connected_to": [
+                "Waypoint_23",
+                "Waypoint_25"
+            ]
+        },
+        {
+            "id": "Waypoint_192",
+            "x": 1415.300048828125,
+            "y": 25.600000381469728,
+            "z": 2165.300048828125,
+            "connected_to": [
+                "Waypoint_191",
+                "Waypoint_193"
+            ]
+        },
+        {
+            "id": "Waypoint_207",
+            "x": 2236.39990234375,
+            "y": 10.600000381469727,
+            "z": 1663.300048828125,
+            "connected_to": [
+                "Waypoint_206",
+                "Waypoint_208"
+            ]
+        },
+        {
+            "id": "Waypoint_187",
+            "x": 973.2999877929688,
+            "y": 25.600000381469728,
+            "z": 1872.199951171875,
+            "connected_to": [
+                "Waypoint_186",
+                "Waypoint_25"
+            ]
+        },
+        {
+            "id": "Waypoint_88",
+            "x": 3114.0,
+            "y": 10.600000381469727,
+            "z": 380.0,
+            "connected_to": [
+                "Waypoint_87",
+                "Waypoint_89"
+            ]
+        },
+        {
+            "id": "Waypoint_63",
+            "x": 1965.0,
+            "y": 10.600000381469727,
+            "z": 1573.0,
+            "connected_to": [
+                "Waypoint_62",
+                "Waypoint_64"
+            ]
+        },
+        {
+            "id": "Waypoint_106",
+            "x": 3707.0,
+            "y": 25.600000381469728,
+            "z": 681.0,
+            "connected_to": [
+                "Waypoint_105",
+                "Waypoint_107"
+            ]
+        },
+        {
+            "id": "Waypoint_16",
+            "x": 652.0,
+            "y": 10.600000381469727,
+            "z": 1764.0,
+            "connected_to": [
+                "Waypoint_15",
+                "Waypoint_17"
+            ]
+        },
+        {
+            "id": "Waypoint_217",
+            "x": 3332.39990234375,
+            "y": 25.600000381469728,
+            "z": 782.9000244140625,
+            "connected_to": [
+                "Waypoint_216",
+                "Waypoint_218"
+            ]
+        },
+        {
+            "id": "Waypoint_17",
+            "x": 703.7000122070313,
+            "y": 10.600000381469727,
+            "z": 1790.0,
+            "connected_to": [
+                "Waypoint_16",
+                "Waypoint_18"
+            ]
+        },
+        {
+            "id": "Waypoint_68",
+            "x": 2152.0,
+            "y": 10.600000381469727,
+            "z": 1573.0,
+            "connected_to": [
+                "Waypoint_67",
+                "Waypoint_69"
+            ]
+        },
+        {
+            "id": "Waypoint_54",
+            "x": 1943.0,
+            "y": 10.600000381469727,
+            "z": 1039.0,
+            "connected_to": [
+                "Waypoint_53",
+                "Waypoint_55"
+            ]
+        },
+        {
+            "id": "Waypoint_21",
+            "x": 884.9000244140625,
+            "y": 10.600000381469727,
+            "z": 1880.5999755859375,
+            "connected_to": [
+                "Waypoint_20",
+                "Waypoint_22"
+            ]
+        },
+        {
+            "id": "Waypoint_70",
+            "x": 2202.0,
+            "y": 10.600000381469727,
+            "z": 1619.0,
+            "connected_to": [
+                "Waypoint_69",
+                "Waypoint_71",
+                "Waypoint_206"
+            ]
+        },
+        {
+            "id": "Waypoint_41",
+            "x": 1110.0,
+            "y": 10.600000381469727,
+            "z": 1170.0,
+            "connected_to": [
+                "Waypoint_40",
+                "Waypoint_42"
+            ]
+        },
+        {
+            "id": "Waypoint_164",
+            "x": 1611.0,
+            "y": 25.600000381469728,
+            "z": 2288.300048828125,
+            "connected_to": [
+                "Waypoint_163",
+                "Waypoint_165"
+            ]
+        },
+        {
+            "id": "Waypoint_27",
+            "x": 1061.0,
+            "y": 10.600000381469727,
+            "z": 1729.0,
+            "connected_to": [
+                "Waypoint_26",
+                "Waypoint_28"
+            ]
+        },
+        {
+            "id": "Waypoint_38",
+            "x": 1189.0,
+            "y": 10.600000381469727,
+            "z": 1272.0,
+            "connected_to": [
+                "Waypoint_37",
+                "Waypoint_39"
+            ]
+        },
+        {
+            "id": "Waypoint_113",
+            "x": 3174.89990234375,
+            "y": 25.600000381469728,
+            "z": 1151.699951171875,
+            "connected_to": [
+                "Waypoint_112",
+                "Waypoint_114"
+            ]
+        },
+        {
+            "id": "Waypoint_122",
+            "x": 2673.0,
+            "y": 25.600000381469728,
+            "z": 1710.0,
+            "connected_to": [
+                "Waypoint_121",
+                "Waypoint_123"
+            ]
+        },
+        {
+            "id": "Waypoint_62",
+            "x": 2008.0,
+            "y": 10.600000381469727,
+            "z": 1507.0,
+            "connected_to": [
+                "Waypoint_61",
+                "Waypoint_63"
+            ]
+        },
+        {
+            "id": "Waypoint_191",
+            "x": 1398.5999755859375,
+            "y": 25.600000381469728,
+            "z": 2151.699951171875,
+            "connected_to": [
+                "Waypoint_188",
+                "Waypoint_192"
+            ]
+        },
+        {
+            "id": "Waypoint_159",
+            "x": 1915.0,
+            "y": 25.600000381469728,
+            "z": 2631.0,
+            "connected_to": [
+                "Waypoint_158",
+                "Waypoint_160"
+            ]
+        },
+        {
+            "id": "Waypoint_157",
+            "x": 1962.0,
+            "y": 25.600000381469728,
+            "z": 2652.0,
+            "connected_to": [
+                "Waypoint_156",
+                "Waypoint_158"
+            ]
+        },
+        {
+            "id": "Waypoint_177",
+            "x": 1284.0,
+            "y": 25.600000381469728,
+            "z": 2026.0,
+            "connected_to": [
+                "Waypoint_176",
+                "Waypoint_178"
+            ]
+        },
+        {
+            "id": "Waypoint_75",
+            "x": 2325.0,
+            "y": 10.600000381469727,
+            "z": 1476.0,
+            "connected_to": [
+                "Waypoint_74",
+                "Waypoint_76"
+            ]
+        },
+        {
+            "id": "Waypoint_132",
+            "x": 2209.0,
+            "y": 25.600000381469728,
+            "z": 1905.0,
+            "connected_to": [
+                "Waypoint_131",
+                "Waypoint_133"
+            ]
+        },
+        {
+            "id": "Waypoint_60",
+            "x": 2079.0,
+            "y": 10.600000381469727,
+            "z": 1409.0,
+            "connected_to": [
+                "Waypoint_59",
+                "Waypoint_61",
+                "Waypoint_65"
+            ]
+        },
+        {
+            "id": "Waypoint_166",
+            "x": 1447.0,
+            "y": 25.600000381469728,
+            "z": 2199.0,
+            "connected_to": [
+                "Waypoint_165",
+                "Waypoint_167"
+            ]
+        },
+        {
+            "id": "Waypoint_172",
+            "x": 1307.0,
+            "y": 25.600000381469728,
+            "z": 2836.0,
+            "connected_to": [
+                "Waypoint_171",
+                "Waypoint_173"
+            ]
+        },
+        {
+            "id": "Waypoint_97",
+            "x": 3726.0,
+            "y": 25.600000381469728,
+            "z": 296.0,
+            "connected_to": [
+                "Waypoint_96",
+                "Waypoint_98"
+            ]
+        },
+        {
+            "id": "Waypoint_91",
+            "x": 3304.0,
+            "y": 26.600000381469728,
+            "z": 272.0,
+            "connected_to": [
+                "Waypoint_90",
+                "Waypoint_92"
+            ]
+        },
+        {
+            "id": "Waypoint_144",
+            "x": 2161.0,
+            "y": 25.600000381469728,
+            "z": 2411.0,
+            "connected_to": [
+                "Waypoint_143",
+                "Waypoint_145"
+            ]
+        },
+        {
+            "id": "Waypoint_218",
+            "x": 3305.699951171875,
+            "y": 25.600000381469728,
+            "z": 764.9000244140625,
+            "connected_to": [
+                "Waypoint_217",
+                "Waypoint_219",
+                "Waypoint_226"
+            ]
+        },
+        {
+            "id": "Waypoint_139",
+            "x": 2169.0,
+            "y": 25.600000381469728,
+            "z": 2345.0,
+            "connected_to": [
+                "Waypoint_138",
+                "Waypoint_140"
+            ]
+        },
+        {
+            "id": "Waypoint_49",
+            "x": 1307.0,
+            "y": 10.600000381469727,
+            "z": 951.0,
+            "connected_to": [
+                "Waypoint_48",
+                "Waypoint_50"
+            ]
+        },
+        {
+            "id": "Waypoint_32",
+            "x": 1292.0,
+            "y": 10.600000381469727,
+            "z": 1421.0,
+            "connected_to": [
+                "Waypoint_31",
+                "Waypoint_33"
+            ]
+        },
+        {
+            "id": "Waypoint_72",
+            "x": 2265.39990234375,
+            "y": 10.600000381469727,
+            "z": 1602.5,
+            "connected_to": [
+                "Waypoint_71",
+                "Waypoint_73"
+            ]
+        },
+        {
+            "id": "Waypoint_95",
+            "x": 3675.0,
+            "y": 25.600000381469728,
+            "z": 245.0,
+            "connected_to": [
+                "Waypoint_94",
+                "Waypoint_96"
+            ]
+        },
+        {
+            "id": "Waypoint_71",
+            "x": 2239.0,
+            "y": 10.600000381469727,
+            "z": 1617.0999755859375,
+            "connected_to": [
+                "Waypoint_70",
+                "Waypoint_72"
+            ]
+        },
+        {
+            "id": "Waypoint_118",
+            "x": 3004.0,
+            "y": 25.600000381469728,
+            "z": 1679.0,
+            "connected_to": [
+                "Waypoint_117",
+                "Waypoint_119"
+            ]
+        },
+        {
+            "id": "Waypoint_162",
+            "x": 1773.0,
+            "y": 25.600000381469728,
+            "z": 2407.800048828125,
+            "connected_to": [
+                "Waypoint_161",
+                "Waypoint_163"
+            ]
+        },
+        {
+            "id": "Waypoint_22",
+            "x": 909.0,
+            "y": 10.600000381469727,
+            "z": 1880.0999755859375,
+            "connected_to": [
+                "Waypoint_21",
+                "Waypoint_23"
+            ]
+        },
+        {
+            "id": "Waypoint_84",
+            "x": 2951.0,
+            "y": 10.600000381469727,
+            "z": 359.0,
+            "connected_to": [
+                "Waypoint_83",
+                "Waypoint_85"
+            ]
+        },
+        {
+            "id": "Waypoint_47",
+            "x": 1209.0,
+            "y": 10.600000381469727,
+            "z": 978.0,
+            "connected_to": [
+                "Waypoint_46",
+                "Waypoint_48"
+            ]
+        },
+        {
+            "id": "Waypoint_206",
+            "x": 2229.10009765625,
+            "y": 10.600000381469727,
+            "z": 1646.199951171875,
+            "connected_to": [
+                "Waypoint_70",
+                "Waypoint_207"
+            ]
+        },
+        {
+            "id": "Waypoint_203",
+            "x": 2059.800048828125,
+            "y": 25.600000381469728,
+            "z": 2704.699951171875,
+            "connected_to": [
+                "Waypoint_202",
+                "Waypoint_204"
+            ]
+        },
+        {
+            "id": "Waypoint_180",
+            "x": 1156.0,
+            "y": 25.600000381469728,
+            "z": 2009.0,
+            "connected_to": [
+                "Waypoint_179",
+                "Waypoint_181"
+            ]
+        },
+        {
+            "id": "Waypoint_147",
+            "x": 2120.39990234375,
+            "y": 25.600000381469728,
+            "z": 2488.0,
+            "connected_to": [
+                "Waypoint_146",
+                "Waypoint_148",
+                "Waypoint_136"
+            ]
+        },
+        {
+            "id": "Waypoint_194",
+            "x": 2015.9000244140625,
+            "y": 25.600000381469728,
+            "z": 2656.39990234375,
+            "connected_to": [
+                "Waypoint_156",
+                "Waypoint_195"
+            ]
+        },
+        {
+            "id": "Waypoint_6",
+            "x": 733.0,
+            "y": 10.600000381469727,
+            "z": 1223.0,
+            "connected_to": [
+                "Waypoint_5",
+                "Waypoint_7"
+            ]
+        },
+        {
+            "id": "Waypoint_175",
+            "x": 1337.0,
+            "y": 25.600000381469728,
+            "z": 2061.0,
+            "connected_to": [
+                "Waypoint_174",
+                "Waypoint_176"
+            ]
+        },
+        {
+            "id": "Waypoint_10",
+            "x": 543.0,
+            "y": 10.600000381469727,
+            "z": 1642.0,
+            "connected_to": [
+                "Waypoint_9",
+                "Waypoint_11"
+            ]
+        },
+        {
+            "id": "Waypoint_79",
+            "x": 2785.0,
+            "y": 10.600000381469727,
+            "z": 396.0,
+            "connected_to": [
+                "Waypoint_78",
+                "Waypoint_80"
+            ]
+        },
+        {
+            "id": "Waypoint_117",
+            "x": 3032.0,
+            "y": 25.600000381469728,
+            "z": 1667.0,
+            "connected_to": [
+                "Waypoint_116",
+                "Waypoint_118"
+            ]
+        },
+        {
+            "id": "Waypoint_158",
+            "x": 1944.0,
+            "y": 25.600000381469728,
+            "z": 2645.89990234375,
+            "connected_to": [
+                "Waypoint_157",
+                "Waypoint_159"
+            ]
+        },
+        {
+            "id": "Waypoint_43",
+            "x": 1116.0,
+            "y": 10.600000381469727,
+            "z": 1101.0,
+            "connected_to": [
+                "Waypoint_42",
+                "Waypoint_44"
+            ]
+        },
+        {
+            "id": "Waypoint_40",
+            "x": 1125.0,
+            "y": 10.600000381469727,
+            "z": 1212.0,
+            "connected_to": [
+                "Waypoint_39",
+                "Waypoint_41"
+            ]
+        },
+        {
+            "id": "Waypoint_12",
+            "x": 552.0,
+            "y": 10.600000381469727,
+            "z": 1698.5,
+            "connected_to": [
+                "Waypoint_11",
+                "Waypoint_13"
+            ]
+        },
+        {
+            "id": "Waypoint_35",
+            "x": 1281.0,
+            "y": 10.600000381469727,
+            "z": 1346.0,
+            "connected_to": [
+                "Waypoint_34",
+                "Waypoint_36"
+            ]
+        },
+        {
+            "id": "Waypoint_204",
+            "x": 2072.60009765625,
+            "y": 25.600000381469728,
+            "z": 2724.39990234375,
+            "connected_to": [
+                "Waypoint_203",
+                "Waypoint_205"
+            ]
+        },
+        {
+            "id": "Waypoint_82",
+            "x": 2879.0,
+            "y": 10.600000381469727,
+            "z": 322.0,
+            "connected_to": [
+                "Waypoint_81",
+                "Waypoint_83"
+            ]
+        },
+        {
+            "id": "Waypoint_86",
+            "x": 3044.0,
+            "y": 10.600000381469727,
+            "z": 407.0,
+            "connected_to": [
+                "Waypoint_85",
+                "Waypoint_87"
+            ]
+        },
+        {
+            "id": "Waypoint_73",
+            "x": 2293.0,
+            "y": 10.600000381469727,
+            "z": 1580.0,
+            "connected_to": [
+                "Waypoint_72",
+                "Waypoint_74",
+                "Waypoint_210"
+            ]
+        },
+        {
+            "id": "Waypoint_128",
+            "x": 2504.0,
+            "y": 25.600000381469728,
+            "z": 1952.0,
+            "connected_to": [
+                "Waypoint_127",
+                "Waypoint_129"
+            ]
+        },
+        {
+            "id": "Waypoint_216",
+            "x": 3362.300048828125,
+            "y": 25.600000381469728,
+            "z": 794.0,
+            "connected_to": [
+                "Waypoint_215",
+                "Waypoint_217"
+            ]
+        },
+        {
+            "id": "Waypoint_33",
+            "x": 1299.0,
+            "y": 10.600000381469727,
+            "z": 1394.0,
+            "connected_to": [
+                "Waypoint_32",
+                "Waypoint_34"
+            ]
+        },
+        {
+            "id": "Waypoint_74",
+            "x": 2311.0,
+            "y": 10.600000381469727,
+            "z": 1527.0,
+            "connected_to": [
+                "Waypoint_73",
+                "Waypoint_75"
+            ]
+        },
+        {
+            "id": "Waypoint_103",
+            "x": 3802.0,
+            "y": 25.600000381469728,
+            "z": 637.0,
+            "connected_to": [
+                "Waypoint_102",
+                "Waypoint_104"
+            ]
+        },
+        {
+            "id": "Waypoint_66",
+            "x": 2115.0,
+            "y": 10.600000381469727,
+            "z": 1497.0,
+            "connected_to": [
+                "Waypoint_65",
+                "Waypoint_67"
+            ]
+        },
+        {
+            "id": "Waypoint_58",
+            "x": 2082.0,
+            "y": 10.600000381469727,
+            "z": 1248.0,
+            "connected_to": [
+                "Waypoint_57",
+                "Waypoint_59"
+            ]
+        },
+        {
+            "id": "Waypoint_208",
+            "x": 2241.699951171875,
+            "y": 10.600000381469727,
+            "z": 1686.300048828125,
+            "connected_to": [
+                "Waypoint_207",
+                "Waypoint_209"
+            ]
+        },
+        {
+            "id": "Waypoint_183",
+            "x": 989.0,
+            "y": 25.600000381469728,
+            "z": 1950.4000244140625,
+            "connected_to": [
+                "Waypoint_182",
+                "Waypoint_184",
+                "Waypoint_20"
+            ]
+        },
+        {
+            "id": "Waypoint_111",
+            "x": 3432.5,
+            "y": 25.600000381469728,
+            "z": 773.5,
+            "connected_to": [
+                "Waypoint_110",
+                "Waypoint_112"
+            ]
+        },
+        {
+            "id": "Waypoint_190",
+            "x": 1384.0,
+            "y": 25.600000381469728,
+            "z": 2190.0,
+            "connected_to": [
+                "Waypoint_189",
+                "Waypoint_170"
+            ]
+        },
+        {
+            "id": "Waypoint_25",
+            "x": 971.0,
+            "y": 10.600000381469727,
+            "z": 1849.5999755859375,
+            "connected_to": [
+                "Waypoint_24",
+                "Waypoint_26"
+            ]
+        },
+        {
+            "id": "Waypoint_161",
+            "x": 1821.0,
+            "y": 25.600000381469728,
+            "z": 2516.0,
+            "connected_to": [
+                "Waypoint_160",
+                "Waypoint_162"
+            ]
+        },
+        {
+            "id": "Waypoint_168",
+            "x": 1398.0,
+            "y": 25.600000381469728,
+            "z": 2217.0,
+            "connected_to": [
+                "Waypoint_167",
+                "Waypoint_169"
+            ]
+        },
+        {
+            "id": "Waypoint_155",
+            "x": 1799.0,
+            "y": 25.600000381469728,
+            "z": 3540.0,
+            "connected_to": [
+                "Waypoint_154"
+            ]
+        },
+        {
+            "id": "Waypoint_152",
+            "x": 2040.0,
+            "y": 25.600000381469728,
+            "z": 3097.0,
+            "connected_to": [
+                "Waypoint_151",
+                "Waypoint_153"
+            ]
+        },
+        {
+            "id": "Waypoint_179",
+            "x": 1217.0,
+            "y": 25.600000381469728,
+            "z": 2020.0,
+            "connected_to": [
+                "Waypoint_178",
+                "Waypoint_180"
+            ]
+        },
+        {
+            "id": "Waypoint_90",
+            "x": 3192.0,
+            "y": 18.600000381469728,
+            "z": 338.3999938964844,
+            "connected_to": [
+                "Waypoint_89",
+                "Waypoint_91",
+                "Waypoint_225"
+            ]
+        },
+        {
+            "id": "Waypoint_26",
+            "x": 1008.0,
+            "y": 10.600000381469727,
+            "z": 1805.0,
+            "connected_to": [
+                "Waypoint_25",
+                "Waypoint_27"
+            ]
+        },
+        {
+            "id": "Waypoint_135",
+            "x": 2100.0,
+            "y": 25.600000381469728,
+            "z": 2162.0,
+            "connected_to": [
+                "Waypoint_134",
+                "Waypoint_136"
+            ]
+        },
+        {
+            "id": "Waypoint_224",
+            "x": 3105.800048828125,
+            "y": 25.600000381469728,
+            "z": 429.6000061035156,
+            "connected_to": [
+                "Waypoint_223",
+                "Waypoint_225"
+            ]
+        },
+        {
+            "id": "Waypoint_53",
+            "x": 1882.0,
+            "y": 10.600000381469727,
+            "z": 1015.0,
+            "connected_to": [
+                "Waypoint_52",
+                "Waypoint_54"
+            ]
+        },
+        {
+            "id": "Waypoint_188",
+            "x": 1374.800048828125,
+            "y": 25.600000381469728,
+            "z": 2124.10009765625,
+            "connected_to": [
+                "Waypoint_174",
+                "Waypoint_189",
+                "Waypoint_191"
+            ]
+        },
+        {
+            "id": "Waypoint_130",
+            "x": 2286.0,
+            "y": 25.600000381469728,
+            "z": 1882.0,
+            "connected_to": [
+                "Waypoint_129",
+                "Waypoint_131",
+                "Waypoint_213"
+            ]
+        },
+        {
+            "id": "Waypoint_126",
+            "x": 2574.0,
+            "y": 25.600000381469728,
+            "z": 1934.0,
+            "connected_to": [
+                "Waypoint_125",
+                "Waypoint_127"
+            ]
+        },
+        {
+            "id": "Waypoint_209",
+            "x": 2243.0,
+            "y": 10.600000381469727,
+            "z": 1717.9000244140625,
+            "connected_to": [
+                "Waypoint_208",
+                "Waypoint_210"
+            ]
+        },
+        {
+            "id": "Waypoint_170",
+            "x": 1376.0,
+            "y": 25.600000381469728,
+            "z": 2261.0,
+            "connected_to": [
+                "Waypoint_169",
+                "Waypoint_171",
+                "Waypoint_190"
+            ]
+        },
+        {
+            "id": "Waypoint_211",
+            "x": 2238.699951171875,
+            "y": 10.600000381469727,
+            "z": 1785.5,
+            "connected_to": [
+                "Waypoint_210",
+                "Waypoint_212"
+            ]
+        },
+        {
+            "id": "Waypoint_124",
+            "x": 2635.0,
+            "y": 25.600000381469728,
+            "z": 1753.0,
+            "connected_to": [
+                "Waypoint_123",
+                "Waypoint_125"
+            ]
+        },
+        {
+            "id": "Waypoint_78",
+            "x": 2379.0,
+            "y": 10.600000381469727,
+            "z": 1290.0,
+            "connected_to": [
+                "Waypoint_77",
+                "Waypoint_79"
+            ]
+        },
+        {
+            "id": "Waypoint_182",
+            "x": 1007.0,
+            "y": 25.600000381469728,
+            "z": 1958.5,
+            "connected_to": [
+                "Waypoint_181",
+                "Waypoint_183"
+            ]
+        },
+        {
+            "id": "Waypoint_112",
+            "x": 3274.89990234375,
+            "y": 25.600000381469728,
+            "z": 1005.7000122070313,
+            "connected_to": [
+                "Waypoint_111",
+                "Waypoint_113",
+                "Waypoint_229"
+            ]
+        },
+        {
+            "id": "Waypoint_14",
+            "x": 576.0,
+            "y": 10.600000381469727,
+            "z": 1726.0,
+            "connected_to": [
+                "Waypoint_13",
+                "Waypoint_15"
+            ]
+        },
+        {
+            "id": "Waypoint_15",
+            "x": 615.0,
+            "y": 10.600000381469727,
+            "z": 1745.0,
+            "connected_to": [
+                "Waypoint_14",
+                "Waypoint_16"
+            ]
+        },
+        {
+            "id": "Waypoint_223",
+            "x": 3096.0,
+            "y": 25.600000381469728,
+            "z": 451.5,
+            "connected_to": [
+                "Waypoint_222",
+                "Waypoint_224"
+            ]
+        },
+        {
+            "id": "Waypoint_77",
+            "x": 2354.0,
+            "y": 10.600000381469727,
+            "z": 1345.0,
+            "connected_to": [
+                "Waypoint_76",
+                "Waypoint_78"
+            ]
+        },
+        {
+            "id": "Waypoint_154",
+            "x": 1813.0,
+            "y": 25.600000381469728,
+            "z": 3423.0,
+            "connected_to": [
+                "Waypoint_153",
+                "Waypoint_155"
+            ]
+        },
+        {
+            "id": "Waypoint_119",
+            "x": 2971.0,
+            "y": 25.600000381469728,
+            "z": 1689.0,
+            "connected_to": [
+                "Waypoint_118",
+                "Waypoint_120"
+            ]
+        },
+        {
+            "id": "Waypoint_228",
+            "x": 3329.10009765625,
+            "y": 25.600000381469728,
+            "z": 871.0,
+            "connected_to": [
+                "Waypoint_227",
+                "Waypoint_229"
+            ]
+        },
+        {
+            "id": "Waypoint_141",
+            "x": 2264.0,
+            "y": 25.600000381469728,
+            "z": 2399.0,
+            "connected_to": [
+                "Waypoint_140",
+                "Waypoint_142"
+            ]
+        },
+        {
+            "id": "Waypoint_199",
+            "x": 2107.199951171875,
+            "y": 25.600000381469728,
+            "z": 2578.199951171875,
+            "connected_to": [
+                "Waypoint_198",
+                "Waypoint_149"
+            ]
+        },
+        {
+            "id": "Waypoint_44",
+            "x": 1129.0,
+            "y": 10.600000381469727,
+            "z": 1062.0,
+            "connected_to": [
+                "Waypoint_43",
+                "Waypoint_45"
+            ]
+        },
+        {
+            "id": "Waypoint_131",
+            "x": 2247.0,
+            "y": 25.600000381469728,
+            "z": 1886.0,
+            "connected_to": [
+                "Waypoint_130",
+                "Waypoint_132"
+            ]
+        },
+        {
+            "id": "Waypoint_115",
+            "x": 3096.0,
+            "y": 25.600000381469728,
+            "z": 1617.0,
+            "connected_to": [
+                "Waypoint_114",
+                "Waypoint_116"
+            ]
+        },
+        {
+            "id": "Waypoint_201",
+            "x": 2025.0999755859375,
+            "y": 25.600000381469728,
+            "z": 2679.89990234375,
+            "connected_to": [
+                "Waypoint_200",
+                "Waypoint_202"
+            ]
+        },
+        {
+            "id": "Waypoint_110",
+            "x": 3460.0,
+            "y": 25.600000381469728,
+            "z": 743.0,
+            "connected_to": [
+                "Waypoint_109",
+                "Waypoint_111",
+                "Waypoint_214"
+            ]
+        },
+        {
+            "id": "Waypoint_80",
+            "x": 2812.0,
+            "y": 10.600000381469727,
+            "z": 345.0,
+            "connected_to": [
+                "Waypoint_79",
+                "Waypoint_81"
+            ]
+        },
+        {
+            "id": "Waypoint_107",
+            "x": 3614.0,
+            "y": 25.600000381469728,
+            "z": 692.0,
+            "connected_to": [
+                "Waypoint_106",
+                "Waypoint_108"
+            ]
+        },
+        {
+            "id": "Waypoint_163",
+            "x": 1736.4000244140625,
+            "y": 25.600000381469728,
+            "z": 2342.300048828125,
+            "connected_to": [
+                "Waypoint_162",
+                "Waypoint_164"
+            ]
+        },
+        {
+            "id": "Waypoint_94",
+            "x": 3630.0,
+            "y": 25.600000381469728,
+            "z": 235.0,
+            "connected_to": [
+                "Waypoint_93",
+                "Waypoint_95"
+            ]
+        },
+        {
+            "id": "Waypoint_205",
+            "x": 2083.199951171875,
+            "y": 25.600000381469728,
+            "z": 2742.39990234375,
+            "connected_to": [
+                "Waypoint_204",
+                "Waypoint_151"
+            ]
+        },
+        {
+            "id": "Waypoint_214",
+            "x": 3425.10009765625,
+            "y": 25.600000381469728,
+            "z": 765.2999877929688,
+            "connected_to": [
+                "Waypoint_110",
+                "Waypoint_215"
+            ]
+        },
+        {
+            "id": "Waypoint_18",
+            "x": 756.0,
+            "y": 10.600000381469727,
+            "z": 1820.0,
+            "connected_to": [
+                "Waypoint_17",
+                "Waypoint_19"
+            ]
+        },
+        {
+            "id": "Waypoint_195",
+            "x": 2043.199951171875,
+            "y": 25.600000381469728,
+            "z": 2646.800048828125,
+            "connected_to": [
+                "Waypoint_194",
+                "Waypoint_196"
+            ]
+        },
+        {
+            "id": "Waypoint_39",
+            "x": 1138.0,
+            "y": 10.600000381469727,
+            "z": 1235.0,
+            "connected_to": [
+                "Waypoint_38",
+                "Waypoint_40"
+            ]
+        },
+        {
+            "id": "Waypoint_64",
+            "x": 1894.0,
+            "y": 10.600000381469727,
+            "z": 1674.0,
+            "connected_to": [
+                "Waypoint_63"
+            ]
+        },
+        {
+            "id": "Waypoint_202",
+            "x": 2041.5999755859375,
+            "y": 25.600000381469728,
+            "z": 2689.39990234375,
+            "connected_to": [
+                "Waypoint_201",
+                "Waypoint_203"
+            ]
+        },
+        {
+            "id": "Waypoint_36",
+            "x": 1260.0,
+            "y": 10.600000381469727,
+            "z": 1318.0,
+            "connected_to": [
+                "Waypoint_35",
+                "Waypoint_37"
+            ]
+        },
+        {
+            "id": "Waypoint_137",
+            "x": 2115.0,
+            "y": 25.600000381469728,
+            "z": 2266.0,
+            "connected_to": [
+                "Waypoint_136",
+                "Waypoint_138"
+            ]
+        },
+        {
+            "id": "Waypoint_184",
+            "x": 978.4000244140625,
+            "y": 25.600000381469728,
+            "z": 1932.4000244140625,
+            "connected_to": [
+                "Waypoint_183",
+                "Waypoint_185"
+            ]
+        },
+        {
+            "id": "Waypoint_11",
+            "x": 542.0,
+            "y": 10.600000381469727,
+            "z": 1675.0,
+            "connected_to": [
+                "Waypoint_10",
+                "Waypoint_12"
+            ]
+        },
+        {
+            "id": "Waypoint_146",
+            "x": 2125.0,
+            "y": 25.600000381469728,
+            "z": 2462.0,
+            "connected_to": [
+                "Waypoint_145",
+                "Waypoint_147"
+            ]
+        },
+        {
+            "id": "Waypoint_121",
+            "x": 2721.0,
+            "y": 25.600000381469728,
+            "z": 1698.0,
+            "connected_to": [
+                "Waypoint_120",
+                "Waypoint_122"
+            ]
+        },
+        {
+            "id": "Waypoint_156",
+            "x": 1994.0,
+            "y": 25.600000381469728,
+            "z": 2664.0,
+            "connected_to": [
+                "Waypoint_194",
+                "Waypoint_157",
+                "Waypoint_200"
+            ]
+        },
+        {
+            "id": "Waypoint_83",
+            "x": 2917.0,
+            "y": 10.600000381469727,
+            "z": 332.0,
+            "connected_to": [
+                "Waypoint_82",
+                "Waypoint_84"
+            ]
+        },
+        {
+            "id": "Waypoint_138",
+            "x": 2134.0,
+            "y": 25.600000381469728,
+            "z": 2305.0,
+            "connected_to": [
+                "Waypoint_137",
+                "Waypoint_139"
+            ]
+        },
+        {
+            "id": "Waypoint_19",
+            "x": 808.5,
+            "y": 10.600000381469727,
+            "z": 1852.800048828125,
+            "connected_to": [
+                "Waypoint_18",
+                "Waypoint_20"
+            ]
+        },
+        {
+            "id": "Waypoint_219",
+            "x": 3283.199951171875,
+            "y": 25.600000381469728,
+            "z": 729.4000244140625,
+            "connected_to": [
+                "Waypoint_218",
+                "Waypoint_220"
+            ]
+        },
+        {
+            "id": "Waypoint_213",
+            "x": 2258.89990234375,
+            "y": 10.600000381469727,
+            "z": 1848.5,
+            "connected_to": [
+                "Waypoint_212",
+                "Waypoint_130"
+            ]
+        },
+        {
+            "id": "Waypoint_212",
+            "x": 2244.800048828125,
+            "y": 10.600000381469727,
+            "z": 1817.0999755859375,
+            "connected_to": [
+                "Waypoint_211",
+                "Waypoint_213"
+            ]
+        },
+        {
+            "id": "Waypoint_105",
+            "x": 3743.0,
+            "y": 25.600000381469728,
+            "z": 676.0,
+            "connected_to": [
+                "Waypoint_104",
+                "Waypoint_106"
+            ]
+        }
+    ]
+}
