@@ -10,7 +10,7 @@
 | 제어면 / 미디어면 / 추론면 분리 | Spring Boot = 상태·권한·오케스트레이션, LiveKit = WebRTC 미디어, AI = 추론 전용 |
 | AI 내부망 격리 | AI 서버는 외부 직접 노출 금지. React → AI 직접 호출 금지 |
 | AI 분리 배포 | DEV/PROD 공통으로 AI 추론은 별도 GPU 서버에서 실행. 메인 서버 Compose에 AI 컨테이너를 포함하지 않음 |
-| AI 프로토콜 분리 | IDV/OCR = REST multipart, 실시간 STT/문진 = WebSocket, 최종 추천 계산/저장 = REST JSON |
+| AI 프로토콜 분리 | IDV/OCR = REST multipart, 실시간 STT/문진 = WebSocket |
 | 파일 전달 표준화 | IDV/OCR 이미지 전달은 DEV/PROD 공통 multipart 전송. 공유 디렉터리 방식 미사용 |
 | 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 완료 후 room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
@@ -59,7 +59,7 @@
 ┌───────────────────────────┴─────────────────────────────┐
 │                  GPU Server (AI Inference)              │
 │              ┌─────────┐   ┌────────────────┐           │
-│              │ IDV AI  │   │ STT / Triage AI│           │
+│              │ IDV AI  │   │ STT AI         │           │
 │              └─────────┘   └────────────────┘           │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -67,7 +67,6 @@
 - DEV와 PROD 모두 `Spring Boot -> GPU Server` 경로로만 AI 추론을 호출한다.
 - `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
 - `Spring Boot <-> STT AI` 는 WebSocket 스트리밍으로 partial/final transcript를 주고받는다.
-- `Spring Boot -> Recommendation/Triage API` 는 REST JSON으로 최종 분류/추천 결과를 요청한다.
 - `Spring Boot -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
 - React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
 
@@ -89,11 +88,10 @@
 ### 3.1 구성 원칙
 
 - 메인 애플리케이션 스택만 로컬 Docker Compose로 실행한다.
-- IDV AI, STT/추천 AI는 **별도 GPU 서버**에서 실행한다.
+- IDV AI, STT AI는 **별도 GPU 서버**에서 실행한다.
 - DEV와 PROD 모두 Spring Boot는 GPU 서버의 AI 엔드포인트를 직접 호출한다.
 - 본인확인(IDV/OCR)은 **REST multipart**를 사용한다.
 - 실시간 문진/STT는 **WebSocket 스트리밍**을 사용한다.
-- 최종 추천 계산/저장은 **REST JSON**을 사용한다.
 - 로컬 개발에서도 React → AI 직접 호출은 금지하고, 반드시 Spring Boot를 경유한다.
 
 ### 3.2 컨테이너 구성
@@ -129,7 +127,6 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - LIVEKIT_HOST=http://livekit:7880
       - AI_IDV_URL=https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_TRIAGE_URL=https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
     volumes:
@@ -221,7 +218,6 @@ Nginx 내부 라우팅:
   - spring-api → kafka:29092 (SMS / 알림 / 텔레메트리 / 배차 이벤트)
   - spring-api → https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (IDV AI REST)
   - spring-api ↔ wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe (STT AI WebSocket)
-  - spring-api → https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend (추천 AI REST)
 ```
 
 ### 3.4 파일 저장 방식 (개발)
@@ -271,28 +267,12 @@ Server → Client:
   {"type":"partial","requestId":"stt_001","text":"머리가 아프고"}
   {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
 
-Spring Boot → Recommendation AI (POST https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend)
-Content-Type: application/json
-
-{
-  "requestId": "rec_001",
-  "intakeSessionId": "its_001",
-  "transcript": "머리가 아프고 어지러워요",
-  "patientContext": {
-    "age": 78,
-    "region": "GANGWON"
-  }
-}
-```
-
----
-
 ## 4. 배포 환경 (Production)
 
 ### 4.1 구성 원칙
 
 - **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, Kafka, Zookeeper, LiveKit
-- **AI 서버 (별도)**: IDV AI, STT/추천 AI
+- **AI 서버 (별도)**: IDV AI, STT AI
 - 서버 간 통신: **REST + WebSocket**
 - 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
 - AI 서버는 메인 서버에서만 접근 가능 (외부 직접 노출 금지)
@@ -335,7 +315,7 @@ Content-Type: application/json
 │  ┌─────────────────────────────────────────────────┐ │
 │  │                                                  │ │
 │  │  ┌───────────┐          ┌────────────┐          │ │
-│  │  │  IDV AI   │          │ STT/Triage │          │ │
+│  │  │  IDV AI   │          │ STT AI     │          │ │
 │  │  │  :8000    │          │  :8001     │          │ │
 │  │  └───────────┘          └────────────┘          │ │
 │  │                                                  │ │
@@ -383,7 +363,6 @@ services:
       - REDIS_HOST=redis
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       - AI_IDV_URL=https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_TRIAGE_URL=https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
     volumes:
@@ -477,15 +456,14 @@ GPU Server
       - listen 443 ssl
       - /idv/*    -> 127.0.0.1:8000
       - /stt/*    -> 127.0.0.1:8001
-      - /triage/* -> 127.0.0.1:8001
 
   - idv-ai process
       - bind 127.0.0.1:8000
       - 역할: 얼굴 비교 / OCR
 
-  - stt-triage-ai process
+  - stt-ai process
       - bind 127.0.0.1:8001
-      - 역할: 실시간 STT WebSocket / 추천 REST
+      - 역할: 실시간 STT WebSocket
 
   - process manager
       - systemd, supervisor, pm2, 또는 전용 ML serving runtime 사용
@@ -531,24 +509,11 @@ Server → Client:
   {"type":"partial","requestId":"stt_001","text":"머리가"}
   {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
 
-Spring Boot → Recommendation AI (POST https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend)
-Content-Type: application/json
-
-{
-  "requestId": "rec_001",
-  "intakeSessionId": "its_001",
-  "transcript": "머리가 아프고 어지러워요"
-}
-```
-
----
-
 ## 5. AI 통신 추상화 레이어
 
 현재 표준 운영 모델은 **역할별 프로토콜 분리**다.
 - IDV/OCR: multipart REST
 - 실시간 STT: WebSocket
-- 최종 추천/분류: REST JSON
 
 과거의 공유 디렉터리(JSON 경로 전달) 전략은 더 이상 기본 아키텍처에 포함하지 않는다.
 
@@ -562,22 +527,16 @@ interface RealtimeSttClient {
     void sendAudioChunk(byte[] chunk);
     void closeSession(String requestId);
 }
-
-interface RecommendationAiClient {
-    RecommendationResult recommend(RecommendationRequest request);
-}
 ```
 
 ```yaml
 # application-local.yml
 ai:
   idv-url: https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-  triage-url: https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
 
 # application-prod.yml
 ai:
   idv-url: https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
-  triage-url: https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
 ```
 
 ---
@@ -587,7 +546,6 @@ ai:
 AI 서버는 **업무 성격에 따라 프로토콜을 분리**한다.
 - 본인확인/신분증 OCR: multipart REST
 - 실시간 STT: WebSocket
-- 최종 증상 분류/추천: REST JSON
 
 ### 6.1 IDV AI API
 
@@ -1243,7 +1201,7 @@ AI 서버:
   외부 공개: 443 (TLS reverse proxy)
   메인 서버에서만 접근: 443
   방화벽: 메인 서버 IP만 허용 (iptables/ufw)
-  내부 전용: 8000 (IDV), 8001 (STT/Triage)
+  내부 전용: 8000 (IDV), 8001 (STT)
 
 서버 간 통신:
   - 같은 VPC/내부 네트워크 내에서 private IP 사용
@@ -1279,7 +1237,7 @@ sudo ufw enable
 | 프로세스 | Memory Limit | CPU Limit | 비고 |
 |-----------|-------------|-----------|------|
 | idv-ai process | 4G | 4.0 | 얼굴 비교 / OCR 모델 |
-| stt-triage-ai process | 4G | 4.0 | 실시간 음성 인식 + 추천 보조 |
+| stt-ai process | 4G | 4.0 | 실시간 음성 인식 |
 | **합계** | **8G** | **8.0** | GPU 있으면 CPU 부담 감소 |
 
 ---
@@ -1291,7 +1249,6 @@ sudo ufw enable
 | Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
 | Spring ↔ STT AI (WS 연결) | 3초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
 | STT final 응답 대기 | 12초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
-| Spring → Recommendation AI | 5초 | 1회 자동 | LOW confidence fallback |
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |
@@ -1347,7 +1304,6 @@ docker compose up -d --build spring-api
 
 # 원격 GPU 서버 헬스체크 예시
 curl https://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
-curl https://<DEV_GPU_SERVER_HOST>/triage/api/v1/health
 ```
 
 ### 배포 환경 — 메인 서버
@@ -1362,7 +1318,7 @@ sudo systemctl restart nginx
 
 # AI 프로세스 재시작 예시
 sudo systemctl restart idv-ai
-sudo systemctl restart stt-triage-ai
+sudo systemctl restart stt-ai
 ```
 
 ---
@@ -1375,8 +1331,7 @@ sudo systemctl restart stt-triage-ai
 | AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
 | Spring → IDV AI | https://\<DEV_GPU_SERVER_HOST\>/idv/api/v1/verify | https://\<PROD_GPU_SERVER_HOST\>/idv/api/v1/verify |
 | Spring ↔ STT AI | wss://\<DEV_GPU_SERVER_HOST\>/stt/ws/transcribe | wss://\<PROD_GPU_SERVER_HOST\>/stt/ws/transcribe |
-| Spring → Recommendation AI | https://\<DEV_GPU_SERVER_HOST\>/triage/api/v1/recommend | https://\<PROD_GPU_SERVER_HOST\>/triage/api/v1/recommend |
-| 프로토콜 모델 | IDV=REST multipart, STT=WebSocket, 추천=REST JSON | IDV=REST multipart, STT=WebSocket, 추천=REST JSON |
+| 프로토콜 모델 | IDV=REST multipart, STT=WebSocket | IDV=REST multipart, STT=WebSocket |
 | AI 파일 접근 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 |
 | Spring Profile | `local` | `prod` |
 | DB 비밀번호 | 하드코딩 (dev) | 환경 변수 / secrets |

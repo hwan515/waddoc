@@ -32,7 +32,6 @@ ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
   idv-url: ${AI_IDV_URL:https://localhost/idv/api/v1/verify}
   idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:5000}
-  triage-url: ${AI_TRIAGE_URL:https://localhost/triage/api/v1/recommend}
 
 file:
   storage-root: ${FILE_STORAGE_ROOT:./local-storage/uploads}

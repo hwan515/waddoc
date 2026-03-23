@@ -30,7 +30,7 @@
   이번 수정안에서는 `동의`를 본인확인 선행 조건에서 제외하고 후속 확장 범위로 분리한다.
 - `활력징후` 단계는 Project 문서에는 존재하지만, MVP 문서에는 별도 저장 도메인이 제외돼 있다.
   따라서 MVP 범위에서는 활력징후 단계를 UX에는 포함하되, 측정값 영속 저장은 선택 또는 더미 fallback으로 제한한다.
-- AI 문서는 현재 STT/triage 중심이며 IDV FastAPI API가 정의돼 있지 않다.
+- AI 문서는 현재 STT 중심이며 IDV FastAPI API가 정의돼 있지 않다.
 
 ## 3. 목표 플로우
 
@@ -358,7 +358,7 @@ MVP 기준:
 ### `src/AI/docs/architecture.md`
 
 - AI Server 책임에 IDV API 추가
-- STT/triage 외에 IDV orchestration 경로 추가
+- STT 외에 IDV orchestration 경로 추가
 
 ## 10. 구현 순서
 

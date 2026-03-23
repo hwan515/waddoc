@@ -52,8 +52,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - AI_IDV_URL=https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify
-      - AI_TRIAGE_URL=https://${PROD_GPU_SERVER_HOST}/triage/api/v1/recommend
+      - AI_IDV_URL=${AI_IDV_URL:-https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
       - CONSULTATION_IDENTITY_CHECK_BYPASS_ENABLED=${CONSULTATION_IDENTITY_CHECK_BYPASS_ENABLED:-false} # AI IDV 서버 미준비 시에만 임시로 본인 확인을 우회
