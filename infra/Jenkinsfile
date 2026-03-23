@@ -145,12 +145,17 @@ pipeline {
                         echo '=== Docker Build & Push Frontend ==='
                         withDockerRegistry([credentialsId: 'dockerhub-credentials', url: '']) {
                             sh '''
+                                set -a
+                                . ${PROD_ENV_FILE}
+                                set +a
                                 docker buildx use ${BUILDX_BUILDER}-fe 2>/dev/null || \
                                 docker buildx create --name ${BUILDX_BUILDER}-fe --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/src/FE && \
                                 docker buildx build \
                                   --builder ${BUILDX_BUILDER}-fe \
                                   --build-arg VITE_API_URL=/api \
+                                  --build-arg VITE_ROBOT_TERMINAL_ID="${VITE_ROBOT_TERMINAL_ID}" \
+                                  --build-arg VITE_ROBOT_TERMINAL_KEY="${VITE_ROBOT_TERMINAL_KEY}" \
                                   --tag ${DOCKER_IMAGE_FE}:${BUILD_NUMBER} \
                                   --tag ${DOCKER_IMAGE_FE}:latest \
                                   --push .
