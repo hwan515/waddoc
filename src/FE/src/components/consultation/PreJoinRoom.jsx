@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Video, Mic, MicOff, VideoOff, MonitorUp } from 'lucide-react';
 
 const PreJoinRoom = ({
@@ -150,7 +150,7 @@ const PreJoinRoom = ({
                         onClick={onJoin}
                         className="bg-primary hover:bg-blue-600 text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-primary/30 transition-all hover:-translate-y-0.5"
                     >
-                        미팅 시작
+                        진료 시작
                     </button>
                 </div>
             </div>

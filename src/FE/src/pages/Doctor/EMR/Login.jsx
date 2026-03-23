@@ -88,7 +88,7 @@ const EMRLogin = () => {
                             />
                         </div>
 
-                        <div className="flex items-center gap-2 text-sm text-slate-600 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                        <div className="flex items-center gap-2 text-[13px] text-slate-600 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
                             <ShieldCheck className="w-4 h-4 text-[#0353A4]" />
                             <span>의료법에 의거, 비인가자의 접근은 처벌받을 수 있습니다.</span>
                         </div>

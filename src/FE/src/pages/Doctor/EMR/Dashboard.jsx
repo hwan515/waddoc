@@ -58,6 +58,7 @@ const INITIAL_HISTORY_DB = {
 const LegacyEMRDashboard = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
+    const doctorDisplayName = useAuthStore((state) => state.user?.name || state.user?.username || '원장');
 
     // SSE 알림 연동
     const { isConnected, notifications, removeNotification } = useSSE();
@@ -517,7 +518,7 @@ const LegacyEMRDashboard = () => {
             <div className="bg-[#E0E0E0] border-t border-slate-400 px-2 py-0.5 flex justify-between text-[11px] text-slate-600 shrink-0">
                 <div className="flex space-x-4">
                     <span>의사랑 Ver 5.2.14 [최신버전]</span>
-                    <span>사용자: 원장</span>
+                    <span>사용자: {doctorDisplayName}</span>
                 </div>
                 <span>Caps Lock: OFF | NUM Lock: ON</span>
             </div>
