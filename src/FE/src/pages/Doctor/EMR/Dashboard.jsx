@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, X } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
@@ -75,44 +75,52 @@ const LegacyEMRDashboard = () => {
     // 3. 현재 선택된 환자
     const [selectedPatientId, setSelectedPatientId] = useState('P1001');
 
+    const syncAssignedCases = useEffectEvent(async () => {
+        try {
+            const response = await apiClient.get('/cases');
+            const cases = response.data.cases || [];
+
+            const mappedReservations = cases.map(c => {
+                const mappedGender = String(c.patientGender).toUpperCase() === 'MALE' ? '남' : String(c.patientGender).toUpperCase() === 'FEMALE' ? '여' : '미상';
+                return {
+                    id: c.caseId,
+                    ptNo: c.patientId,
+                    name: c.patientName,
+                    gender: mappedGender,
+                    symptom: getRandomSymptom(c.departmentName),
+                    date: c.appointmentDate,
+                    time: c.startTime?.substring(0, 5) || '00:00',
+                    status: c.status === 'CREATED' ? '예약' : c.status === 'IN_PROGRESS' ? '진료대기' : '완료',
+                    type: '비대면' // 또는 c.missionPhase 기반 처리
+                };
+            });
+
+            setReservations(prev => {
+                const combined = [...prev];
+                mappedReservations.forEach(r => {
+                    if (!combined.some(existing => existing.id === r.id)) {
+                        combined.push(r);
+                    }
+                });
+                return combined;
+            });
+        } catch (err) {
+            console.error("Failed to fetch cases from API:", err);
+        }
+    });
+
     // API를 통한 백엔드 케이스(예약) 초기 로드
     useEffect(() => {
-        const fetchCases = async () => {
-            try {
-                const response = await apiClient.get('/cases');
-                const cases = response.data.cases || [];
+        syncAssignedCases();
+    }, [syncAssignedCases]);
 
-                const mappedReservations = cases.map(c => {
-                    const mappedGender = String(c.patientGender).toUpperCase() === 'MALE' ? '남' : String(c.patientGender).toUpperCase() === 'FEMALE' ? '여' : '미상';
-                    return {
-                        id: c.caseId,
-                        ptNo: c.patientId,
-                        name: c.patientName,
-                        gender: mappedGender,
-                        symptom: getRandomSymptom(c.departmentName),
-                        date: c.appointmentDate,
-                        time: c.startTime?.substring(0, 5) || '00:00',
-                        status: c.status === 'CREATED' ? '예약' : c.status === 'IN_PROGRESS' ? '진료대기' : '완료',
-                        type: '비대면' // 또는 c.missionPhase 기반 처리
-                    };
-                });
-
-                setReservations(prev => {
-                    const combined = [...prev];
-                    mappedReservations.forEach(r => {
-                        if (!combined.some(existing => existing.id === r.id)) {
-                            combined.push(r);
-                        }
-                    });
-                    return combined;
-                });
-            } catch (err) {
-                console.error("Failed to fetch cases from API:", err);
-            }
-        };
-
-        fetchCases();
-    }, []);
+    // SSE 연결이 늦게 붙은 경우 누락된 신규 예약을 한 번 더 동기화한다.
+    useEffect(() => {
+        if (!isConnected) {
+            return;
+        }
+        syncAssignedCases();
+    }, [isConnected, syncAssignedCases]);
 
     // 시계 업데이트
     useEffect(() => {
