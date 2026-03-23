@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 차량 단말이 처음 붙을 때 필요한 부트스트랩과 체크인 API를 제공한다.
+ */
 @RestController
 @RequestMapping("/api/v1/terminal")
 @RequiredArgsConstructor

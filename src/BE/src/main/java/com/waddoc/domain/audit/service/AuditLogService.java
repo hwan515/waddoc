@@ -5,6 +5,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
+/**
+ * 도메인 이벤트를 공통 형식의 감사 로그로 남긴다.
+ */
 @Slf4j
 @Service
 public class AuditLogService {

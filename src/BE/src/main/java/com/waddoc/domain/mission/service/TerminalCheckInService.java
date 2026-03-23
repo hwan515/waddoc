@@ -25,6 +25,9 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 차량 단말의 체크인 후보 조회와 미션 claim 규칙을 처리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class TerminalCheckInService {
@@ -40,6 +43,9 @@ public class TerminalCheckInService {
     private final MissionTerminalTokenService missionTerminalTokenService;
     private final AuditLogService auditLogService;
 
+    /**
+     * 단말이 가진 권역/차량 범위를 기준으로 실제 조회 가능한 후보만 추려서 내려준다.
+     */
     @Transactional(readOnly = true)
     public TerminalCheckInCandidatesResponse lookupCandidates(
             TerminalCheckInCandidatesRequest request,
@@ -83,6 +89,9 @@ public class TerminalCheckInService {
         );
     }
 
+    /**
+     * 후보 조회에 사용한 식별값을 다시 검증한 뒤, 단말이 해당 미션을 점유하도록 만든다.
+     */
     @Transactional
     public IssueMissionTerminalTokenResponse claimMission(
             String missionId,

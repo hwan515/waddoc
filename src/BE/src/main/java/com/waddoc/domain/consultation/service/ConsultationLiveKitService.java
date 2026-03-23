@@ -21,6 +21,9 @@ import retrofit2.Response;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * LiveKit 방 생성과 의사/환자 참가 토큰 발급을 캡슐화한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

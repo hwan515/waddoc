@@ -41,6 +41,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 예약 생성 시 슬롯 선점부터 케이스/배차 준비, 알림 발행까지 한 트랜잭션 흐름으로 묶는다.
+ */
 @Service
 @RequiredArgsConstructor
 public class BookingService {

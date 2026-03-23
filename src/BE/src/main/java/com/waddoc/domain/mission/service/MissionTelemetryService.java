@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+/**
+ * 차량 telemetry의 인증, 최신성 판단, 위치/단계 반영을 담당한다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -37,6 +40,9 @@ public class MissionTelemetryService {
         }
     }
 
+    /**
+     * 이미 처리한 이벤트나 더 오래된 데이터는 버리고, 최신 상태만 미션에 반영한다.
+     */
     public void processTelemetry(String missionId, MissionTelemetryRequest request) {
         Mission mission = missionRepository.findByPublicId(missionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
@@ -72,6 +78,9 @@ public class MissionTelemetryService {
         return false;
     }
 
+    /**
+     * 미션 단계가 뒤로 가지 않도록 막고, INCIDENT 같은 예외 상태만 별도 규칙을 적용한다.
+     */
     private boolean shouldUpdatePhase(Mission mission, MissionPhase incomingPhase) {
         MissionPhase currentPhase = mission.getPhase();
         if (currentPhase == incomingPhase) {

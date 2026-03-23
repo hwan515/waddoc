@@ -17,6 +17,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 차량 운영 상태를 조회/변경하고 복구 시 대기 중인 재배차를 다시 깨운다.
+ */
 @Service
 @RequiredArgsConstructor
 public class VehicleStatusService {

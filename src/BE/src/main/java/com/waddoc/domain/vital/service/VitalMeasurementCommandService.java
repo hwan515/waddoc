@@ -12,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * 케이스 단위 활력 징후를 생성하거나 최신 값으로 갱신한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class VitalMeasurementCommandService {

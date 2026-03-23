@@ -21,6 +21,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * 진료 요약의 조회와 저장, 세션 종료 시점 정리를 담당한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class ConsultationSummaryService {

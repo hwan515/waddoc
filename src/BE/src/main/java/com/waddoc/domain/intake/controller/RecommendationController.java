@@ -8,6 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 접수 내용으로 진료과와 예약 가능 슬롯을 추천하는 API를 노출한다.
+ */
 @RestController
 @RequestMapping("/api/v1/intake/sessions/{intakeSessionId}")
 @RequiredArgsConstructor

@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 
+/**
+ * 관리자가 환자 기본 정보와 기준 이미지를 등록할 때 사용하는 API다.
+ */
 @RestController
 @RequestMapping("/api/v1/patients")
 @RequiredArgsConstructor

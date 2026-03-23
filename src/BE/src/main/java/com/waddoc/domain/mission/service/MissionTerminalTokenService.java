@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 현장 단말이 사용할 mission-scoped JWT를 최소 권한으로 발급한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class MissionTerminalTokenService {

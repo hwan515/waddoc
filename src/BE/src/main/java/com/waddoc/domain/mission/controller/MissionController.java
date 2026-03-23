@@ -41,6 +41,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
+/**
+ * 왕진 미션의 생성, 조회, 단계 변경과 현장 단말 연동 API를 묶은 컨트롤러다.
+ */
 @RestController
 @RequestMapping("/api/v1/missions")
 @RequiredArgsConstructor

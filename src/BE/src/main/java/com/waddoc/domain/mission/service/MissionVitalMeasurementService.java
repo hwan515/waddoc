@@ -21,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.EnumSet;
 import java.util.Map;
 
+/**
+ * 미션 진행 중 활력 징후 저장 권한과 상태를 검증한 뒤 실제 기록을 남긴다.
+ */
 @Service
 @RequiredArgsConstructor
 public class MissionVitalMeasurementService {

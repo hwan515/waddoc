@@ -20,6 +20,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * LiveKit webhook을 검증하고 참가자 연결 상태를 진료 세션에 반영한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

@@ -10,6 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 접수 세션 중 환자 식별에 필요한 조회 API를 제공한다.
+ */
 @RestController
 @RequestMapping("/api/v1/intake/sessions/{intakeSessionId}/identify")
 @RequiredArgsConstructor

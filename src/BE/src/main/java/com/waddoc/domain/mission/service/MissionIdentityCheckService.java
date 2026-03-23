@@ -27,6 +27,9 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 환자 기준 이미지와 업로드된 자료를 비교해 미션 본인 확인을 확정한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,6 +50,10 @@ public class MissionIdentityCheckService {
     @Value("${consultation.identity-check-bypass-enabled:false}")
     private boolean identityCheckBypassEnabled;
 
+    /**
+     * 관리자 또는 미션 단말 권한을 확인한 뒤 신원 확인을 수행한다.
+     * 성공 결과는 캐시에 저장되어 이후 환자 토큰 발급에서 재사용된다.
+     */
     public MissionIdentityCheckResponse verify(
             String missionId,
             MultipartFile faceImage,

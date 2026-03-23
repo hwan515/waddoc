@@ -8,6 +8,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 접수 세션에서 이어지는 예약 생성, 조회, 취소 API를 제공한다.
+ */
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor

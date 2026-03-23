@@ -18,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 
+/**
+ * 케이스 기준으로 진료 세션을 생성하거나 재사용하는 쓰기 작업을 담당한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class ConsultationSessionCommandService {
@@ -28,6 +31,9 @@ public class ConsultationSessionCommandService {
     private final ConsultationLiveKitService consultationLiveKitService;
     private final AuditLogService auditLogService;
 
+    /**
+     * 같은 케이스에 열린 세션이 있으면 재사용하고, 없으면 LiveKit 방까지 함께 준비한다.
+     */
     @Transactional
     public CreateSessionResult createOrReuseSession(String caseId, AuthenticatedUser authenticatedUser) {
         DoctorProfile doctorProfile = accessControlService.getDoctorProfileOrThrow(authenticatedUser);

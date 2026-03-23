@@ -9,6 +9,9 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 사용자 역할에 맞는 로그인 가능 조건 검사를 위임하는 서비스다.
+ */
 @Service
 public class LoginEligibilityService {
 

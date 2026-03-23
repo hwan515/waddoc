@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+/**
+ * 의사와 관리자가 케이스를 조회하고 진료 세션을 시작할 때 사용하는 API다.
+ */
 @RestController
 @RequestMapping("/api/v1/cases")
 @RequiredArgsConstructor

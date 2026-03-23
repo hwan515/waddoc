@@ -11,6 +11,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 진료 세션의 현재 상태를 읽을 때 사용하는 조회 전용 서비스다.
+ */
 @Service
 @RequiredArgsConstructor
 public class ConsultationSessionQueryService {

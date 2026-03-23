@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 등록된 차량 단말이 처음 붙을 때 사용할 bootstrap 토큰을 발급한다.
+ */
 @Service
 public class DeviceTerminalTokenService {
 

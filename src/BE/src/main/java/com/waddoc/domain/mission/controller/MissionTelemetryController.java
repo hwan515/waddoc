@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 차량에서 올라오는 위치/상태 telemetry를 빠르게 수신해 비동기 처리로 넘긴다.
+ */
 @RestController
 @RequestMapping("/api/v1/missions")
 @RequiredArgsConstructor
@@ -25,6 +28,9 @@ public class MissionTelemetryController {
     private final MissionTelemetryService missionTelemetryService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
+    /**
+     * 단말 응답 지연을 줄이기 위해 검증만 한 뒤 Kafka로 넘기고 바로 202를 반환한다.
+     */
     @PostMapping("/{missionId}/telemetry")
     public ResponseEntity<Void> receiveTelemetry(
             @PathVariable String missionId,

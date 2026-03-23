@@ -24,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.EnumSet;
 import java.util.Map;
 
+/**
+ * 본인 확인이 끝난 환자에게만 진료방 입장 토큰을 발급한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

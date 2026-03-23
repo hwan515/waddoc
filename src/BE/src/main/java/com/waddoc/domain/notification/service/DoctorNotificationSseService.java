@@ -17,6 +17,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * 의사별 SSE 연결을 관리하고 새 예약 알림을 브라우저로 밀어 넣는다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

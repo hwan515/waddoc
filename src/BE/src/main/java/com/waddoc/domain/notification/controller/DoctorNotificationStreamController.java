@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+/**
+ * 의사 클라이언트가 실시간 알림 스트림을 구독하는 SSE 엔드포인트다.
+ */
 @RestController
 @RequestMapping("/api/v1/doctors/me/notifications")
 @RequiredArgsConstructor

@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+/**
+ * 미션 생성과 단계 전이처럼 상태를 바꾸는 명령성 작업을 담당한다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -31,6 +34,9 @@ public class MissionCommandService {
     private final CareCaseRepository careCaseRepository;
     private final AccessControlService accessControlService;
 
+    /**
+     * 케이스별 미션 중복 생성을 막고, 배차 시간을 KST 기준으로 정규화해 저장한다.
+     */
     public CreateMissionResponse createMission(
             AuthenticatedUser authenticatedUser,
             CreateMissionRequest request
@@ -70,6 +76,10 @@ public class MissionCommandService {
                 ));
     }
 
+    /**
+     * 관리자가 미션 진행 단계를 수동으로 바꿀 때 사용한다.
+     * 실제 전이 가능 여부는 별도 검증 로직에서 판단한다.
+     */
     public UpdateMissionPhaseResponse updateMissionPhase(
             AuthenticatedUser authenticatedUser,
             String missionId,
@@ -89,6 +99,10 @@ public class MissionCommandService {
         return UpdateMissionPhaseResponse.of(savedMission, previousPhase);
     }
 
+    /**
+     * 미션 단계가 앞뒤로 뒤엉키지 않도록 허용된 전이만 통과시킨다.
+     * INCIDENT 상태는 복귀 전 단계로만 돌아갈 수 있다.
+     */
     private void validatePhaseTransition(Mission mission, MissionPhase targetPhase) {
         MissionPhase currentPhase = mission.getPhase();
         if (currentPhase == targetPhase) {

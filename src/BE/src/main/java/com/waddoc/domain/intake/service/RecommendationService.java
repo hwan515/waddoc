@@ -28,6 +28,9 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 문진 결과를 바탕으로 진료과를 정하고 예약 가능한 슬롯을 추천한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class RecommendationService {

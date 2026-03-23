@@ -18,6 +18,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 관리자 화면에서 필요한 미션 목록과 상세 조회 응답을 조립한다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)

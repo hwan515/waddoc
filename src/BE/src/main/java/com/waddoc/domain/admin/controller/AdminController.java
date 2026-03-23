@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 
+/**
+ * 관리자 대시보드에서 사용하는 조회/승인 API를 모아둔 컨트롤러다.
+ */
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
