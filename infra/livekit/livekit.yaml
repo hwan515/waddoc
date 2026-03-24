@@ -5,7 +5,8 @@ rtc:
   tcp_port: 8881
 turn:
   enabled: true
-  domain: turn.waddoc.site
+  # TURN/UDP 전용. 일치하는 TLS 엔드포인트/인증서 없이 
+# TURN 호스트가 노출(광고)되는 것을 방지하기 위해 TURN/TLS는 비활성화 상태로 둔다.
   tls_port: 0
   udp_port: 8478
   relay_range_start: 8600
