@@ -140,6 +140,35 @@ class ConsultationWebhookServiceTest {
     }
 
     @Test
+    void handleWebhook_keepsReadySessionWhenRoomFinishedBeforeConsultationStarts() {
+        ConsultationSession session = buildSession();
+        session.connectDoctor();
+
+        when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
+        stubIdempotencyCheck();
+
+        String body = """
+                {
+                  "event": "room_finished",
+                  "room": {
+                    "name": "room_ses_test123"
+                  }
+                }
+                """;
+        when(webhookReceiver.receive(body, "signed-header"))
+                .thenReturn(buildRoomFinishedEvent("room_ses_test123"));
+
+        consultationWebhookService.handleWebhook(body, "signed-header");
+
+        assertThat(session.getStatus()).isEqualTo(ConsultationSessionStatus.READY);
+        assertThat(session.getEndedAt()).isNull();
+        assertThat(session.getDurationMinutes()).isNull();
+        verify(disconnectTimerService).cancel("ses_test123", "DOCTOR");
+        verify(disconnectTimerService).cancel("ses_test123", "PATIENT");
+        verify(disconnectTimerService, never()).schedule(anyString(), anyString());
+    }
+
+    @Test
     void handleWebhook_rejectsInvalidSignature() {
         when(webhookReceiver.receive("{}", "invalid-token")).thenThrow(new IllegalArgumentException("invalid signature"));
 

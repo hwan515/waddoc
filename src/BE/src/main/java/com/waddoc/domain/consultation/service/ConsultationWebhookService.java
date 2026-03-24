@@ -133,7 +133,8 @@ public class ConsultationWebhookService {
         disconnectTimerService.cancel(session.getPublicId(), ParticipantRole.DOCTOR.name());
         disconnectTimerService.cancel(session.getPublicId(), ParticipantRole.PATIENT.name());
 
-        if (session.getStatus() != ConsultationSessionStatus.COMPLETED) {
+        // 진료가 실제 시작된 세션만 room_finished 시 완료 처리한다.
+        if (session.getStatus() == ConsultationSessionStatus.IN_PROGRESS) {
             session.complete(calculateDurationMinutes(session, LocalDateTime.now()));
         }
 
