@@ -1,3 +1,4 @@
+*.sh text eol=lf
 /src/ros2_docker/workspace/unity/Assets/model/farm/Meshy_AI_A_modular_fenced_farm_0318053526_texture.fbx filter=lfs diff=lfs merge=lfs -text
 /src/ros2_docker/workspace/unity/Assets/model/greenhouse/source/Farmer[[:space:]]3,5[[:space:]]x[[:space:]]6m.obj filter=lfs diff=lfs merge=lfs -text
 /src/ros2_docker/workspace/unity/Assets/model/집2/Meshy_AI_집2_0318052554_texture.fbx filter=lfs diff=lfs merge=lfs -text

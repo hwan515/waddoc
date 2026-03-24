@@ -5,13 +5,15 @@
 ```
 infra/
 ├── .env.example              # 환경 변수 템플릿
+├── Jenkinsfile               # Jenkins CI/CD 파이프라인 정의
 ├── docker-compose.yml        # 개발 메인 스택 (8 서비스, AI 제외)
-├── docker-compose.prod.yml   # 배포 메인 서버 (8+ 서비스, frontend-phone/zenoh 포함)
+├── docker-compose.prod.yml   # 배포 메인 서버 (9+ 서비스, coturn/frontend-phone/zenoh 포함)
 ├── nginx/
 │   ├── dev.conf              # 개발 Nginx (HTTP)
 │   └── prod.conf             # 배포 Nginx (SSL + WSS 프록시)
 ├── livekit/
-│   └── livekit.yaml          # LiveKit RTC/TURN 설정
+│   ├── entrypoint.sh         # LiveKit env 치환 래퍼 (LF 유지)
+│   └── livekit.yaml          # LiveKit RTC + 외부 TURN(coturn) 설정
 ├── certs/                    # SSL 인증서 (gitignored)
 └── README.md
 ```
@@ -71,7 +73,58 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 - `.env` 에 `PROD_GPU_SERVER_HOST` 와 `SERVER_DOMAIN` 을 반드시 설정해야 한다.
+- `livekit.yaml`, `entrypoint.sh` 같은 bind mount 파일을 수정한 배포라면 아래 재시작까지 수행해야 한다.
+
+```bash
+docker compose -f docker-compose.prod.yml restart livekit coturn
+```
 - 배포 환경의 `spring-api` 도 GPU 서버 `443`만 사용한다.
+
+### CI/CD 파이프라인 (Jenkins)
+
+운영 배포는 `infra/Jenkinsfile`에 정의된 Jenkins 파이프라인이 자동으로 수행한다.
+
+#### 파이프라인 흐름
+
+```
+GitLab (dev push) → Checkout → 변경 감지 → 테스트 → Docker buildx → DockerHub push → docker compose up
+```
+
+#### 스테이지 상세
+
+| 스테이지 | 설명 |
+|----------|------|
+| Checkout | GitLab deploy token으로 소스 checkout (shallow clone) |
+| Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `infra/` 경로별 변경 감지 |
+| Quality Gate | BE 변경 시 단위 테스트 실행 (`-PskipIntegrationTests=true`) |
+| Build & Push | 변경된 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 |
+| Deploy | `docker compose pull` → `up -d`로 변경 서비스만 교체, spring-api는 항상 3개 보정 |
+
+#### 빌더 아키텍처
+
+서비스별 독립 buildx builder를 사용하여 병렬 빌드 충돌을 방지하고 캐시를 유지한다.
+
+| 빌더 이름 | 대상 서비스 |
+|-----------|------------|
+| `waddoc-builder-be` | Backend (`src/BE`) |
+| `waddoc-builder-fe` | Frontend (`src/FE`) |
+| `waddoc-builder-fp` | Phone (`src/FE-phone`) |
+
+#### 이미지 태깅 전략
+
+- `BUILD_NUMBER` 태그: 배포 추적용 (예: `hwan515/waddoc-backend:51`)
+- `latest` 태그: 수동 확인/기본 fallback용
+- 부분 배포 시 변경되지 않은 서비스는 현재 실행 중인 이미지 태그를 그대로 유지한다.
+
+#### 필요한 Jenkins Credentials
+
+- `gitlab-deploy-token`: GitLab Deploy Token (Username+Password)
+- `dockerhub-credentials`: DockerHub 계정
+
+#### 환경 변수
+
+- `PROD_ENV_FILE`: 운영 환경변수 파일 경로 (서버 로컬, `/home/ubuntu/.waddoc/prod.env`)
+- `PROJECT_PATH`: EC2 내 프로젝트 경로 (`/home/ubuntu/S14P21A603`)
 
 ### 배포 환경 — Backend 다중 인스턴스 (수평 확장)
 
@@ -180,9 +233,11 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 | 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
 | 8881 | 7881 | livekit | ICE/TCP |
 | 8882/udp | 7882/udp | livekit | ICE/UDP mux |
-| 8478/udp | 3478/udp | livekit | TURN UDP |
+| 8478/udp | 8478/udp | coturn | TURN listener |
+| 8600-8699/udp | 8600-8699/udp | coturn | TURN relay range |
 
 > LiveKit signaling(7880)은 Nginx가 `/livekit` 경로로 WSS 프록시한다.
 > 클라이언트는 `wss://<DOMAIN>/livekit`으로 접속한다.
 > 운영에서는 `rtc.use_external_ip: false`와 `LIVEKIT_NODE_IP=<EC2 공인 IP>` 조합으로 공인 IP를 고정한다.
-> STUN 자동 감지에 맡기면 브라우저가 파싱하지 못하는 잘못된 TURN URL이 광고될 수 있다.
+> TURN 릴레이는 LiveKit 내장 TURN이 아니라 `coturn` 컨테이너가 담당한다.
+> `livekit.yaml`, `entrypoint.sh`는 bind mount 파일이므로 수정 후 `docker compose restart livekit coturn`이 필요하다.

@@ -425,21 +425,40 @@ services:
 
   livekit:
     image: livekit/livekit-server:latest
+    entrypoint: ["/bin/sh", "/etc/entrypoint.sh"]
     expose:
       - "7880"               # API + signaling WebSocket (Nginx가 프록시)
     ports:
-      - "8881:7881"          # ICE/TCP (직접 노출 — 미디어 전용)
-      - "8882:7882/udp"      # ICE/UDP mux (직접 노출 — 미디어 전용)
-      - "8478:3478/udp"      # TURN UDP (직접 노출 — NAT traversal)
+      - "8881:8881"          # ICE/TCP (직접 노출 — 미디어 전용)
+      - "8882:8882/udp"      # ICE/UDP mux (직접 노출 — 미디어 전용)
     volumes:
-      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+      - ./livekit/livekit.yaml:/etc/livekit.yaml.tpl:ro
+      - ./livekit/entrypoint.sh:/etc/entrypoint.sh:ro
     environment:
       - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
-      - LIVEKIT_CONFIG=/etc/livekit.yaml
+      - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP}
+      - TURN_SECRET=${TURN_SECRET}
     deploy:
       resources:
         limits:
           memory: 1G
+
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    command: >
+      -n
+      --listening-port=8478
+      --min-port=8600
+      --max-port=8699
+      --lt-cred-mech
+      --user=waddoc:${TURN_SECRET}
+      --realm=turn.waddoc.com
+      --external-ip=${LIVEKIT_NODE_IP}
+      --no-tls
+      --no-dtls
+      --no-cli
+      --fingerprint
 
 volumes:
   pg_data:
@@ -729,8 +748,8 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 
 | 항목 | 개발 환경 | 배포 환경 |
 |------|----------|----------|
-| TURN 서버 | LiveKit 내장 TURN | LiveKit 내장 TURN |
-| TURN 포트 | 3478/udp (publish) | 8478/udp (publish) |
+| TURN 서버 | LiveKit 내장 TURN | 외부 coturn |
+| TURN 포트 | 3478/udp (publish) | 8478/udp (listener), 8600-8699/udp (relay) |
 | ICE/TCP | 7881 (publish) | 8881 (publish) |
 | ICE/UDP | 7882/udp mux (publish) | 8882/udp mux (publish) |
 | TLS TURN | 없음 | 없음 (P1 검토) |
@@ -744,7 +763,9 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 7880    API + signaling WS  개발: 직접 접속, 배포: Nginx가 WSS 프록시 (/livekit)
 7881    ICE/TCP             TCP fallback, 방화벽에서 UDP 차단 시 사용
 7882    ICE/UDP mux         모든 UDP 미디어가 단일 포트 통과
-3478    TURN/UDP            NAT traversal 릴레이
+3478    TURN/UDP            개발 환경 LiveKit 내장 TURN
+8478    TURN listener       배포 환경 coturn 리스너
+8600-8699 TURN relay        배포 환경 coturn relay range
 ```
 
 #### 배포 환경 포트 매핑
@@ -756,7 +777,8 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 443         443         Nginx HTTPS (API, 프론트, LiveKit WS — SSL termination)
 8881        7881        LiveKit ICE/TCP (직접 노출 — 미디어 전용)
 8882/udp    7882/udp    LiveKit ICE/UDP mux (직접 노출 — 미디어 전용)
-8478/udp    3478/udp    TURN UDP (직접 노출 — NAT traversal)
+8478/udp       8478/udp       coturn TURN listener
+8600-8699/udp  8600-8699/udp  coturn TURN relay range
 
 ※ LiveKit signaling(7880)은 Nginx가 /livekit 경로로 WSS 프록시.
   클라이언트는 wss://<DOMAIN>/livekit 으로 접속.
@@ -766,20 +788,24 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 
 ```yaml
 # livekit/livekit.yaml
+port: 7880
 rtc:
-  use_external_ip: false          # 운영에서는 --node-ip로 공인 IP를 명시
-  udp_port: 7882               # UDP mux: 모든 ICE/UDP가 단일 포트 통과
-  tcp_port: 7881               # ICE/TCP fallback
-  # port_range_start/end 사용 안 함 (udp_port 사용 시 무시됨)
-
+  use_external_ip: false
+  udp_port: 8882
+  tcp_port: 8881
+  turn_servers:
+    - host: $LIVEKIT_NODE_IP
+      port: 8478
+      protocol: udp
+      username: waddoc
+      credential: $TURN_SECRET
 turn:
-  enabled: true
-  tls_port: 0                  # MVP에서 TLS TURN 사용 안 함
-  udp_port: 3478               # TURN/UDP (외부 8478으로 매핑)
+  enabled: false
 ```
 
-> 운영 docker-compose에서는 `livekit-server --config /etc/livekit.yaml --node-ip <PUBLIC_IP>` 형태로 공인 IP를 명시한다.
-> `turn.domain`은 TURN/TLS 인증서 도메인과 맞추는 설정이므로, 현재처럼 `tls_port: 0`인 UDP-only 구성에서는 사용하지 않는다.
+> 운영 docker-compose에서는 `entrypoint.sh`가 `LIVEKIT_NODE_IP`, `TURN_SECRET`를 치환한 뒤 `/livekit-server --config /tmp/livekit.yaml --node-ip <PUBLIC_IP>` 형태로 LiveKit을 실행한다.
+> TURN listener/relay는 LiveKit이 아니라 `coturn` 컨테이너가 맡는다.
+> bind mount 파일(`livekit.yaml`, `entrypoint.sh`)을 바꾸면 `docker compose restart livekit coturn`이 필요하다.
 
 #### Nginx 설정 (배포 환경)
 
@@ -845,7 +871,8 @@ sudo ufw allow 80/tcp              # HTTP → HTTPS 리다이렉트
 sudo ufw allow 443/tcp             # HTTPS (API, 프론트, LiveKit WS — SSL termination)
 sudo ufw allow 8881/tcp            # LiveKit ICE/TCP
 sudo ufw allow 8882/udp            # LiveKit ICE/UDP mux
-sudo ufw allow 8478/udp            # TURN UDP
+sudo ufw allow 8478/udp            # coturn TURN listener
+sudo ufw allow 8600:8699/udp       # coturn TURN relay range
 sudo ufw enable
 ```
 
@@ -853,7 +880,7 @@ sudo ufw enable
 > **8880 포트 불필요**: LiveKit signaling(7880)은 Nginx가 443 포트에서 `/livekit` 경로로 WSS 프록시하므로, 8880 포트를 별도로 개방할 필요가 없다.
 
 > [!WARNING]
-> **ICE/UDP mux (8882/udp)** 포트가 방화벽에서 차단되면 UDP 미디어가 불가능하고 ICE/TCP(8881)로 fallback된다. TURN/UDP(8478)도 차단되면 NAT traversal이 실패할 수 있다.
+> **ICE/UDP mux (8882/udp)** 포트가 방화벽에서 차단되면 UDP 미디어가 불가능하고 ICE/TCP(8881)로 fallback된다. `coturn`의 8478/udp 또는 relay range(8600-8699/udp)가 차단되면 symmetric NAT 환경에서 TURN 릴레이가 실패할 수 있다.
 
 ### 7.2 네트워크 품질 저하 대응
 
@@ -1202,7 +1229,8 @@ GPU 서버 내부 서비스 포트 8000, 8001은 외부 직접 공개하지 않�
 ```
 메인 서버:
   외부 공개: 80, 443 (Nginx — API, 프론트, LiveKit WS SSL termination),
-            8092 (Kafka host access), 8881 (ICE/TCP), 8882/udp (ICE/UDP), 8478/udp (TURN)
+            8092 (Kafka host access), 8881 (ICE/TCP), 8882/udp (ICE/UDP),
+            8478/udp (TURN listener), 8600-8699/udp (TURN relay)
   내부 전용: 8080 (Spring), 7880 (LiveKit WS), 5432 (PostgreSQL), 6379 (Redis), 2181 (Zookeeper), 29092 (Kafka broker)
 
 AI 서버:
@@ -1347,8 +1375,8 @@ sudo systemctl restart stt-ai
 | 방화벽 | GPU 서버에 Dev 메인 서버/VPN 대역만 허용 | GPU 서버에 Prod 메인 서버 IP만 허용 |
 | 자원 제한 | 느슨 | 프로세스별 limits / systemd 제어 권장 |
 | 인증 쿠키 Secure | 없음 (HTTP) | Secure 필수 (HTTPS) |
-| TURN | LiveKit 내장, 3478/udp (publish) | LiveKit 내장, 8478/udp (publish) |
+| TURN | LiveKit 내장, 3478/udp (publish) | coturn, 8478/udp (listener) + 8600-8699/udp (relay) |
 | LiveKit signaling | 7880 직접 접속 (HTTP) | Nginx WSS 프록시 (`/livekit` → 7880, SSL termination) |
 | LiveKit 미디어 포트 | 7881, 7882/udp (publish) | 8881, 8882/udp (직접 노출) |
 | 포트 모델 | UDP mux (7882) | UDP mux (8882←7882) |
-| 허용 포트 범위 | 80, 3478, 7880-7882 | 80, 443, 8478, 8881-8882 |
+| 허용 포트 범위 | 80, 3478, 7880-7882 | 80, 443, 8478, 8600-8699, 8881-8882 |
