@@ -1,21 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Activity, Eye, EyeOff } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import { getHomePathForRole } from '../../utils/authRouting';
 
 const Login = () => {
     const navigate = useNavigate();
+    const authenticatedRole = useAuthStore((state) => state.user?.role);
 
     const [formData, setFormData] = useState({
         id: '',
         password: '',
-        role: 'patient'
     });
 
     const [showPassword, setShowPassword] = useState(false);
+
+    useEffect(() => {
+        const destination = getHomePathForRole(authenticatedRole);
+        if (destination) {
+            navigate(destination, { replace: true });
+        }
+    }, [authenticatedRole, navigate]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -35,9 +43,15 @@ const Login = () => {
             });
 
             const { accessToken, user } = response.data;
-            // 의사/관리자라도 로그인 할 수는 있겠으나 우선 저장
+            const destination = getHomePathForRole(user?.role);
+
+            if (!destination) {
+                alert('지원하지 않는 계정 권한입니다. 관리자에게 문의해주세요.');
+                return;
+            }
+
             useAuthStore.getState().setAuth(accessToken, user);
-            navigate('/patient/portal');
+            navigate(destination, { replace: true });
         } catch (error) {
             console.error('Login Failed:', error);
             alert('로그인에 실패했습니다. 아이디와 비밀번호를 다시 확인해주세요.');
@@ -63,8 +77,16 @@ const Login = () => {
                 {/* 폼 컨테이너 */}
                 <div className="w-full max-w-sm mx-auto flex-1 flex flex-col justify-center py-6">
                     <div className="mb-8 text-center lg:text-left">
-                        <h1 className="text-3xl font-bold mb-3 text-slate-900 tracking-tight">환영합니다</h1>
-                        <p className="text-sm text-slate-500 font-medium">서비스 이용을 위해 계정에 로그인해주세요.</p>
+                        <h1 className="text-3xl font-bold mb-3 text-slate-900 tracking-tight">보호자 포털 로그인</h1>
+                        <p className="text-sm text-slate-500 font-medium">
+                            승인된 보호자 계정으로 환자 포털에 접속하세요.
+                        </p>
+                        <Link
+                            to="/"
+                            className="mt-3 inline-flex text-sm font-semibold text-primary transition-colors hover:text-accent-1"
+                        >
+                            다른 역할 진입 경로 보기
+                        </Link>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
@@ -88,7 +110,7 @@ const Login = () => {
                             required
                             value={formData.password}
                             onChange={handleChange}
-                            placeholder="모의 테스트용 비밀번호를 입력해주세요"
+                            placeholder="비밀번호를 입력해주세요"
                             iconRight={
                                 <button
                                     type="button"
@@ -118,7 +140,7 @@ const Login = () => {
 
                         {/* 로그인 버튼 */}
                         <Button type="submit" fullWidth className="mt-4">
-                            로그인
+                            포털 로그인
                         </Button>
                     </form>
 
