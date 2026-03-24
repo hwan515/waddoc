@@ -48,7 +48,6 @@ const PatientPortal = () => {
                         return {
                             id: s.caseId || index,
                             date: s.consultationDate || '',
-                            time: '-', // API 명세상 시간은 제공되지 않으므로 임시 대시
                             doctorName: s.doctorName,
                             department: s.departmentName,
                             status: '완료', // summaries API는 완료된 것만 내려줌

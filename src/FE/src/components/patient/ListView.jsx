@@ -10,25 +10,22 @@ const ListView = ({ records, patientName }) => {
             <div className="w-full overflow-hidden border border-slate-200 rounded-2xl shadow-sm bg-white">
                 <table className="w-full border-collapse">
                     <thead>
-                        <tr className="bg-[#0353A4] text-white">
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-[#ffffff20]">진료일</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-[#ffffff20]">진료과목</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-[#ffffff20]">담당의</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-[#ffffff20]">처방전 보기</th>
+                        <tr className="bg-primary text-white">
+                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">진료일</th>
+                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">진료과목</th>
+                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">담당의</th>
+                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">처방전 보기</th>
                             <th className="px-6 py-4 text-center text-sm font-bold">소견서 보기</th>
                         </tr>
                     </thead>
                     <tbody>
                         {records.length > 0 ? records.map((r, i) => (
-                            <tr key={r.id || i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-[#F8FAFC]'} hover:bg-[#B9D6F2]/20 transition-colors border-b border-slate-200 last:border-b-0`}>
+                            <tr key={r.id || i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-secondary/20 transition-colors border-b border-slate-200 last:border-b-0`}>
                                 <td className="px-6 py-4 border-r border-slate-200 text-center">
-                                    <div className="flex flex-col items-center">
-                                        <span className="text-sm font-bold text-slate-700">{r.date.replace(/-/g, '/')}</span>
-                                        <span className="text-xs font-semibold text-slate-500 mt-0.5">{r.time}</span>
-                                    </div>
+                                    <span className="text-sm font-bold text-slate-700">{r.date.replace(/-/g, '/')}</span>
                                 </td>
                                 <td className="px-6 py-4 border-r border-slate-200 text-center">
-                                    <span className="text-sm font-bold text-[#0353A4]">{r.department}</span>
+                                    <span className="text-sm font-bold text-primary">{r.department}</span>
                                 </td>
                                 <td className="px-6 py-4 border-r border-slate-200 text-center">
                                     <span className="text-sm font-bold text-slate-700">{r.doctorName}</span>
@@ -37,7 +34,7 @@ const ListView = ({ records, patientName }) => {
                                     {r.hasPrescription ? (
                                         <button 
                                             onClick={() => setSelectedPrescription(r)}
-                                            className="text-sm font-bold text-[#0353A4] hover:text-white hover:bg-[#0353A4] border border-[#0353A4] px-4 py-1.5 rounded-full transition-all mx-auto shadow-sm active:translate-y-[1px]"
+                                            className="mx-auto rounded-full border border-primary px-4 py-1.5 text-sm font-bold text-primary shadow-sm transition-all hover:bg-primary hover:text-white active:translate-y-[1px]"
                                         >
                                             처방전 보기
                                         </button>

@@ -82,7 +82,7 @@ const PrescriptionModal = ({ isOpen, onClose, record, patientName }) => {
                                     <tr>
                                         <th className="border border-slate-400 bg-slate-100 py-1.5 px-3 md:py-2 text-left w-24 font-bold text-black">교부일자</th>
                                         <td className="border border-slate-400 py-1.5 px-3 md:py-2 text-black font-medium">
-                                            {record.date} {record.time !== '-' ? record.time : ''}
+                                            {record.date}
                                         </td>
                                     </tr>
                                     <tr>

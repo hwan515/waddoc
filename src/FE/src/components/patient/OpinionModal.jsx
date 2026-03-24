@@ -63,7 +63,7 @@ const OpinionModal = ({ isOpen, onClose, record, patientName }) => {
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-0 border border-slate-400 text-xs md:text-sm mb-3">
                             <div className="bg-slate-100 p-2 md:p-3 font-bold border-r border-b border-slate-400 flex items-center text-black">진료일자</div>
                             <div className="p-2 md:p-3 border-r border-b border-slate-400 font-medium text-black">
-                                {record.date.replace(/-/g, '.')} {record.time !== '-' ? record.time : ''}
+                                {record.date.replace(/-/g, '.')}
                             </div>
                             
                             <div className="bg-slate-100 p-2 md:p-3 font-bold border-r border-b border-slate-400 flex items-center text-black">진료과목</div>
