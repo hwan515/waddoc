@@ -10,6 +10,7 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image
@@ -34,10 +35,10 @@ class HybridDijkstraVisionFollower(Node):
         self.bridge = CvBridge()
 
         self.odom_sub = self.create_subscription(
-            Odometry, '/odom', self.odom_callback, 10
+            Odometry, '/odom', self.odom_callback, qos_profile_sensor_data
         )
         self.image_sub = self.create_subscription(
-            Image, '/camera/image_raw', self.image_callback, 10
+            Image, '/camera/image_raw', self.image_callback, qos_profile_sensor_data
         )
         self.estop_sub = self.create_subscription(
             Bool, '/ec2_cmd/e_stop', self.estop_callback, 1
@@ -52,6 +53,7 @@ class HybridDijkstraVisionFollower(Node):
         self.pub_state_waypoint = self.create_publisher(
             Int32, '/cmd_state/target_waypoint', 1
         )
+        self.state_pub = self.create_publisher(String, '/state', 1)
         self.pub_minimap_route = self.create_publisher(
             String, '/ec2_state/minimap_route', 1
         )
@@ -259,9 +261,12 @@ class HybridDijkstraVisionFollower(Node):
         self.estop_reason = ''
 
         self.current_mode = 'waiting_goal'
+        self.current_state_label = None
+        self.pending_state_timer = None
 
         self.load_map(self.waypoint_json_path)
         self.initialize_yolo_detector()
+        self.publish_state_if_changed('대기')
 
         self.get_logger().info(
             f'Hybrid follower started. json={self.waypoint_json_path}, '
@@ -311,6 +316,39 @@ class HybridDijkstraVisionFollower(Node):
         msg = Int32()
         msg.data = int(value)
         publisher.publish(msg)
+
+    def publish_state_if_changed(self, state_text):
+        state_text = str(state_text).strip()
+        if not state_text or self.current_state_label == state_text:
+            return False
+
+        msg = String()
+        msg.data = state_text
+        self.state_pub.publish(msg)
+        self.current_state_label = state_text
+        return True
+
+    def cancel_pending_state_timer(self):
+        timer = self.pending_state_timer
+        if timer is None:
+            return
+
+        timer.cancel()
+        self.destroy_timer(timer)
+        self.pending_state_timer = None
+
+    def schedule_delayed_state_publish(self, state_text, delay_sec=1.0):
+        self.cancel_pending_state_timer()
+
+        def delayed_publish_callback():
+            timer = self.pending_state_timer
+            if timer is not None:
+                self.pending_state_timer = None
+                timer.cancel()
+                self.destroy_timer(timer)
+            self.publish_state_if_changed(state_text)
+
+        self.pending_state_timer = self.create_timer(delay_sec, delayed_publish_callback)
 
     def normalize_detection_label(self, label):
         return ' '.join(
@@ -771,6 +809,8 @@ class HybridDijkstraVisionFollower(Node):
                 self.reset_vision_tracking()
                 self.publish_int_state(self.pub_state_waypoint, 0)
 
+            self.cancel_pending_state_timer()
+            self.publish_state_if_changed('긴급 정지')
             self.stop_vehicle()
             self.current_mode = 'estop'
             return
@@ -1069,6 +1109,9 @@ class HybridDijkstraVisionFollower(Node):
         self.publish_int_state(self.pub_state_waypoint, state_value)
         self.export_route_snapshot(start_id, goal_id, state_value, self.path, self.trajectory)
         self.clear_pending_goal()
+        self.cancel_pending_state_timer()
+        self.publish_state_if_changed('출발')
+        self.schedule_delayed_state_publish('주행 중')
 
         self.get_logger().info(f'생성된 waypoint 경로: {" -> ".join(self.path)}')
         self.get_logger().info(f'trajectory point 수: {len(self.trajectory)}')
@@ -1701,6 +1744,9 @@ class HybridDijkstraVisionFollower(Node):
         goal_dist = self.get_goal_distance()
         if goal_dist < self.goal_tolerance:
             self.get_logger().info('최종 목적지 도착!')
+            self.cancel_pending_state_timer()
+            self.publish_state_if_changed('도착')
+            self.schedule_delayed_state_publish('진료중')
             self.clear_navigation(clear_goal=True, clear_reason='goal_reset')
             self.publish_int_state(self.pub_state_waypoint, 0)
             self.stop_vehicle()
@@ -1718,6 +1764,9 @@ class HybridDijkstraVisionFollower(Node):
         end_dist = self.dist_xy(self.current_x, self.current_z, end_x, end_z)
         if lookahead_idx >= len(self.trajectory) - 1 and end_dist < self.traj_reach_tolerance:
             self.get_logger().info('trajectory 끝점 도달')
+            self.cancel_pending_state_timer()
+            self.publish_state_if_changed('도착')
+            self.schedule_delayed_state_publish('진료중')
             self.clear_navigation(clear_goal=True, clear_reason='goal_reset')
             self.publish_int_state(self.pub_state_waypoint, 0)
             self.stop_vehicle()

@@ -7,8 +7,7 @@ import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
-
-const MINIMAP_API_URL = import.meta.env.VITE_MINIMAP_API_URL || '/api/minimap';
+import { getRobotMinimapApiUrlCandidates } from '../../utils/runtimeConfig';
 const MINIMAP_POLL_INTERVAL_MS = 100;
 
 const MONITOR_STATE_LABELS = {
@@ -25,16 +24,18 @@ const MONITOR_STATE_LABELS = {
     ARRIVED: '도착',
     COMPLETED: '도착',
     '도착': '도착',
-    VERIFYING: '진료 중',
-    CONSULTING: '진료 중',
-    CONSULTATION: '진료 중',
-    '진료 중': '진료 중',
-    INCIDENT: '긴급정지',
-    ESTOP: '긴급정지',
-    E_STOP: '긴급정지',
-    EMERGENCY_STOP: '긴급정지',
-    '긴급정지': '긴급정지',
-    '장애': '긴급정지',
+    VERIFYING: '진료중',
+    CONSULTING: '진료중',
+    CONSULTATION: '진료중',
+    '진료 중': '진료중',
+    '진료중': '진료중',
+    INCIDENT: '긴급 정지',
+    ESTOP: '긴급 정지',
+    E_STOP: '긴급 정지',
+    EMERGENCY_STOP: '긴급 정지',
+    '긴급정지': '긴급 정지',
+    '긴급 정지': '긴급 정지',
+    '장애': '긴급 정지',
     WAITING: '대기',
     STANDBY: '대기',
     IDLE: '대기',
@@ -227,19 +228,34 @@ const ControlCenter = () => {
             minimapRequestInFlightRef.current = true;
 
             try {
-                const response = await fetch(MINIMAP_API_URL, {
-                    method: 'GET',
-                    headers: {
-                        Accept: 'application/json'
-                    },
-                    cache: 'no-store'
-                });
+                let data = null;
+                let lastError = null;
 
-                if (!response.ok) {
-                    throw new Error(`Minimap API error: ${response.status}`);
+                for (const apiUrl of getRobotMinimapApiUrlCandidates()) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'GET',
+                            headers: {
+                                Accept: 'application/json'
+                            },
+                            cache: 'no-store'
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Minimap API error: ${response.status}`);
+                        }
+
+                        data = await response.json();
+                        break;
+                    } catch (error) {
+                        lastError = error;
+                    }
                 }
 
-                const data = await response.json();
+                if (data === null) {
+                    throw lastError || new Error('Minimap API unavailable');
+                }
+
                 if (!isMounted) return;
 
                 const posePayload = data?.vehiclePose ?? data?.current_pose ?? data?.currentPose;

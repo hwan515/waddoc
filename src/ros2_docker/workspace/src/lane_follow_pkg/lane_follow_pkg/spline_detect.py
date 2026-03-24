@@ -7,6 +7,7 @@ from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, Int32
@@ -22,7 +23,7 @@ class DijkstraSplineFollower(Node):
         super().__init__('dijkstra_spline_follower')
 
         self.sub_odom = self.create_subscription(
-            Odometry, '/odom', self.odom_callback, 10
+            Odometry, '/odom', self.odom_callback, qos_profile_sensor_data
         )
         self.sub_estop = self.create_subscription(
             Bool, '/ec2_cmd/e_stop', self.estop_callback, 1

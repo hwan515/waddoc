@@ -48,15 +48,17 @@ const getStatePresentation = (state) => {
                 chipClass: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
                 dotClass: 'bg-amber-300'
             };
+        case '진료중':
         case '진료 중':
             return {
-                label: '진료 중',
+                label: '진료중',
                 chipClass: 'border-violet-300/30 bg-violet-400/12 text-violet-100',
                 dotClass: 'bg-violet-300'
             };
+        case '긴급 정지':
         case '긴급정지':
             return {
-                label: '긴급정지',
+                label: '긴급 정지',
                 chipClass: 'border-rose-300/30 bg-rose-400/12 text-rose-100',
                 dotClass: 'bg-rose-300'
             };

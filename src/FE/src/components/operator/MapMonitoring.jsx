@@ -1,22 +1,53 @@
-import { Map as MapIcon, Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
+import { Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
+import MinimapPanel from './MinimapPanel';
+import { getRobotCommandUrlCandidates } from '../../utils/runtimeConfig';
 
-const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) => {
+const formatSpeed = (value) => {
+    if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
+    return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
+};
+
+const MapMonitoring = ({
+    vehicles,
+    selectedVehicleId,
+    setSelectedVehicleId,
+    minimapVehiclePose,
+    minimapPathPoints,
+    vehicleState = '대기',
+    vehicleSpeed = 0,
+    updateIntervalMs = 100,
+    useMockMinimapData = false,
+}) => {
     // E-Stop REST API POST 요청 핸들러
     const handleEStop = async () => {
         if (!window.confirm("정말로 E-Stop (긴급 정지)을 작동하시겠습니까?")) return;
 
         try {
-            // Zenoh-server API E-Stop 요청 (Nginx 프록시를 통해 포트 8000으로 전달됨)
-            const targetUrl = `/api/cmd/estop/1`;
-            const response = await fetch(targetUrl, {
-                method: 'POST',
-                headers: { 'accept': 'application/json' }
-            });
+            let success = false;
+            let lastError = null;
 
-            if (response.ok) {
+            for (const targetUrl of getRobotCommandUrlCandidates('/api/cmd/estop/1')) {
+                try {
+                    const response = await fetch(targetUrl, {
+                        method: 'POST',
+                        headers: { 'accept': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        success = true;
+                        break;
+                    }
+
+                    lastError = new Error(`E-Stop API error: ${response.status}`);
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            if (success) {
                 alert("E-Stop 명령이 성공적으로 전송되었습니다.");
             } else {
-                alert("E-Stop 전송 중 오류가 발생했습니다.");
+                throw lastError || new Error('E-Stop API unavailable');
             }
         } catch (error) {
             console.error("E-Stop Error:", error);
@@ -27,10 +58,17 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
     // 상태에 따른 배지 색상 결정 헬퍼 함수
     const getStatusBadge = (status) => {
         switch (status) {
+            case '출발':
+            case '주행 중':
             case '운행 중': return 'bg-blue-100 text-blue-700 border-blue-200';
+            case '대기':
             case '대기 중': return 'bg-green-100 text-green-700 border-green-200';
+            case '도착': return 'bg-amber-100 text-amber-700 border-amber-200';
+            case '진료중':
             case '진료 중': return 'bg-purple-100 text-purple-700 border-purple-200';
             case '점검 중': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+            case '긴급 정지':
+            case '긴급정지':
             case '장애': return 'bg-red-100 text-red-700 border-red-200';
             default: return 'bg-slate-100 text-slate-700 border-slate-200';
         }
@@ -74,8 +112,8 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
                         {vehicles.map((vehicle) => {
-                            const displayStatus = vehicle.id === highlightedVehicleId ? vehicleState || vehicle.status : vehicle.status;
-                            const displaySpeed = vehicle.id === highlightedVehicleId && typeof vehicleSpeed === 'number'
+                            const displayStatus = vehicle.id === selectedVehicleId ? vehicleState || vehicle.status : vehicle.status;
+                            const displaySpeed = vehicle.id === selectedVehicleId && typeof vehicleSpeed === 'number'
                                 ? vehicleSpeed
                                 : vehicle.speed;
 
@@ -83,7 +121,7 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
                                 <div
                                     key={vehicle.id}
                                     onClick={() => setSelectedVehicleId(vehicle.id)}
-                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${highlightedVehicleId === vehicle.id
+                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${selectedVehicleId === vehicle.id
                                         ? 'border-[#0353A4] bg-[#F0F7FF] shadow-sm'
                                         : 'border-slate-200 hover:border-[#006DAA]/30 hover:bg-slate-50'
                                         }`}
@@ -117,7 +155,7 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
                 <div className="flex-[2] bg-slate-950 rounded-[28px] shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
                     <div className="absolute top-3 left-3 z-10 bg-black/55 backdrop-blur-sm px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-white/10">
                         <Video className="w-3.5 h-3.5 text-red-400" />
-                        {highlightedVehicleId ? `${highlightedVehicleId} 카메라` : '차량을 선택하세요'}
+                        {selectedVehicleId ? `${selectedVehicleId} 카메라` : '차량을 선택하세요'}
                         <span className="ml-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                     </div>
 
