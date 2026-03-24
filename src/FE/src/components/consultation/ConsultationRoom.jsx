@@ -242,7 +242,7 @@ const ConsultationRoom = ({
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full bg-slate-800 text-slate-400">
                                 <div className="w-12 h-12 border-4 border-slate-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                <span className="font-bold">상대방 영상을 대기 중입니다...</span>
+                                <span className="font-bold">환자 접속 대기 중입니다...</span>
                             </div>
                         )}
                     </div>
