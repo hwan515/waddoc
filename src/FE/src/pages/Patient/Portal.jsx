@@ -5,6 +5,7 @@ import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
 import CalendarView from '../../components/patient/CalendarView';
 import ListView from '../../components/patient/ListView';
+import { parsePrescriptionNote } from '../../utils/prescriptionNote';
 
 const PatientPortal = () => {
     const [activeTab, setActiveTab] = useState('list');
@@ -41,18 +42,23 @@ const PatientPortal = () => {
                     });
 
                     // 리스트 뷰 & 캘린더 뷰 포맷으로 파싱
-                    const mappedRecords = summaries.map((s, index) => ({
-                        id: s.caseId || index,
-                        date: s.consultationDate || '',
-                        time: '-', // API 명세상 시간은 제공되지 않으므로 임시 대시
-                        doctorName: s.doctorName,
-                        department: s.departmentName,
-                        status: '완료', // summaries API는 완료된 것만 내려줌
-                        hasPrescription: s.isPrescriptionIssued,
-                        hasNote: !!s.summaryNote,
-                        summaryNote: s.summaryNote,
-                        prescriptionNote: s.prescriptionNote
-                    }));
+                    const mappedRecords = summaries.map((s, index) => {
+                        const parsedPrescription = parsePrescriptionNote(s.prescriptionNote);
+
+                        return {
+                            id: s.caseId || index,
+                            date: s.consultationDate || '',
+                            time: '-', // API 명세상 시간은 제공되지 않으므로 임시 대시
+                            doctorName: s.doctorName,
+                            department: s.departmentName,
+                            status: '완료', // summaries API는 완료된 것만 내려줌
+                            hasPrescription: Boolean(s.isPrescriptionIssued || parsedPrescription.hasData),
+                            hasNote: !!s.summaryNote,
+                            summaryNote: s.summaryNote,
+                            prescriptionNote: s.prescriptionNote,
+                            prescription: parsedPrescription,
+                        };
+                    });
 
                     const mappedEvents = summaries.map((s, index) => ({
                         id: s.caseId || index,
@@ -65,7 +71,11 @@ const PatientPortal = () => {
                     setMedicalRecords(mappedRecords);
                     setCalendarEvents(mappedEvents);
                 } else {
-                    setUser({ ...user, name: '연결된 환자 없음', stats: { totalVisits: 0, nextReservation: '없음' } });
+                    setUser((currentUser) => ({
+                        ...currentUser,
+                        name: '연결된 환자 없음',
+                        stats: { totalVisits: 0, nextReservation: '없음' },
+                    }));
                 }
             } catch (error) {
                 console.error("Failed to fetch guardian patient data:", error);
