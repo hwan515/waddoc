@@ -184,3 +184,5 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 
 > LiveKit signaling(7880)은 Nginx가 `/livekit` 경로로 WSS 프록시한다.
 > 클라이언트는 `wss://<DOMAIN>/livekit`으로 접속한다.
+> 운영에서는 `rtc.use_external_ip: false`와 `LIVEKIT_NODE_IP=<EC2 공인 IP>` 조합으로 공인 IP를 고정한다.
+> STUN 자동 감지에 맡기면 브라우저가 파싱하지 못하는 잘못된 TURN URL이 광고될 수 있다.

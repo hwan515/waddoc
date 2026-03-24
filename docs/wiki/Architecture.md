@@ -767,7 +767,7 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 ```yaml
 # livekit/livekit.yaml
 rtc:
-  use_external_ip: true
+  use_external_ip: false          # 운영에서는 --node-ip로 공인 IP를 명시
   udp_port: 7882               # UDP mux: 모든 ICE/UDP가 단일 포트 통과
   tcp_port: 7881               # ICE/TCP fallback
   # port_range_start/end 사용 안 함 (udp_port 사용 시 무시됨)
@@ -778,6 +778,8 @@ turn:
   tls_port: 0                  # MVP에서 TLS TURN 사용 안 함
   udp_port: 3478               # TURN/UDP (외부 8478으로 매핑)
 ```
+
+> 운영 docker-compose에서는 `livekit-server --config /etc/livekit.yaml --node-ip <PUBLIC_IP>` 형태로 공인 IP를 명시한다.
 
 #### Nginx 설정 (배포 환경)
 

@@ -144,7 +144,7 @@ services:
   # === WebRTC (LiveKit) — 화상 진료 시그널링 서버 ===
   livekit:
     image: livekit/livekit-server:latest
-    command: [ "--config", "/etc/livekit.yaml" ]
+    command: [ "--config", "/etc/livekit.yaml", "--node-ip", "${LIVEKIT_NODE_IP}" ]
     expose:
       - "7880"
     ports:

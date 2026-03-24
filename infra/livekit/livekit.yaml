@@ -1,6 +1,9 @@
 port: 7880
 rtc:
-  use_external_ip: true
+  # 운영에서는 STUN 자동 감지 대신 --node-ip로 공인 IP를 고정한다.
+  # use_external_ip 경로에서 잘못된 TURN URL(host에 braces/whitespace 포함)이
+  # 생성되는 현상을 피하기 위한 설정이다.
+  use_external_ip: false
   udp_port: 8882
   tcp_port: 8881
 turn:
