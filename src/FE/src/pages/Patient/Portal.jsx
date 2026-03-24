@@ -103,7 +103,7 @@ const PatientPortal = () => {
             <header className="bg-white border-b border-slate-200 shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
                 <div className="flex items-center gap-8">
                     {/* Logo */}
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/patient/portal')}>
                         <div className="bg-[#0353A4]/10 p-1.5 rounded-lg">
                             <Activity className="w-6 h-6 text-[#0353A4]" strokeWidth={2.5} />
                         </div>

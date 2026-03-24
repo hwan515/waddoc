@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Activity, User, LogOut, Phone, MapPin, HeartPulse, Stethoscope, ChevronLeft } from 'lucide-react';
+import { Activity, User, LogOut, Phone, MapPin, HeartPulse, Stethoscope } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
@@ -23,14 +23,6 @@ const MyPage = () => {
                 if (patients.length > 0) {
                     const primaryPatient = patients[0];
                     console.log("[MyPage] 보호자 환자 정보 API 응답:", primaryPatient);
-                    // 간단한 나이 계산 (YYMMDD)
-                    let age = '-';
-                    if (primaryPatient.birthDate6) {
-                        const birthYearStr = primaryPatient.birthDate6.substring(0, 2);
-                        let birthYear = parseInt(birthYearStr);
-                        birthYear += birthYear > 30 ? 1900 : 2000;
-                        age = new Date().getFullYear() - birthYear;
-                    }
 
                     // 전화번호 포맷 정규식 (010-0000-0000)
                     const formatPhoneNumber = (phoneNumberString) => {
@@ -81,34 +73,37 @@ const MyPage = () => {
 
     return (
         <div className="min-h-screen flex flex-col bg-[#FAF9F6] font-sans">
-            {/* Header (공통 스타일 유지, 뒤로가기 버튼 추가) */}
+            {/* Header */}
             <header className="bg-white border-b border-slate-200 shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-                <div className="flex items-center gap-6">
-                    {/* Back Button */}
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="p-2 -ml-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-                        title="뒤로 가기"
-                    >
-                        <ChevronLeft className="w-6 h-6" />
-                    </button>
-
+                <div className="flex items-center gap-8">
                     {/* Logo */}
                     <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/patient/portal')}>
-                        <div className="bg-[#0353A4]/10 p-1.5 rounded-lg">
-                            <Activity className="w-6 h-6 text-[#0353A4]" strokeWidth={2.5} />
+                        <div className="bg-primary/10 p-1.5 rounded-lg">
+                            <Activity className="w-6 h-6 text-primary" strokeWidth={2.5} />
                         </div>
-                        <span className="font-bold text-xl text-slate-800 tracking-tight hidden sm:block">
-                            Vital<span className="text-[#0353A4]">Connect</span>
+                        <span className="font-bold text-xl text-slate-800 tracking-tight">
+                            Waddoc<span className="text-primary"> 왔닥</span>
                         </span>
                     </div>
 
-                    <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-                    <span className="font-bold text-slate-800 hidden sm:block">마이페이지</span>
+                    {/* Patient Name */}
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-slate-100 rounded-full">
+                        <User className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-slate-700">
+                            {user.name === '로딩중' || user.name === '연결된 환자 없음' ? user.name : `${user.name} 환자님`}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50">
+                <div className="flex items-center gap-4 border-l border-slate-200 pl-4">
+                    <button
+                        onClick={() => navigate('/patient/portal')}
+                        className="text-sm font-medium text-slate-600 hover:text-primary transition-colors"
+                    >
+                        진료 내역
+                    </button>
+                    <div className="w-1 h-1 rounded-full bg-slate-300 mx-2"></div>
+                    <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-red-500 transition-colors">
                         <LogOut className="w-4 h-4" />
                         로그아웃
                     </button>
