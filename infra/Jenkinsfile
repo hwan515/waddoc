@@ -144,9 +144,9 @@ pipeline {
                                 docker buildx use ${BUILDX_BUILDER}-be 2>/dev/null || \
                                 docker buildx create --name ${BUILDX_BUILDER}-be --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/src/BE && \
+                                # BUILD_NUMBER는 배포 추적용, latest는 수동 확인/기본 fallback용이다.
                                 docker buildx build \
                                   --builder ${BUILDX_BUILDER}-be \
-                                  # BUILD_NUMBER는 배포 추적용, latest는 수동 확인/기본 fallback용이다.
                                   --tag ${DOCKER_IMAGE_BE}:${BUILD_NUMBER} \
                                   --tag ${DOCKER_IMAGE_BE}:latest \
                                   --push .
@@ -164,9 +164,9 @@ pipeline {
                                 docker buildx use ${BUILDX_BUILDER}-fe 2>/dev/null || \
                                 docker buildx create --name ${BUILDX_BUILDER}-fe --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/src/FE && \
+                                # 운영 Nginx가 /api 로 프록시하므로 정적 빌드는 상대 API 경로를 사용한다.
                                 docker buildx build \
                                   --builder ${BUILDX_BUILDER}-fe \
-                                  # 운영 Nginx가 /api 로 프록시하므로 정적 빌드는 상대 API 경로를 사용한다.
                                   --build-arg VITE_API_URL=/api \
                                   --tag ${DOCKER_IMAGE_FE}:${BUILD_NUMBER} \
                                   --tag ${DOCKER_IMAGE_FE}:latest \
@@ -185,9 +185,9 @@ pipeline {
                                 docker buildx use ${BUILDX_BUILDER}-fp 2>/dev/null || \
                                 docker buildx create --name ${BUILDX_BUILDER}-fp --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/src/FE-phone && \
+                                # phone 앱은 /phone 하위 경로로 서비스되므로 base path를 함께 고정한다.
                                 docker buildx build \
                                   --builder ${BUILDX_BUILDER}-fp \
-                                  # phone 앱은 /phone 하위 경로로 서비스되므로 base path를 함께 고정한다.
                                   --build-arg VITE_API_BASE_URL=/api/v1 \
                                   --build-arg VITE_BASE_PATH=/phone/ \
                                   --tag ${DOCKER_IMAGE_FP}:${BUILD_NUMBER} \
@@ -269,7 +269,6 @@ pipeline {
                                 sh """
                                     cd ${PROJECT_PATH}/infra && \
                                     docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${svc} && \
-                                    # --no-deps로 변경된 서비스만 교체해 불필요한 재시작을 막는다.
                                     docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --no-deps ${scaleArg} ${svc}
                                 """
                             } else {
