@@ -32,8 +32,8 @@ const Button = ({
 
     // 테마 색상 변형
     const variantStyles = {
-        primary: "bg-[#0353A4] hover:bg-[#006DAA] text-white shadow-lg shadow-[#0353A4]/30 transform hover:-translate-y-0.5",
-        secondary: "bg-[#B9D6F2] hover:bg-[#92C1EB] text-[#061A40]",
+        primary: "bg-primary hover:bg-accent-1 text-white shadow-lg shadow-primary/30 transform hover:-translate-y-0.5",
+        secondary: "bg-secondary hover:bg-secondary/80 text-dark",
         outline: "bg-transparent border-2 border-slate-200 text-slate-700 hover:bg-slate-50",
         danger: "bg-red-500 hover:bg-red-600 text-white",
     };

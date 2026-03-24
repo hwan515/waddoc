@@ -53,7 +53,7 @@ const Input = forwardRef(({
                     className={`
                         w-full py-3.5 border rounded-xl text-slate-900 placeholder-slate-400 
                         focus:outline-none focus:ring-2 focus:border-transparent transition-all sm:text-sm font-medium
-                        ${hasError ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-[#0353A4]'}
+                        ${hasError ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-primary'}
                         ${iconLeft ? 'pl-10' : 'px-4'}
                         ${iconRight ? 'pr-12' : ''}
                         ${className}

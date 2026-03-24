@@ -43,7 +43,7 @@ const AdminSignup = () => {
                 <div className="bg-white p-10 rounded-3xl shadow-xl w-full max-w-sm text-center animate-fade-in-up">
                     <div className="flex justify-center mb-6">
                         <div className="bg-blue-100 p-4 rounded-full">
-                            <CheckCircle2 className="w-12 h-12 text-[#0353A4]" />
+                            <CheckCircle2 className="w-12 h-12 text-primary" />
                         </div>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">가입 완료!</h2>
@@ -52,7 +52,7 @@ const AdminSignup = () => {
                         잠시 후 대시보드로 이동합니다.
                     </p>
                     <div className="w-full bg-slate-100 rounded-full h-1.5 mb-4 overflow-hidden">
-                        <div className="bg-[#0353A4] h-1.5 rounded-full animate-progress"></div>
+                        <div className="bg-primary h-1.5 rounded-full animate-progress"></div>
                     </div>
                 </div>
                 <style dangerouslySetInnerHTML={{
@@ -79,7 +79,7 @@ const AdminSignup = () => {
 
             <div className="max-w-md w-full space-y-6 bg-white p-10 rounded-3xl shadow-xl border border-slate-100 relative z-10">
                 <div className="text-center">
-                    <h2 className="text-3xl font-extrabold text-[#0353A4] mb-2">관리자 등록</h2>
+                    <h2 className="text-3xl font-extrabold text-primary mb-2">관리자 등록</h2>
                     <p className="text-sm text-slate-500">
                         통합 관제 시스템 운영을 위한 관리자 계정을 생성합니다
                     </p>
@@ -146,7 +146,7 @@ const AdminSignup = () => {
 
                 <div className="mt-4 text-center text-sm">
                     <span className="text-slate-500">이미 등록된 관리자이신가요? </span>
-                    <Link to="/operator/login" className="font-semibold text-[#0353A4] hover:underline">
+                    <Link to="/operator/login" className="font-semibold text-primary hover:underline">
                         로그인
                     </Link>
                 </div>
