@@ -42,6 +42,21 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/api/minimap': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api/odom': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api/cmd': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: 'http://localhost:8080', // 백엔드 서버 주소
         changeOrigin: true,

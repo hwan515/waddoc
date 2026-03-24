@@ -69,7 +69,7 @@ class HybridDijkstraVisionFollower(Node):
         self.declare_parameter('enable_yolo_estop', True)
         self.declare_parameter('yolo_model', str(default_yolo_model_path))
         self.declare_parameter('yolo_device', '')
-        self.declare_parameter('yolo_confidence', 0.45)
+        self.declare_parameter('yolo_confidence', 0.80)
         self.declare_parameter('yolo_input_size', 640)
         self.declare_parameter(
             'yolo_hazard_labels',
@@ -98,6 +98,9 @@ class HybridDijkstraVisionFollower(Node):
             )
         self.route_export_path = Path(str(self.get_parameter('route_export_path').value))
         self.route_export_seq = 0
+        self.minimap_live_publish_interval = 0.1
+        self.last_minimap_publish_time = 0.0
+        self.minimap_last_error_log_time = 0.0
         self.enable_yolo_estop = bool(self.get_parameter('enable_yolo_estop').value)
         self.yolo_model_name = str(self.get_parameter('yolo_model').value).strip()
         self.yolo_device = str(self.get_parameter('yolo_device').value).strip()
@@ -120,6 +123,8 @@ class HybridDijkstraVisionFollower(Node):
         self.current_x = 0.0
         self.current_z = 0.0
         self.current_yaw = 0.0
+        self.current_speed_ms = 0.0
+        self.current_speed_kmh = 0.0
         self.has_odom = False
         self.estop_active = False
 
@@ -132,11 +137,13 @@ class HybridDijkstraVisionFollower(Node):
         self.path = []
         self.trajectory = []
         self.closest_traj_idx = 0
+        self.active_route_start_id = None
+        self.active_route_state_value = None
 
         self.last_log_time = 0.0
 
         # =========================
-        # 팀원 코드 기반 waypoint 추종 파라미터
+        # waypoint 추종 파라미터
         # =========================
         self.cruise_speed = 0.5
 
@@ -290,6 +297,16 @@ class HybridDijkstraVisionFollower(Node):
             return None
         return sum(v * w for v, w in pairs) / denom
 
+    def speed_ms_to_kmh(self, speed_ms):
+        return float(speed_ms) * 3.6
+
+    def build_speed_snapshot(self):
+        return {
+            'speed': float(self.current_speed_ms),
+            'speedMs': float(self.current_speed_ms),
+            'speedKmh': float(self.current_speed_kmh),
+        }
+
     def publish_int_state(self, publisher, value):
         msg = Int32()
         msg.data = int(value)
@@ -348,6 +365,21 @@ class HybridDijkstraVisionFollower(Node):
         msg.data = json.dumps(payload, ensure_ascii=False)
         self.pub_minimap_route.publish(msg)
 
+    def persist_minimap_route_payload(self, payload):
+        self.route_export_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.route_export_path.parent / f'{self.route_export_path.name}.tmp'
+        tmp_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+        )
+        tmp_path.replace(self.route_export_path)
+
+    def log_minimap_export_error(self, error):
+        now = time.time()
+        if now - self.minimap_last_error_log_time >= 5.0:
+            self.get_logger().error(f'Minimap export failed: {error}')
+            self.minimap_last_error_log_time = now
+
     def build_empty_route_snapshot(self, reason='navigation_cleared'):
         goal_wp = self.waypoints.get(self.goal_wp_id)
 
@@ -363,7 +395,10 @@ class HybridDijkstraVisionFollower(Node):
                 'x': float(self.current_x),
                 'z': float(self.current_z),
                 'yaw': float(self.current_yaw),
+                'speed_ms': float(self.current_speed_ms),
+                'speed_kmh': float(self.current_speed_kmh),
             },
+            **self.build_speed_snapshot(),
             'start_waypoint': None,
             'goal_waypoint': None if goal_wp is None else {
                 'id': self.goal_wp_id,
@@ -387,10 +422,14 @@ class HybridDijkstraVisionFollower(Node):
         }
 
     def publish_cleared_minimap_route(self, reason='navigation_cleared'):
-        self.route_export_seq += 1
-        self.publish_minimap_route_payload(
-            self.build_empty_route_snapshot(reason=reason)
-        )
+        try:
+            self.route_export_seq += 1
+            payload = self.build_empty_route_snapshot(reason=reason)
+            self.persist_minimap_route_payload(payload)
+            self.publish_minimap_route_payload(payload)
+            self.last_minimap_publish_time = time.time()
+        except Exception as e:
+            self.log_minimap_export_error(e)
 
     def build_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
         path_waypoints = []
@@ -434,7 +473,10 @@ class HybridDijkstraVisionFollower(Node):
                 'x': float(self.current_x),
                 'z': float(self.current_z),
                 'yaw': float(self.current_yaw),
+                'speed_ms': float(self.current_speed_ms),
+                'speed_kmh': float(self.current_speed_kmh),
             },
+            **self.build_speed_snapshot(),
             'start_waypoint': None if start_wp is None else {
                 'id': start_id,
                 'x': float(start_wp['x']),
@@ -462,6 +504,8 @@ class HybridDijkstraVisionFollower(Node):
     def export_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
         try:
             self.route_export_seq += 1
+            self.active_route_start_id = start_id
+            self.active_route_state_value = int(state_value)
             payload = self.build_route_snapshot(
                 start_id,
                 goal_id,
@@ -469,19 +513,42 @@ class HybridDijkstraVisionFollower(Node):
                 path_ids,
                 trajectory,
             )
-            self.route_export_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self.route_export_path.parent / f'{self.route_export_path.name}.tmp'
-            tmp_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2),
-                encoding='utf-8',
-            )
-            tmp_path.replace(self.route_export_path)
+            self.persist_minimap_route_payload(payload)
             self.publish_minimap_route_payload(payload)
+            self.last_minimap_publish_time = time.time()
             self.get_logger().info(
                 f'route json saved: {self.route_export_path} (version={self.route_export_seq})'
             )
         except Exception as e:
-            self.get_logger().error(f'Route export failed: {e}')
+            self.log_minimap_export_error(e)
+
+    def publish_live_minimap_snapshot(self, force=False):
+        now = time.time()
+        if not force and (now - self.last_minimap_publish_time) < self.minimap_live_publish_interval:
+            return
+
+        try:
+            if self.trajectory and self.goal_wp_id is not None:
+                state_value = (
+                    self.active_route_state_value
+                    if self.active_route_state_value is not None
+                    else self.goal_id_to_state_value(self.goal_wp_id)
+                )
+                payload = self.build_route_snapshot(
+                    self.active_route_start_id,
+                    self.goal_wp_id,
+                    state_value,
+                    self.path,
+                    self.trajectory,
+                )
+            else:
+                payload = self.build_empty_route_snapshot(reason=self.current_mode)
+
+            self.persist_minimap_route_payload(payload)
+            self.publish_minimap_route_payload(payload)
+            self.last_minimap_publish_time = now
+        except Exception as e:
+            self.log_minimap_export_error(e)
 
     def clear_pending_goal(self):
         self.pending_goal_id = None
@@ -490,6 +557,8 @@ class HybridDijkstraVisionFollower(Node):
     def clear_navigation(self, clear_goal=False, clear_pending=False, clear_reason='navigation_cleared'):
         self.path = []
         self.trajectory = []
+        self.active_route_start_id = None
+        self.active_route_state_value = None
         self.clear_tracking_state()
         if clear_goal:
             self.goal_wp_id = None
@@ -1014,23 +1083,32 @@ class HybridDijkstraVisionFollower(Node):
         )
 
     # =====================================================
-    # odom - 팀원 코드 기준 그대로
+    # odom 
     # =====================================================
     def odom_callback(self, msg):
         pos = msg.pose.pose.position
         q = msg.pose.pose.orientation
+        linear = msg.twist.twist.linear
 
         self.current_z = pos.x
         self.current_x = -pos.y
+
+        planar_speed_ms = math.sqrt(
+            (linear.x * linear.x) +
+            (linear.y * linear.y) +
+            (linear.z * linear.z)
+        )
+        self.current_speed_ms = float(planar_speed_ms)
+        self.current_speed_kmh = self.speed_ms_to_kmh(self.current_speed_ms)
 
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         yaw = math.atan2(siny_cosp, cosy_cosp)
 
-        # 팀원 코드 기준 유지
         self.current_yaw = self.normalize_angle(yaw + math.pi)
 
         self.has_odom = True
+        self.publish_live_minimap_snapshot()
 
     def estop_callback(self, msg):
         self.set_estop_state(bool(msg.data))

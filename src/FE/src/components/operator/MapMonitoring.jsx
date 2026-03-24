@@ -38,29 +38,16 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
 
     return (
         <div className="h-full flex p-4 gap-4">
-            {/* 좌측: 디지털 트윈 (전체 맵 영역) */}
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow border border-slate-200">
-                    <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                        <MapIcon className="w-4 h-4 text-[#006DAA]" /> 디지털 트윈 모니터링
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-1">평소: 전체 Map / 차량 선택 시: 해당 차량 중심 뷰</p>
-                </div>
-
-                {/* TODO: Three.js 또는 카카오/네이버 지도 연동 영역 */}
-                <div className="flex-1 bg-[#E8F0F8] flex items-center justify-center relative">
-                    <div className="absolute inset-0" style={{
-                        backgroundImage: `radial-gradient(#CBD5E1 1px, transparent 1px)`,
-                        backgroundSize: '24px 24px',
-                        opacity: 0.5
-                    }}></div>
-                    <div className="text-center z-10 p-8 bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white mt-10">
-                        <div className="w-16 h-16 bg-[#0353A4]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <MapIcon className="w-8 h-8 text-[#0353A4]" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">디지털 트윈 Map (추후 구현)</h3>
-                        <p className="text-slate-500 text-sm">자율주행 모빌리티의 실시간 위치와 상태를 3D/2D 맵으로 렌더링 할 영역입니다.</p>
-                    </div>
+            <div className="flex-1 min-w-0 overflow-hidden relative">
+                <div className="h-full">
+                    <MinimapPanel
+                        vehiclePose={minimapVehiclePose}
+                        pathPoints={minimapPathPoints}
+                        vehicleState={vehicleState}
+                        vehicleSpeed={vehicleSpeed}
+                        updateIntervalMs={updateIntervalMs}
+                        showMockBadge={useMockMinimapData}
+                    />
                 </div>
             </div>
 
@@ -86,74 +73,55 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
                         </span>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                        {vehicles.map(v => (
-                            <div
-                                key={v.id}
-                                onClick={() => setSelectedVehicleId(v.id)}
-                                className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedVehicleId === v.id
-                                    ? 'border-[#0353A4] bg-[#F0F7FF] shadow-sm'
-                                    : 'border-slate-200 hover:border-[#006DAA]/30 hover:bg-slate-50'
-                                    }`}
-                            >
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="font-bold text-slate-800 text-[15px]">{v.id}</div>
-                                    <div className={`text-xs px-2 py-0.5 rounded-md border font-bold ${getStatusBadge(v.status)}`}>
-                                        {v.status}
+                        {vehicles.map((vehicle) => {
+                            const displayStatus = vehicle.id === highlightedVehicleId ? vehicleState || vehicle.status : vehicle.status;
+                            const displaySpeed = vehicle.id === highlightedVehicleId && typeof vehicleSpeed === 'number'
+                                ? vehicleSpeed
+                                : vehicle.speed;
+
+                            return (
+                                <div
+                                    key={vehicle.id}
+                                    onClick={() => setSelectedVehicleId(vehicle.id)}
+                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${highlightedVehicleId === vehicle.id
+                                        ? 'border-[#0353A4] bg-[#F0F7FF] shadow-sm'
+                                        : 'border-slate-200 hover:border-[#006DAA]/30 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="font-bold text-slate-800 text-[15px]">{vehicle.id}</div>
+                                        <div className={`text-xs px-2 py-0.5 rounded-md border font-bold ${getStatusBadge(displayStatus)}`}>
+                                            {displayStatus}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5 text-xs text-slate-600 font-medium">
+                                        <div className="flex items-center gap-2">
+                                            <Navigation className="w-3.5 h-3.5 text-slate-400" />
+                                            <span className="font-mono">{vehicle.location.lat.toFixed(4)}, {vehicle.location.lng.toFixed(4)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60">
+                                            <span className="flex items-center gap-1.5">
+                                                배터리 <span className="font-bold text-slate-800">{vehicle.battery}%</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                속도 <span className="font-bold text-slate-800">{formatSpeed(displaySpeed)}</span>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="space-y-1.5 text-xs text-slate-600 font-medium">
-                                    <div className="flex items-center gap-2">
-                                        <Navigation className="w-3.5 h-3.5 text-slate-400" />
-                                        <span className="font-mono">{v.location.lat.toFixed(4)}, {v.location.lng.toFixed(4)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/50">
-                                        <span className="flex items-center gap-1.5">
-                                            배터리 <span className="font-bold text-slate-800">{v.battery}%</span>
-                                        </span>
-                                        <span className="flex items-center gap-1.5">
-                                            속도 <span className="font-bold text-slate-800">{v.speed} km/h</span>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* 하단: 선택 차량 카메라 화면 */}
-                <div className="flex-[2] bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
-                    <div className="absolute top-3 left-3 z-10 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded text-white text-xs font-bold flex items-center gap-2 border border-white/10">
+                <div className="flex-[2] bg-slate-950 rounded-[28px] shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
+                    <div className="absolute top-3 left-3 z-10 bg-black/55 backdrop-blur-sm px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-white/10">
                         <Video className="w-3.5 h-3.5 text-red-400" />
-                        {selectedVehicleId ? `${selectedVehicleId} 카메라` : '차량을 선택하세요'}
+                        {highlightedVehicleId ? `${highlightedVehicleId} 카메라` : '차량을 선택하세요'}
                         <span className="ml-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                     </div>
 
-                    {/* 실시간 카메라 영상 스트리밍 영역 목업 */}
                     <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-                        {false && (
-                            selectedVehicleId ? (
-                                <>
-                                    {/* 카메라 목업 배경 */}
-                                    <div className="absolute inset-0 bg-[#1a1c23]">
-                                        {/* HUD 라인 */}
-                                        <div className="absolute inset-0 opacity-20" style={{
-                                            backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
-                                            backgroundSize: '40px 40px'
-                                        }}></div>
-                                        <div className="absolute top-1/2 left-1/4 right-1/4 h-px bg-green-500/30"></div>
-                                        <div className="absolute left-1/2 top-1/4 bottom-1/4 w-px bg-green-500/30"></div>
-                                    </div>
-                                    <div className="relative z-10 text-center">
-                                        <Video className="w-10 h-10 text-slate-500 mx-auto mb-2 opacity-50" />
-                                        <p className="text-slate-400 text-sm font-medium">실시간 주행 카메라 (추후 연동)</p>
-                                    </div>
-                                </>
-                            ) : (
-                                <p className="text-slate-500 text-sm font-medium">리스트에서 차량을 선택해주세요.</p>
-                            )
-                        )}
-
-                        {/* 무조건 즉시 띄우는 스트리밍 영상 영역 (HTML 플레이어 지원을 위해 iframe 적용) */}
                         <div className="absolute inset-0 z-20 w-full h-full bg-black">
                             <iframe
                                 src="/unity_cam/"

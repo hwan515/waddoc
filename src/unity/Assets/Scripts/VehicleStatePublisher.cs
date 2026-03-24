@@ -1,12 +1,13 @@
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
 
-
 using RosMessageTypes.Std;
 using RosMessageTypes.Nav;
 using RosMessageTypes.Geometry;
 using RosMessageTypes.Tf2;
 using RosMessageTypes.BuiltinInterfaces;
+
+using System;
 
 public class VehicleStatePublisher : MonoBehaviour
 {
@@ -58,15 +59,20 @@ public class VehicleStatePublisher : MonoBehaviour
 
     void PublishAll()
     {
-        double now = Time.timeAsDouble;
-        int sec = (int)now;
-        uint nanosec = (uint)((now - sec) * 1e9);
-
-        TimeMsg stamp = new TimeMsg(sec, nanosec);
+        TimeMsg stamp = GetCurrentRosTime();
 
         PublishOdom(stamp);
         PublishTF(stamp);
         PublishWheelStates();
+    }
+
+    TimeMsg GetCurrentRosTime()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        long sec = now.ToUnixTimeSeconds();
+        long nanosec = (now.Ticks % TimeSpan.TicksPerSecond) * 100L; // 1 tick = 100ns
+
+        return new TimeMsg((int)sec, (uint)nanosec);
     }
 
     void PublishOdom(TimeMsg stamp)
@@ -83,7 +89,7 @@ public class VehicleStatePublisher : MonoBehaviour
         Vector3 unityAngVelLocal = refTf.InverseTransformDirection(unityAngVelWorld);
 
         unityVelLocal.z *= -1.0f;
-        unityAngVelLocal.z *= -1.0f; 
+        unityAngVelLocal.z *= -1.0f;
 
         Vector3 rosPos = UnityToRosPosition(unityPos);
         Quaternion rosQuat = UnityToRosQuaternion(unityRot);

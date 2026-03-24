@@ -1,25 +1,108 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
-import { mockStatistics } from '../../mockdata/operator';
 import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
 
+const MINIMAP_API_URL = import.meta.env.VITE_MINIMAP_API_URL || '/api/minimap';
+const MINIMAP_POLL_INTERVAL_MS = 100;
+
+const MONITOR_STATE_LABELS = {
+    DISPATCHED: '출발',
+    START: '출발',
+    DEPARTURE: '출발',
+    '출발': '출발',
+    EN_ROUTE: '주행 중',
+    DRIVING: '주행 중',
+    MOVING: '주행 중',
+    RETURNING: '주행 중',
+    '운행 중': '주행 중',
+    '주행 중': '주행 중',
+    ARRIVED: '도착',
+    COMPLETED: '도착',
+    '도착': '도착',
+    VERIFYING: '진료 중',
+    CONSULTING: '진료 중',
+    CONSULTATION: '진료 중',
+    '진료 중': '진료 중',
+    INCIDENT: '긴급정지',
+    ESTOP: '긴급정지',
+    E_STOP: '긴급정지',
+    EMERGENCY_STOP: '긴급정지',
+    '긴급정지': '긴급정지',
+    '장애': '긴급정지',
+    WAITING: '대기',
+    STANDBY: '대기',
+    IDLE: '대기',
+    '대기 중': '대기',
+    '대기': '대기'
+};
+
+const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
+const isValidPose = (pose) => (
+    pose
+    && isFiniteNumber(pose.x)
+    && isFiniteNumber(pose.z)
+);
+
+const sanitizePathPoints = (points) => {
+    if (!Array.isArray(points)) return [];
+
+    return points.filter((point) => (
+        point
+        && isFiniteNumber(point.x)
+        && isFiniteNumber(point.z)
+    ));
+};
+
+const toFiniteNumber = (value) => {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeMonitorState = (value) => {
+    if (typeof value !== 'string') return null;
+
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    return MONITOR_STATE_LABELS[trimmed.toUpperCase()]
+        || MONITOR_STATE_LABELS[trimmed]
+        || trimmed;
+};
+
+const phaseToMonitorState = (phase) => normalizeMonitorState(phase) || '대기';
+
+const MOVING_MONITOR_STATES = new Set(['출발', '주행 중']);
+
+const convertMetersPerSecondToKilometersPerHour = (value) => value * 3.6;
+
+const normalizeVehicleSpeed = (value, state, unit = 'm/s') => {
+    const parsed = toFiniteNumber(value);
+
+    if (!MOVING_MONITOR_STATES.has(state)) return 0;
+    if (parsed === null || parsed <= 0) return 0;
+
+    if (unit === 'km/h') return parsed;
+    return convertMetersPerSecondToKilometersPerHour(parsed);
+};
+
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
+    const minimapRequestInFlightRef = useRef(false);
+    const minimapErrorLoggedAtRef = useRef(0);
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
 
     // 캘린더 모드
     const [calendarMode, setCalendarMode] = useState('weekly');
-
-    // 상태 관리
     const [vehicles, setVehicles] = useState([]);
     const [missionsList, setMissionsList] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
@@ -29,110 +112,186 @@ const ControlCenter = () => {
         completedMissions: 0,
         incidentCount: 0
     });
-
-    // 현재 선택된 차량 (카메라 뷰 연동)
     const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+    const [minimapVehiclePose, setMinimapVehiclePose] = useState(null);
+    const [minimapPathPoints, setMinimapPathPoints] = useState([]);
+    const [minimapMonitorState, setMinimapMonitorState] = useState(null);
+    const [minimapVehicleSpeed, setMinimapVehicleSpeed] = useState(null);
 
-    // API 호출
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                // 오늘 날짜 구하기 (YYYY-MM-DD)
                 const today = new Date().toISOString().split('T')[0];
 
-                // 개별 API 실패 시 전체 화면이 멈추는 것을 방지하기 위한 안전 장치
                 const fetchSafe = (req) => req.catch(err => {
-                    console.error("API Error:", err);
+                    console.error('API Error:', err);
                     return { data: {} };
                 });
 
                 const [missionsRes, bookingsRes] = await Promise.all([
                     fetchSafe(apiClient.get('/missions')),
-                    fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })) // 전체 달력 일정
+                    fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } }))
                 ]);
 
-                // 1. 차량(Missions) 매핑
-                // 상태 변환 (CREATED/DISPATCHED... -> 운행 중 / 대기 중 등)
                 const rawMissions = missionsRes.data.missions || [];
-                const mappedVehicles = rawMissions.map(m => {
-                    let statusLabel = '대기 중';
-                    if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(m.phase)) statusLabel = '운행 중';
-                    if (['VERIFYING', 'CONSULTING'].includes(m.phase)) statusLabel = '진료 중';
-                    if (m.phase === 'INCIDENT') statusLabel = '장애';
-                    if (m.phase === 'RETURNING') statusLabel = '상황 종료'; // or returning
+                const mappedVehicles = rawMissions.map((mission) => {
+                    const statusLabel = phaseToMonitorState(mission.phase);
+                    const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
 
                     return {
-                        id: m.vehicleId,
+                        id: mission.vehicleId,
                         status: statusLabel,
-                        location: { lat: 37.4845, lng: 130.9057 }, // 임시 목업
-                        battery: 85, // 임시
-                        speed: 30, // 임시
-                        lastUpdated: m.updatedAt || new Date().toISOString(),
-                        mission: m
+                        location: { lat: 37.4845, lng: 130.9057 },
+                        battery: 85,
+                        speed: missionSpeed,
+                        lastUpdated: mission.updatedAt || new Date().toISOString(),
+                        mission
                     };
                 });
-                setVehicles(mappedVehicles);
-                if (mappedVehicles.length > 0) setSelectedVehicleId(mappedVehicles[0].id);
 
-                // 2. 출동 목록 (금일) 및 통계 (전체) 매핑
-                const todayMissions = rawMissions.filter(m => {
-                    const dateStr = m.dispatchedAt || m.createdAt || m.updatedAt;
+                setVehicles(mappedVehicles);
+                if (mappedVehicles.length > 0) {
+                    setSelectedVehicleId((currentVehicleId) => {
+                        if (currentVehicleId && mappedVehicles.some((vehicle) => vehicle.id === currentVehicleId)) {
+                            return currentVehicleId;
+                        }
+                        return mappedVehicles[0].id;
+                    });
+                }
+
+                const todayMissions = rawMissions.filter((mission) => {
+                    const dateStr = mission.dispatchedAt || mission.createdAt || mission.updatedAt;
                     if (!dateStr) return false;
                     return new Date(dateStr).toISOString().split('T')[0] === today;
                 });
 
-                const mappedMissionsList = todayMissions.map(m => {
+                const mappedMissionsList = todayMissions.map((mission) => {
                     let statusStr = '대기 중';
-                    if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(m.phase)) statusStr = '출동 중';
-                    if (['VERIFYING', 'CONSULTING'].includes(m.phase)) statusStr = '진료 중';
-                    if (m.phase === 'INCIDENT') statusStr = '장애 발생';
-                    if (['COMPLETED', 'RETURNING'].includes(m.phase)) statusStr = '종료/복귀';
+                    if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)) statusStr = '출동 중';
+                    if (['VERIFYING', 'CONSULTING'].includes(mission.phase)) statusStr = '진료 중';
+                    if (mission.phase === 'INCIDENT') statusStr = '장애 발생';
+                    if (['COMPLETED', 'RETURNING'].includes(mission.phase)) statusStr = '종료/복귀';
 
                     return {
-                        id: m.missionId,
-                        patientName: m.patientName || '환자명 미상',
-                        destination: m.destination || '목적지 미상',
-                        vehicleId: m.vehicleId,
+                        id: mission.missionId,
+                        patientName: mission.patientName || '환자명 미상',
+                        destination: mission.destination || '목적지 미상',
+                        vehicleId: mission.vehicleId,
                         status: statusStr,
-                        time: m.dispatchedAt ? new Date(m.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'
+                        time: mission.dispatchedAt
+                            ? new Date(mission.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : '-'
                     };
                 });
                 setMissionsList(mappedMissionsList);
 
-                // 통계 업데이트 (전체 누적)
                 setStatistics({
                     totalMissions: rawMissions.length,
-                    activeMissions: rawMissions.filter(m => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(m.phase)).length,
-                    completedMissions: rawMissions.filter(m => ['COMPLETED', 'RETURNING'].includes(m.phase)).length,
-                    incidentCount: rawMissions.filter(m => m.phase === 'INCIDENT').length
+                    activeMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+                    completedMissions: rawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
+                    incidentCount: rawMissions.filter((mission) => mission.phase === 'INCIDENT').length
                 });
 
-                // 3. 캘린더 일정(Bookings) 매핑
-                // appointmentDate 기반으로 dayIdx 추출 (임시: 일~토 를 0~6으로 매핑)
-                const mappedEvents = (bookingsRes.data.bookings || []).map(b => {
-                    const dateObj = new Date(b.appointmentDate);
-                    const dayIdx = dateObj.getDay(); // 0: 일, 1: 월 ... 6: 토
+                const mappedEvents = (bookingsRes.data.bookings || []).map((booking) => {
+                    const dateObj = new Date(booking.appointmentDate);
+                    const dayIdx = dateObj.getDay();
 
                     return {
-                        id: b.bookingId,
-                        name: b.patientName,
-                        type: b.departmentName || '진료', // API에 초진/재진 필드가 없으니 과 이름으로 대체
-                        timeStr: b.startTime, // "10:00"
-                        dayIdx: dayIdx,
-                        fullDate: b.appointmentDate,
-                        doctor: b.doctorName || '담당의',
-                        status: b.status || 'CONFIRMED'
+                        id: booking.bookingId,
+                        name: booking.patientName,
+                        type: booking.departmentName || '진료',
+                        timeStr: booking.startTime,
+                        dayIdx,
+                        fullDate: booking.appointmentDate,
+                        doctor: booking.doctorName || '담당의',
+                        status: booking.status || 'CONFIRMED'
                     };
                 });
                 setCalendarEvents(mappedEvents);
-
             } catch (error) {
-                console.error("Dashboard data fetch error:", error);
+                console.error('Dashboard data fetch error:', error);
             }
         };
 
         fetchDashboardData();
     }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const fetchMinimapState = async () => {
+            if (!isMounted || minimapRequestInFlightRef.current) {
+                return;
+            }
+
+            minimapRequestInFlightRef.current = true;
+
+            try {
+                const response = await fetch(MINIMAP_API_URL, {
+                    method: 'GET',
+                    headers: {
+                        Accept: 'application/json'
+                    },
+                    cache: 'no-store'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Minimap API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (!isMounted) return;
+
+                const posePayload = data?.vehiclePose ?? data?.current_pose ?? data?.currentPose;
+                const pathPayload = data?.pathPoints ?? data?.trajectory;
+                const nextState = normalizeMonitorState(
+                    data?.state
+                    ?? data?.vehicleState
+                    ?? data?.missionState
+                    ?? data?.status
+                );
+                const nextSpeedKmh = toFiniteNumber(
+                    data?.speedKmh
+                    ?? data?.vehicleSpeedKmh
+                );
+                const nextSpeedMs = toFiniteNumber(
+                    data?.speedMs
+                    ?? data?.vehicleSpeedMs
+                    ?? data?.speed
+                );
+                const nextSpeed = nextSpeedKmh !== null
+                    ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
+                    : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
+
+                setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
+                setMinimapPathPoints(sanitizePathPoints(pathPayload));
+                setMinimapMonitorState(nextState);
+                setMinimapVehicleSpeed(nextSpeed);
+            } catch (error) {
+                if (isMounted) {
+                    const now = Date.now();
+                    if (now - minimapErrorLoggedAtRef.current >= 2000) {
+                        console.error('Minimap polling error:', error);
+                        minimapErrorLoggedAtRef.current = now;
+                    }
+                }
+            } finally {
+                minimapRequestInFlightRef.current = false;
+            }
+        };
+
+        fetchMinimapState();
+        const intervalId = window.setInterval(fetchMinimapState, MINIMAP_POLL_INTERVAL_MS);
+
+        return () => {
+            isMounted = false;
+            window.clearInterval(intervalId);
+        };
+    }, []);
+
+    const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || vehicles[0] || null;
+    const vehicleState = minimapMonitorState || selectedVehicle?.status || '대기';
+    const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
 
     const handleLogout = () => {
         logout();
@@ -141,10 +300,8 @@ const ControlCenter = () => {
 
     return (
         <div className="h-screen bg-[#F5F6F8] flex flex-col font-sans overflow-hidden">
-            {/* 1. 상단 글로벌 네비게이션 바 (Nav Bar) */}
             <header className="h-16 bg-[#061A40] text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
                 <div className="flex items-center gap-8">
-                    {/* Logo Section */}
                     <div className="flex items-center gap-3">
                         <div className="bg-white/10 p-2 rounded-lg">
                             <Activity className="w-5 h-5 text-[#B9D6F2]" />
@@ -155,7 +312,6 @@ const ControlCenter = () => {
                         </span>
                     </div>
 
-                    {/* Navigation Tabs */}
                     <div className="flex items-center gap-1 bg-[#003559] p-1 rounded-lg">
                         <button
                             onClick={() => setActiveTab('map')}
@@ -219,13 +375,19 @@ const ControlCenter = () => {
                 </div>
             </header>
 
-            {/* 메인 뷰 영역 (탭에 따라 변경) */}
             <main className="flex-1 overflow-hidden relative">
                 {activeTab === 'map' && (
                     <MapMonitoring
                         vehicles={vehicles}
+                        selectedVehicle={selectedVehicle}
                         selectedVehicleId={selectedVehicleId}
                         setSelectedVehicleId={setSelectedVehicleId}
+                        minimapVehiclePose={minimapVehiclePose}
+                        minimapPathPoints={minimapPathPoints}
+                        vehicleState={vehicleState}
+                        vehicleSpeed={vehicleSpeed}
+                        updateIntervalMs={MINIMAP_POLL_INTERVAL_MS}
+                        useMockMinimapData={false}
                     />
                 )}
                 {activeTab === 'dashboard' && (
