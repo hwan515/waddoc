@@ -46,7 +46,7 @@ const ListView = ({ records, patientName }) => {
                                     {r.hasNote ? (
                                         <button 
                                             onClick={() => setSelectedOpinion(r)}
-                                            className="text-sm font-bold text-[#115E59] hover:text-white hover:bg-[#115E59] border border-[#115E59] px-4 py-1.5 rounded-full transition-all mx-auto shadow-sm active:translate-y-[1px]"
+                                            className="mx-auto rounded-full border border-teal-800 px-4 py-1.5 text-sm font-bold text-teal-800 shadow-sm transition-all hover:bg-teal-800 hover:text-white active:translate-y-[1px]"
                                         >
                                             열람
                                         </button>

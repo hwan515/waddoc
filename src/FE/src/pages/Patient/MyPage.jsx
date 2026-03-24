@@ -22,8 +22,6 @@ const MyPage = () => {
                 
                 if (patients.length > 0) {
                     const primaryPatient = patients[0];
-                    console.log("[MyPage] 보호자 환자 정보 API 응답:", primaryPatient);
-
                     // 전화번호 포맷 정규식 (010-0000-0000)
                     const formatPhoneNumber = (phoneNumberString) => {
                         if (!phoneNumberString) return '-';
@@ -72,7 +70,7 @@ const MyPage = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col bg-[#FAF9F6] font-sans">
+        <div className="min-h-screen flex flex-col bg-slate-50 font-sans">
             {/* Header */}
             <header className="bg-white border-b border-slate-200 shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
                 <div className="flex items-center gap-8">
@@ -115,14 +113,14 @@ const MyPage = () => {
 
                 {/* 1. Profile Overview Card */}
                 <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-[#0353A4]/5 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-primary/5 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
 
                     <div className="flex flex-col md:flex-row items-center md:items-start gap-8 relative z-10">
-                        <div className="w-24 h-24 bg-[#0353A4]/10 rounded-full flex items-center justify-center border-4 border-white shadow-md flex-shrink-0 overflow-hidden">
+                        <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center border-4 border-white shadow-md flex-shrink-0 overflow-hidden">
                             {user.referenceImagePath ? (
                                 <img src={user.referenceImagePath} alt="Patient Profile" className="w-full h-full object-cover" />
                             ) : (
-                                <User className="w-10 h-10 text-[#0353A4]" />
+                                <User className="w-10 h-10 text-primary" />
                             )}
                         </div>
 
@@ -150,22 +148,22 @@ const MyPage = () => {
                     {/* Activity Stats */}
                     <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60">
                         <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
-                            <Activity className="w-5 h-5 text-[#0353A4]" />
+                            <Activity className="w-5 h-5 text-primary" />
                             나의 병원 진료 요약
                         </h2>
 
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-[#F0F4F8] rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-transform hover:-translate-y-1">
+                            <div className="bg-slate-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-transform hover:-translate-y-1">
                                 <div className="p-3 bg-white rounded-xl shadow-sm mb-4">
-                                    <HeartPulse className="w-6 h-6 text-[#0353A4]" />
+                                    <HeartPulse className="w-6 h-6 text-primary" />
                                 </div>
                                 <span className="text-sm font-medium text-slate-500 mb-1">총 진료 횟수</span>
-                                <div className="text-3xl font-extrabold text-[#0353A4] tracking-tight">{totalVisits}<span className="text-lg text-slate-400 font-medium ml-1">회</span></div>
+                                <div className="text-3xl font-extrabold text-primary tracking-tight">{totalVisits}<span className="text-lg text-slate-400 font-medium ml-1">회</span></div>
                             </div>
 
-                            <div className="bg-[#FDF4EE] rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-transform hover:-translate-y-1">
+                            <div className="bg-orange-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-transform hover:-translate-y-1">
                                 <div className="p-3 bg-white rounded-xl shadow-sm mb-4">
-                                    <Stethoscope className="w-6 h-6 text-[#D97757]" />
+                                    <Stethoscope className="w-6 h-6 text-orange-500" />
                                 </div>
                                 <span className="text-sm font-medium text-slate-500 mb-1">주 진료 의사</span>
                                 <div className="text-2xl font-extrabold text-slate-800 tracking-tight mt-1">{mostVisitedDoctor}</div>
@@ -176,7 +174,7 @@ const MyPage = () => {
                     {/* Basic Patient Details */}
                     <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60">
                         <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
-                            <User className="w-5 h-5 text-[#0353A4]" />
+                            <User className="w-5 h-5 text-primary" />
                             기본 정보
                         </h2>
 

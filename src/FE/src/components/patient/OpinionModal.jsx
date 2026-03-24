@@ -23,7 +23,7 @@ const OpinionModal = ({ isOpen, onClose, record, patientName }) => {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-slide-up">
                 
                 {/* 헤더 영역 */}
-                <div className="bg-[#115E59] px-6 py-4 flex items-center justify-between">
+                <div className="bg-teal-800 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-white">
                         <FileSignature className="w-5 h-5" />
                         <h2 className="text-lg font-bold">진료 소견서</h2>
@@ -43,7 +43,7 @@ const OpinionModal = ({ isOpen, onClose, record, patientName }) => {
                 </div>
 
                 {/* 내용 영역 (스크롤 가능) */}
-                <div className="p-3 md:p-4 overflow-y-auto flex-1 bg-[#F8FAFC] text-black">
+                <div className="p-3 md:p-4 overflow-y-auto flex-1 bg-slate-50 text-black">
                     {/* 문서 실제 종이 양식 컨테이너 */}
                     <div className="bg-white border-2 border-slate-300 p-4 md:p-5 shadow-sm">
                         

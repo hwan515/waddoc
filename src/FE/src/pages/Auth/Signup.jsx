@@ -125,7 +125,7 @@ const Signup = () => {
                     <div className="space-y-3">
                         <Link
                             to="/"
-                            className="inline-flex w-full items-center justify-center rounded-xl bg-[#0353A4] px-4 py-4 text-base font-bold text-white shadow-lg shadow-[#0353A4]/30 transition-all hover:-translate-y-0.5 hover:bg-[#006DAA]"
+                            className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-4 text-base font-bold text-white shadow-lg shadow-primary/30 transition-all hover:-translate-y-0.5 hover:bg-accent-1"
                         >
                             로그인 화면으로 이동
                         </Link>
