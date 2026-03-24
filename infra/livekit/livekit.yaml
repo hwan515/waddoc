@@ -1,14 +1,13 @@
 port: 7880
 rtc:
-  # 운영에서는 STUN 자동 감지 대신 --node-ip로 공인 IP를 고정한다.
-  # use_external_ip 경로에서 잘못된 TURN URL(host에 braces/whitespace 포함)이
-  # 생성되는 현상을 피하기 위한 설정이다.
   use_external_ip: false
   udp_port: 8882
   tcp_port: 8881
+  turn_servers:
+    - host: $LIVEKIT_NODE_IP
+      port: 8478
+      protocol: udp
+      username: ""
+      credential: $TURN_SECRET
 turn:
-  enabled: true
-  tls_port: 0
-  udp_port: 8478
-  relay_range_start: 8600
-  relay_range_end: 8699
+  enabled: false

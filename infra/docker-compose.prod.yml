@@ -144,21 +144,41 @@ services:
   # === WebRTC (LiveKit) — 화상 진료 시그널링 서버 ===
   livekit:
     image: livekit/livekit-server:latest
-    command: [ "--config", "/etc/livekit.yaml", "--node-ip", "${LIVEKIT_NODE_IP}" ]
+    entrypoint: ["/bin/sh", "/etc/entrypoint.sh"]
     expose:
       - "7880"
     ports:
       - "8881:8881" # TCP fallback for WebRTC media
       - "8882:8882/udp" # UDP media
-      - "8478:8478/udp" # TURN UDP
-      - "8600-8699:8600-8699/udp" # TURN relay range
     volumes:
-      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+      - ./livekit/livekit.yaml:/etc/livekit.yaml.tpl:ro
+      - ./livekit/entrypoint.sh:/etc/entrypoint.sh:ro
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_NODE_IP: "${LIVEKIT_NODE_IP}"
+      TURN_SECRET: "${TURN_SECRET}"
     restart: unless-stopped
     networks:
       - waddoc-net
+
+  # === TURN Server (coturn) — NAT 통과용 릴레이 ===
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    command: >
+      -n
+      --listening-port=8478
+      --min-port=8600
+      --max-port=8699
+      --use-auth-secret
+      --static-auth-secret=${TURN_SECRET}
+      --realm=turn.waddoc.com
+      --external-ip=${LIVEKIT_NODE_IP}
+      --no-tls
+      --no-dtls
+      --no-cli
+      --fingerprint
+    restart: unless-stopped
 
   # === Zenoh (ROS2 메시지 라우터) — 로봇 통신 브릿지 ===
   zenoh:
