@@ -32,7 +32,7 @@ ARCFACE_TEMPLATE = np.array(
 class IdvRequestContext:
     verification_id: str
     patient_id: str
-    reference_image: UploadFile
+    reference_image: UploadFile | None
     face_image: UploadFile
     id_card_image: UploadFile
 
@@ -71,7 +71,8 @@ class IdvService:
 
     def _verify_sync(self, context: IdvRequestContext) -> IdvVerifyResponse:
         start = time.perf_counter()
-        reference_image = self._load_image(context.reference_image)
+        has_reference_image = context.reference_image is not None
+        reference_image = self._load_image(context.reference_image) if context.reference_image is not None else None
         face_image = self._load_image(context.face_image)
         id_card_image = self._load_image(context.id_card_image)
 
@@ -79,7 +80,7 @@ class IdvService:
         embedder = self._registry.get_adaface()
         ocr_engine = self._registry.get_ocr()
 
-        reference_faces = self._detect_faces(detector, reference_image)
+        reference_faces = self._detect_faces(detector, reference_image) if reference_image is not None else []
         live_faces = self._detect_faces(detector, face_image)
         id_card_faces = self._detect_faces(detector, id_card_image)
 
@@ -88,7 +89,7 @@ class IdvService:
         id_card_detected = True
         reason_codes: list[str] = []
 
-        if not reference_faces:
+        if has_reference_image and not reference_faces:
             reason_codes.append("REFERENCE_FACE_NOT_FOUND")
         if not live_faces:
             reason_codes.append("LIVE_FACE_NOT_FOUND")
@@ -102,15 +103,16 @@ class IdvService:
 
         face_similarity = None
         id_card_face_similarity = None
+        live_embedding = None
 
-        if reference_faces and len(live_faces) == 1:
-            reference_embedding = embedder.embed(self._align_face(reference_image, reference_faces[0].keypoints))
+        if len(live_faces) == 1:
             live_embedding = embedder.embed(self._align_face(face_image, live_faces[0].keypoints))
+
+        if reference_faces and len(live_faces) == 1 and reference_image is not None and live_embedding is not None:
+            reference_embedding = embedder.embed(self._align_face(reference_image, reference_faces[0].keypoints))
             face_similarity = cosine_similarity(reference_embedding, live_embedding)
             if face_similarity < self._settings.idv_face_reference_threshold:
                 reason_codes.append("LOW_FACE_SIMILARITY")
-        else:
-            live_embedding = None
 
         parsed_ocr = self._run_ocr(ocr_engine, id_card_image)
         if parsed_ocr.name is None or parsed_ocr.rrn_masked is None or parsed_ocr.address is None:

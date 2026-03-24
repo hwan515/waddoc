@@ -151,7 +151,7 @@ Request: `multipart/form-data`
 - `verificationId`
 - `patientId`
 - `verificationMode=FACE_AND_IDCARD`
-- `referenceImage`
+- `referenceImage` (optional)
 - `faceImage`
 - `idCardImage`
 
@@ -191,7 +191,7 @@ Response:
 
 ### Step 2. Reference Face Processing
 
-- `referenceImage`에서 얼굴 검출
+- `referenceImage`가 있으면 얼굴 검출
 - 단일 얼굴만 허용
 - landmark 기반 정렬
 - AdaFace embedding 생성
@@ -223,7 +223,7 @@ Response:
 
 `matched=true` 조건:
 
-- `faceSimilarityScore >= IDV_FACE_REFERENCE_THRESHOLD`
+- `referenceImage`가 있으면 `faceSimilarityScore >= IDV_FACE_REFERENCE_THRESHOLD`
 - `idCardFaceSimilarityScore >= IDV_FACE_IDCARD_THRESHOLD`
 - `ocrConfidence >= IDV_OCR_MIN_CONFIDENCE`
 - `name`, `rrn`, `address` 추출 성공

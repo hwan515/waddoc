@@ -11,7 +11,7 @@ async def verify_identity(
     verification_id: str = Form(..., alias="verificationId"),
     patient_id: str = Form(..., alias="patientId"),
     verification_mode: str = Form(..., alias="verificationMode"),
-    reference_image: UploadFile = File(..., alias="referenceImage"),
+    reference_image: UploadFile | None = File(None, alias="referenceImage"),
     face_image: UploadFile = File(..., alias="faceImage"),
     id_card_image: UploadFile = File(..., alias="idCardImage"),
     service: IdvService = Depends(get_idv_service),

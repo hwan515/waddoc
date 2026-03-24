@@ -84,11 +84,11 @@ public class MissionIdentityCheckService {
             return bypassIdentityCheck(mission, patient, actor);
         }
 
-        byte[] referenceImage = readReferenceImage(patient);
+        byte[] referenceImage = readReferenceImageIfPresent(patient);
         IdentityVerificationResult identityVerificationResult = consultationIdentityVerificationClient.verify(
                 patient.getPublicId(),
                 referenceImage,
-                extractFilename(patient.getReferenceImagePath()),
+                extractFilenameIfPresent(patient.getReferenceImagePath()),
                 getBytes(faceImage),
                 fallbackFilename(faceImage, "face-image.jpg"),
                 getBytes(idCardImage),
@@ -128,9 +128,27 @@ public class MissionIdentityCheckService {
             Patient patient,
             AccessActor actor
     ) {
-        // TODO: Remove this bypass once the AI IDV server is stable and all environments use the real verification flow.
+        return buildBypassedIdentityCheckResponse(
+                mission,
+                patient,
+                actor,
+                "MISSION_IDENTITY_CHECK_BYPASSED",
+                "BYPASSED",
+                "Identity check bypass enabled."
+        );
+    }
+
+    private MissionIdentityCheckResponse buildBypassedIdentityCheckResponse(
+            Mission mission,
+            Patient patient,
+            AccessActor actor,
+            String auditAction,
+            String reasonCode,
+            String logMessage
+    ) {
         log.warn(
-                "Identity check bypass enabled. missionId={}, patientId={}",
+                "{} missionId={}, patientId={}",
+                logMessage,
                 mission.getPublicId(),
                 patient.getPublicId()
         );
@@ -139,7 +157,7 @@ public class MissionIdentityCheckService {
                 missionIdentityCheckCacheService.saveVerified(mission.getPublicId(), patient.getPublicId());
 
         auditLogService.log(
-                "MISSION_IDENTITY_CHECK_BYPASSED",
+                auditAction,
                 "MISSION",
                 mission.getPublicId(),
                 "corr_mis_" + mission.getPublicId(),
@@ -147,7 +165,8 @@ public class MissionIdentityCheckService {
                 actor.actorRole(),
                 Map.of(
                         "patientId", patient.getPublicId(),
-                        "missionPhase", mission.getPhase().name()
+                        "missionPhase", mission.getPhase().name(),
+                        "reasonCode", reasonCode
                 )
         );
 
@@ -155,7 +174,7 @@ public class MissionIdentityCheckService {
                 .matched(true)
                 .faceSimilarityScore(1.0)
                 .idCardFaceSimilarityScore(1.0)
-                .reasonCodes(List.of("BYPASSED"))
+                .reasonCodes(List.of(reasonCode))
                 .ocr(IdentityVerificationResult.OcrData.builder()
                         .name(patient.getName())
                         .birthDate6(patient.getBirthDate6())
@@ -172,15 +191,15 @@ public class MissionIdentityCheckService {
         );
     }
 
-    private byte[] readReferenceImage(Patient patient) {
+    private byte[] readReferenceImageIfPresent(Patient patient) {
         if (!patient.hasReferenceImage()) {
-            throw new BusinessException(ErrorCode.REFERENCE_IMAGE_MISSING);
+            return null;
         }
 
         Path rootPath = Path.of(fileStorageRoot).toAbsolutePath().normalize();
         Path resolvedPath = rootPath.resolve(patient.getReferenceImagePath()).normalize();
         if (!resolvedPath.startsWith(rootPath) || !Files.exists(resolvedPath) || !Files.isRegularFile(resolvedPath)) {
-            throw new BusinessException(ErrorCode.REFERENCE_IMAGE_MISSING);
+            return null;
         }
 
         try {
@@ -210,23 +229,36 @@ public class MissionIdentityCheckService {
         return Path.of(relativePath).getFileName().toString();
     }
 
+    private String extractFilenameIfPresent(String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            return null;
+        }
+        return extractFilename(relativePath);
+    }
+
     private void validateIdentityVerification(Patient patient, IdentityVerificationResult result, String missionId) {
         IdentityVerificationResult.OcrData ocr = result.getOcr();
+        boolean nameMatched = ocr != null && equalsNormalized(patient.getName(), ocr.getName());
+        boolean birthDateMatched = ocr != null && birthDate6Matches(patient.getBirthDate6(), ocr);
+        boolean addressMatched = ocr != null && addressMatches(patient.getAddress(), ocr.getAddress());
+        boolean anyOcrFieldMatched = nameMatched || birthDateMatched || addressMatched;
         boolean verified = result.isMatched()
                 && ocr != null
-                && equalsNormalized(patient.getName(), ocr.getName())
-                && equalsNormalized(patient.getBirthDate6(), ocr.getBirthDate6())
-                && addressMatches(patient.getAddress(), ocr.getAddress());
+                && anyOcrFieldMatched;
 
         if (verified) {
             return;
         }
 
         log.warn(
-                "Identity verification failed. missionId={}, patientId={}, matched={}, reasonCodes={}",
+                "Identity verification failed. missionId={}, patientId={}, matched={}, anyOcrFieldMatched={}, nameMatched={}, birthDateMatched={}, addressMatched={}, reasonCodes={}",
                 missionId,
                 patient.getPublicId(),
                 result.isMatched(),
+                anyOcrFieldMatched,
+                nameMatched,
+                birthDateMatched,
+                addressMatched,
                 result.getReasonCodes()
         );
         auditLogService.log(
@@ -237,6 +269,10 @@ public class MissionIdentityCheckService {
                 Map.of(
                         "patientId", patient.getPublicId(),
                         "matched", result.isMatched(),
+                        "anyOcrFieldMatched", anyOcrFieldMatched,
+                        "nameMatched", nameMatched,
+                        "birthDateMatched", birthDateMatched,
+                        "addressMatched", addressMatched,
                         "reasonCodes", result.getReasonCodes()
                 )
         );
@@ -254,10 +290,63 @@ public class MissionIdentityCheckService {
         if (patientAddress == null || ocrAddress == null) {
             return false;
         }
-        String normalizedPatientAddress = normalize(patientAddress);
-        String normalizedOcrAddress = normalize(ocrAddress);
+        String normalizedPatientAddress = normalizeAddress(patientAddress);
+        String normalizedOcrAddress = normalizeAddress(ocrAddress);
         return normalizedPatientAddress.contains(normalizedOcrAddress)
                 || normalizedOcrAddress.contains(normalizedPatientAddress);
+    }
+
+    private boolean birthDate6Matches(String patientBirthDate6, IdentityVerificationResult.OcrData ocr) {
+        if (patientBirthDate6 == null || ocr == null) {
+            return false;
+        }
+        String resolvedBirthDate6 = firstNonBlank(
+                ocr.getBirthDate6(),
+                extractBirthDate6(ocr.getRrnMasked())
+        );
+        return equalsNormalized(patientBirthDate6, resolvedBirthDate6);
+    }
+
+    private String extractBirthDate6(String rrnMasked) {
+        if (rrnMasked == null || rrnMasked.isBlank()) {
+            return null;
+        }
+        String digits = rrnMasked.replaceAll("\\D", "");
+        return digits.length() >= 6 ? digits.substring(0, 6) : null;
+    }
+
+    private String normalizeAddress(String value) {
+        return normalize(
+                value
+                        .replace("서울특별시", "서울")
+                        .replace("부산광역시", "부산")
+                        .replace("대구광역시", "대구")
+                        .replace("인천광역시", "인천")
+                        .replace("광주광역시", "광주")
+                        .replace("대전광역시", "대전")
+                        .replace("울산광역시", "울산")
+                        .replace("세종특별자치시", "세종")
+                        .replace("경상북도", "경북")
+                        .replace("경상남도", "경남")
+                        .replace("전라북도", "전북")
+                        .replace("전라남도", "전남")
+                        .replace("충청북도", "충북")
+                        .replace("충청남도", "충남")
+                        .replace("강원특별자치도", "강원")
+                        .replace("강원도", "강원")
+                        .replace("제주특별자치도", "제주")
+                        .replace("제주도", "제주")
+                        .replaceAll("[,()\\-]", "")
+        );
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String normalize(String value) {
