@@ -774,12 +774,12 @@ rtc:
 
 turn:
   enabled: true
-  domain: <SERVER_DOMAIN>
   tls_port: 0                  # MVP에서 TLS TURN 사용 안 함
   udp_port: 3478               # TURN/UDP (외부 8478으로 매핑)
 ```
 
 > 운영 docker-compose에서는 `livekit-server --config /etc/livekit.yaml --node-ip <PUBLIC_IP>` 형태로 공인 IP를 명시한다.
+> `turn.domain`은 TURN/TLS 인증서 도메인과 맞추는 설정이므로, 현재처럼 `tls_port: 0`인 UDP-only 구성에서는 사용하지 않는다.
 
 #### Nginx 설정 (배포 환경)
 
