@@ -170,8 +170,8 @@ services:
       --listening-port=8478
       --min-port=8600
       --max-port=8699
-      --use-auth-secret
-      --static-auth-secret=${TURN_SECRET}
+      --lt-cred-mech
+      --user=waddoc:${TURN_SECRET}
       --realm=turn.waddoc.com
       --external-ip=${LIVEKIT_NODE_IP}
       --no-tls
