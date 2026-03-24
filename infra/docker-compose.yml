@@ -38,7 +38,6 @@ services:
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
       - LIVEKIT_HOST=http://livekit:7880
       - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
-      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-5000}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}

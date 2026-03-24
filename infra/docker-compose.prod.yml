@@ -56,7 +56,6 @@ services:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - AI_IDV_URL=${AI_IDV_URL:-https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify}
-      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-5000}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
       # 더미 데이터 추가

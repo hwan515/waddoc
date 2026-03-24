@@ -245,9 +245,9 @@ MVP 핵심 흐름:
 
 1. 차량 태블릿은 환자 얼굴 사진과 신분증 이미지를 촬영한다.
 2. 서버는 `patientId` 기준으로 운영 저장소에 보관된 기존 기준 이미지를 조회한다.
-3. 서버는 기준 이미지가 있으면 `referenceImage`, `faceImage`, `idCardImage`를, 없으면 `faceImage`, `idCardImage`만 GPU 서버로 전송하고 일치도/판정 응답을 받는다.
+3. 서버는 `referenceImage`, `faceImage`, `idCardImage`를 GPU 서버로 전송하고 일치도/판정 응답을 받는다.
 4. GPU 서버 응답에는 최소 `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`가 포함되어야 한다.
-5. 서버는 GPU OCR 결과의 이름, 주소, 주민등록번호 기반 생년월일을 현재 환자 정보와 대조하고, 이름/생년월일 6자리/주소 중 하나 이상 일치하면 통과로 판정한다.
+5. 서버는 GPU OCR 결과의 이름, 주소, 주민등록번호 기반 생년월일을 현재 환자 정보와 대조한다.
 6. 서버는 별도 본인확인 결과 테이블은 두지 않되, 활력징후 단계와 환자 토큰 발급 사이에서 사용할 수 있도록 TTL 기반 캐시에 최근 성공 상태를 저장한다.
 7. 본인 확인 성공 시 차량 태블릿은 활력징후 단계로 이동하고, 실패 시 재촬영 또는 운영자 개입 경로를 제공한다.
 
@@ -257,7 +257,7 @@ MVP 핵심 흐름:
 2. 활력징후 단계는 UX에 포함하되, MVP에서는 측정값 영속 저장 없이 장비 연동 또는 더미 표시 수준까지 허용한다.
 3. 시스템은 케이스, 미션 단계, 활성 진료 세션 존재 여부를 함께 조회한다.
 4. 활성 진료 세션이 없으면 차량 태블릿은 활력징후 완료 후 `의사 입장 대기` 화면을 유지하고, 세션이 준비되면 다음 단계로 진행한다.
-5. 활성 진료 세션이 있으면 차량 태블릿은 `POST /missions/{missionId}/participants/patient/token`으로 환자 참가 토큰을 요청하고, 서버가 `missionId -> case -> consultationSession -> patient`로 대상 세션과 환자를 결정한다.
+5. 활성 진료 세션이 있으면 차량 태블릿은 `POST /sessions/{sessionId}/participants/patient/token`으로 환자 참가 토큰을 요청하고, 서버가 `sessionId -> case -> patient`로 대상 환자를 결정한다.
 6. 서버는 최근 본인 확인 성공 상태가 유효할 때만 환자 토큰을 발급한다.
 7. 의사와 환자가 모두 입장하면 세션 상태를 `IN_PROGRESS`로 전환하고, 미션 단계도 `CONSULTING`으로 전환한다.
 8. 환자 측 UI는 "세션 생성"이 아니라 "세션 참가 준비/대기/참가" 상태를 표현해야 한다.
@@ -278,7 +278,7 @@ MVP 핵심 흐름:
 3. 의사는 차량 측에서 진료 준비가 시작된 케이스를 확인한다.
 4. 의사가 "진료 시작"을 클릭하면 시스템은 `POST /cases/{caseId}/sessions`에 해당하는 흐름으로 **의사 전용 진료 세션을 생성**하고, 의사 본인의 WebRTC 토큰만 발급한다.
 5. 진료 세션 생성 권한은 **배정된 의사만** 가진다. 환자/차량 태블릿은 진료 세션을 생성하지 않는다.
-6. 세션 생성 후 상태는 `READY`가 되며, 차량 태블릿(운영 단말, 미션 단말 토큰)은 본인 확인과 활력징후 단계를 거친 뒤 `POST /missions/{missionId}/participants/patient/token`으로 환자 토큰 발급을 요청한다.
+6. 세션 생성 후 상태는 `READY`가 되며, 차량 태블릿(운영 단말, 관리자 인증)은 본인 확인과 활력징후 단계를 거친 뒤 `POST /sessions/{sessionId}/participants/patient/token`으로 환자 토큰 발급을 요청한다.
 7. 환자 토큰 발급 시 서버는 다음을 검증해야 한다.
     - 세션이 연결된 케이스의 환자를 서버가 일관되게 조회할 수 있는지
     - 미션 단계가 환자 참가 가능한 준비 상태(`VERIFYING` 또는 `CONSULTING`)인지
