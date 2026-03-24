@@ -9,6 +9,9 @@ import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
@@ -46,6 +49,9 @@ class ConsultationWebhookServiceTest {
     private ConsultationSessionRepository consultationSessionRepository;
 
     @Mock
+    private MissionRepository missionRepository;
+
+    @Mock
     private AuditLogService auditLogService;
 
     @Mock
@@ -66,7 +72,9 @@ class ConsultationWebhookServiceTest {
     @Test
     void handleWebhook_marksDoctorAndPatientConnectedAndStartsSession() {
         ConsultationSession session = buildSession();
+        Mission mission = buildMission(session.getCareCase(), MissionPhase.VERIFYING);
         when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
+        when(missionRepository.findByCareCase(session.getCareCase())).thenReturn(Optional.of(mission));
         stubIdempotencyCheck();
 
         String doctorJoinedBody = participantEventBody("participant_joined", "room_ses_test123", "doc_usr_doctor");
@@ -89,6 +97,7 @@ class ConsultationWebhookServiceTest {
         assertThat(session.getPatientConnectionState()).isEqualTo(ConnectionState.CONNECTED);
         assertThat(session.getStatus()).isEqualTo(ConsultationSessionStatus.IN_PROGRESS);
         assertThat(session.getStartedAt()).isNotNull();
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.CONSULTING);
     }
 
     @Test
@@ -239,6 +248,17 @@ class ConsultationWebhookServiceTest {
                 .build();
         setField(session, "publicId", "ses_test123");
         return session;
+    }
+
+    private Mission buildMission(com.waddoc.domain.carecase.entity.CareCase careCase, MissionPhase phase) {
+        Mission mission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId("VEH-01")
+                .destination(careCase.getPatient().getAddress())
+                .build();
+        setField(mission, "publicId", "ms_test123");
+        mission.updatePhase(phase);
+        return mission;
     }
 
     private String participantEventBody(String event, String roomName, String identity) {

@@ -4,6 +4,8 @@ import com.waddoc.domain.audit.service.AuditLogService;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import io.livekit.server.WebhookReceiver;
@@ -32,6 +34,7 @@ public class ConsultationWebhookService {
     private static final Duration WEBHOOK_IDEMPOTENCY_TTL = Duration.ofMinutes(5);
 
     private final ConsultationSessionRepository consultationSessionRepository;
+    private final MissionRepository missionRepository;
     private final AuditLogService auditLogService;
     private final WebhookReceiver webhookReceiver;
     private final DisconnectTimerService disconnectTimerService;
@@ -86,6 +89,8 @@ public class ConsultationWebhookService {
             }
         }
 
+        syncMissionPhaseWhenConsultationStarts(session);
+
         auditLogService.log(
                 "LIVEKIT_PARTICIPANT_JOINED",
                 "CONSULTATION_SESSION",
@@ -97,6 +102,36 @@ public class ConsultationWebhookService {
                         "identity", event.getParticipant().getIdentity()
                 )
         );
+    }
+
+    private void syncMissionPhaseWhenConsultationStarts(ConsultationSession session) {
+        if (session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
+            return;
+        }
+
+        missionRepository.findByCareCase(session.getCareCase())
+                .ifPresentOrElse(mission -> {
+                    if (mission.getPhase() == MissionPhase.VERIFYING) {
+                        mission.updatePhase(MissionPhase.CONSULTING);
+                        missionRepository.save(mission);
+                        log.info(
+                                "Mission phase updated to CONSULTING after consultation start. sessionId={}, missionId={}",
+                                session.getPublicId(),
+                                mission.getPublicId()
+                        );
+                    } else if (mission.getPhase() != MissionPhase.CONSULTING) {
+                        log.warn(
+                                "Consultation started with unexpected mission phase. sessionId={}, missionId={}, missionPhase={}",
+                                session.getPublicId(),
+                                mission.getPublicId(),
+                                mission.getPhase()
+                        );
+                    }
+                }, () -> log.warn(
+                        "Mission not found for started consultation session. sessionId={}, caseId={}",
+                        session.getPublicId(),
+                        session.getCareCase().getPublicId()
+                ));
     }
 
     private void handleParticipantLeft(LivekitWebhook.WebhookEvent event) {
