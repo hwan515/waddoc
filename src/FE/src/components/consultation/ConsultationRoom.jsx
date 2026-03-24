@@ -9,6 +9,10 @@ import {
     MEDICINE_CATALOG,
     MEDICINE_CATALOG_BY_CODE,
 } from '../../constants/medicineCatalog';
+import {
+    createConsultationSummaryPayload,
+    hasSummaryNote,
+} from '../../utils/consultationSummary';
 import EcgWaveform from './EcgWaveform';
 
 const ConsultationRoom = ({
@@ -19,6 +23,8 @@ const ConsultationRoom = ({
     videoEnabled,
     setVideoEnabled,
     onEndCall,
+    isSavingSummary = false,
+    summarySaveStatus = { type: 'idle', message: '' },
     role = 'DOCTOR'
 }) => {
     // 1. 상태 변수 설정
@@ -34,6 +40,8 @@ const ConsultationRoom = ({
     const [selectedMeds, setSelectedMeds] = useState([]);
     const [prescribedMeds, setPrescribedMeds] = useState([]);
     const [consultationNote, setConsultationNote] = useState('');
+    const [needsFollowUp, setNeedsFollowUp] = useState(false);
+    const [validationMessage, setValidationMessage] = useState('');
 
     // 진료 시간 타이머 & 상단 시계
     useEffect(() => {
@@ -67,23 +75,44 @@ const ConsultationRoom = ({
         );
     };
 
+    const buildSummaryPayload = (prescriptionCodes = prescribedMeds) => createConsultationSummaryPayload({
+        summaryNote: consultationNote,
+        prescriptionCodes,
+        needsFollowUp,
+    });
+
     const handleAddPrescription = () => {
         if (selectedMeds.length === 0) {
             return;
         }
 
-        setPrescribedMeds((prev) => [...new Set([...prev, ...selectedMeds])]);
+        const nextPrescribedMeds = [...new Set([...prescribedMeds, ...selectedMeds])];
+        setValidationMessage('');
+        setPrescribedMeds(nextPrescribedMeds);
         setSelectedMeds([]);
     };
 
     const handleRemovePrescription = (medCode) => {
-        setPrescribedMeds((prev) => prev.filter((code) => code !== medCode));
+        const nextPrescribedMeds = prescribedMeds.filter((code) => code !== medCode);
+        setValidationMessage('');
+        setPrescribedMeds(nextPrescribedMeds);
         setSelectedMeds((prev) => prev.filter((code) => code !== medCode));
     };
 
     const handleClearPrescription = () => {
+        if (prescribedMeds.length === 0) {
+            return;
+        }
+
+        setValidationMessage('');
         setPrescribedMeds([]);
         setSelectedMeds([]);
+    };
+
+    const handleResetConsultationNote = () => {
+        setConsultationNote('');
+        setNeedsFollowUp(false);
+        setValidationMessage('');
     };
 
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -114,19 +143,18 @@ const ConsultationRoom = ({
     const prescribedMedicineItems = prescribedMeds
         .map((code) => MEDICINE_CATALOG_BY_CODE[code])
         .filter(Boolean);
+    const feedbackType = validationMessage ? 'error' : summarySaveStatus?.type;
+    const feedbackMessage = validationMessage || summarySaveStatus?.message || '';
 
-    const handleEndCallClick = () => {
+    const handleEndCallClick = async () => {
         if (role === 'DOCTOR') {
-            const summaryData = {
-                summaryNote: consultationNote,
-                isPrescriptionIssued: prescribedMeds.length > 0,
-                prescriptionNote: prescribedMeds
-                    .map((code) => MEDICINE_CATALOG_BY_CODE[code]?.name)
-                    .filter(Boolean)
-                    .join(', '),
-                needsFollowUp: false 
-            };
-            onEndCall(summaryData);
+            if (!hasSummaryNote(consultationNote)) {
+                setValidationMessage('진료 기록을 입력한 후 진료를 종료하세요.');
+                return;
+            }
+
+            setValidationMessage('');
+            await onEndCall(buildSummaryPayload());
         } else {
             onEndCall();
         }
@@ -366,7 +394,7 @@ const ConsultationRoom = ({
                                 <div className="font-bold text-slate-800">처방 내역</div>
                                 <button
                                     onClick={handleClearPrescription}
-                                    disabled={prescribedMedicineItems.length === 0}
+                                    disabled={prescribedMedicineItems.length === 0 || isSavingSummary}
                                     className="px-2 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-300 bg-white disabled:cursor-not-allowed disabled:text-slate-300"
                                 >
                                     전체 비우기
@@ -385,6 +413,7 @@ const ConsultationRoom = ({
                                                 onClick={() => handleRemovePrescription(medicine.code)}
                                                 className="rounded border border-emerald-400 bg-white px-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50"
                                                 aria-label={`${medicine.name} 삭제`}
+                                                disabled={isSavingSummary}
                                             >
                                                 삭제
                                             </button>
@@ -402,29 +431,63 @@ const ConsultationRoom = ({
                             </span>
                             <button
                                 onClick={handleAddPrescription}
-                                disabled={selectedMeds.length === 0}
+                                disabled={selectedMeds.length === 0 || isSavingSummary}
                                 className="px-3 py-0.5 bg-blue-100 border border-blue-400 text-xs text-blue-800 font-bold active:bg-blue-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
                             >
                                 처방 내역 추가
                             </button>
                         </div>
+                        {feedbackMessage ? (
+                            <div
+                                className={`border-t px-2 py-1 text-[11px] font-medium ${
+                                    feedbackType === 'error'
+                                        ? 'border-red-200 bg-red-50 text-red-700'
+                                        : feedbackType === 'success'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : 'border-blue-200 bg-blue-50 text-blue-700'
+                                }`}
+                            >
+                                {feedbackMessage}
+                            </div>
+                        ) : null}
                     </div>
 
                     {/* 우측 하단: 진료 내역 입력란 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex justify-between">
-                            <span className="font-bold text-slate-800 text-sm">📝 진료 기록 (경과 기록지)</span>
-                            <div className="space-x-1">
-                                <button className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100">초기화</button>
-                                <button className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100">임시저장</button>
+                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex items-center justify-between gap-2">
+                            <div>
+                                <span className="font-bold text-slate-800 text-sm">📝 진료 기록 (경과 기록지)</span>
+                                <div className="text-[11px] font-medium text-slate-500">작성 내용은 진료 종료 시 저장됩니다.</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={needsFollowUp}
+                                        onChange={(e) => setNeedsFollowUp(e.target.checked)}
+                                        className="h-3.5 w-3.5 accent-amber-600"
+                                    />
+                                    재진 필요
+                                </label>
+                                <button
+                                    onClick={handleResetConsultationNote}
+                                    className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100"
+                                >
+                                    초기화
+                                </button>
                             </div>
                         </div>
-                        <div className="flex-1 p-1 bg-[#E0E0E0]">
+                        <div className="flex-1 p-2 bg-[#EAE6D0]">
                             <textarea 
                                 value={consultationNote}
-                                onChange={(e) => setConsultationNote(e.target.value)}
-                                className="w-full h-full p-2 text-xs border border-slate-400 focus:outline-none focus:border-blue-500 resize-none font-mono"
-                                placeholder="환자 증상 및 처방 기록을 입력하세요..."
+                                onChange={(e) => {
+                                    setConsultationNote(e.target.value);
+                                    if (validationMessage) {
+                                        setValidationMessage('');
+                                    }
+                                }}
+                                className="h-full w-full resize-none rounded-md border border-amber-300 bg-[#FFFDF5] p-3 font-mono text-sm leading-6 text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                placeholder="환자 증상, 진단 소견, 처방 이유를 자세히 기록하세요."
                             ></textarea>
                         </div>
                     </div>

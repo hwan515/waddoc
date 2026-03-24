@@ -4,6 +4,7 @@ import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
+import useConsultationSummarySave from '../../hooks/useConsultationSummarySave';
 import apiClient from '../../utils/api';
 
 const EMPTY_VITALS = {
@@ -72,6 +73,7 @@ const createFallbackDetails = (caseId) => ({
 const VideoConference = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const isDemoMode = !id || id === 'test-room' || id.startsWith('RV_');
 
     const [isJoined, setIsJoined] = useState(false);
     const [livekitToken, setLivekitToken] = useState('');
@@ -85,11 +87,19 @@ const VideoConference = () => {
     const [consultationDetails, setConsultationDetails] = useState(null);
     const [vitals, setVitals] = useState(EMPTY_VITALS);
     const [isLoading, setIsLoading] = useState(true);
+    const {
+        isSavingSummary,
+        summarySaveStatus,
+        saveSummary,
+    } = useConsultationSummarySave({
+        sessionId,
+        isDemoMode,
+    });
 
     // 진료 내역 데이터 조회
     useEffect(() => {
         const fetchCaseDetails = async () => {
-            if (!id || id === 'test-room' || id.startsWith('RV_')) {
+            if (isDemoMode) {
                 // 테스트용 방일 경우 mock 활용
                 setConsultationDetails(DEMO_CONSULTATION_DETAILS);
                 setVitals(DEMO_VITALS);
@@ -136,24 +146,27 @@ const VideoConference = () => {
         };
 
         fetchCaseDetails();
-    }, [id]);
-
+    }, [id, isDemoMode]);
 
     const handleEndCall = async (summaryData) => {
-        if (sessionId && summaryData) {
-            try {
-                await apiClient.put(`/sessions/${sessionId}/summary`, summaryData);
-                console.log("✅ 진료 종료 및 요약 기록 완료");
-            } catch (error) {
-                console.error("❌ 진료 종료 기록 실패:", error);
+        if (summaryData) {
+            const result = await saveSummary(summaryData, {
+                successMessage: '진료 요약을 저장하고 진료를 종료했습니다.',
+                savingMessage: '진료 종료 기록을 저장하는 중입니다.',
+                errorMessage: '진료 종료 기록 저장에 실패했습니다.',
+            });
+
+            if (!result.ok) {
+                return;
             }
         }
+
         navigate('/emr/dashboard');
     };
 
     const handleJoin = async () => {
         try {
-            if (!id || id === 'test-room' || id.startsWith('RV_')) {
+            if (isDemoMode) {
                 console.warn('임시(데모) 예약건이므로 방 생성 API를 건너뛰고 데모 모드로 전환합니다.');
                 setLivekitToken('test-token');
                 setLivekitUrl('wss://test.livekit.cloud');
@@ -227,6 +240,8 @@ const VideoConference = () => {
                 videoEnabled={videoEnabled}
                 setVideoEnabled={setVideoEnabled}
                 onEndCall={handleEndCall}
+                isSavingSummary={isSavingSummary}
+                summarySaveStatus={summarySaveStatus}
                 role="DOCTOR"
             />
             {/* LiveKit 오디오 랜더링 허용을 위한 트랙 랜더러 (기본 숨김) */}
