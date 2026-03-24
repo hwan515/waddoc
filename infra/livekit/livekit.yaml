@@ -7,7 +7,7 @@ rtc:
     - host: $LIVEKIT_NODE_IP
       port: 8478
       protocol: udp
-      username: ""
-      credential: $TURN_SECRET
+      secret: $TURN_SECRET
+      ttl: 14400
 turn:
   enabled: false
