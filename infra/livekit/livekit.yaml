@@ -5,7 +5,7 @@ rtc:
   tcp_port: 8881
 turn:
   enabled: true
-  domain: j14a603.p.ssafy.io
+  domain: www.waddoc.site
   tls_port: 0
   udp_port: 8478
   relay_range_start: 8600
