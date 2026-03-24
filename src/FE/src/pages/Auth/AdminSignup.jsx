@@ -1,17 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Lock, CheckCircle2 } from 'lucide-react';
-import useAuthStore from '../../store/authStore';
+import { User, Lock, CheckCircle2 } from 'lucide-react';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 
 const AdminSignup = () => {
     const navigate = useNavigate();
-    const login = useAuthStore((state) => state.login);
 
     const [formData, setFormData] = useState({
         name: '',
-        email: '',
+        username: '',
         password: '',
         passwordConfirm: '',
         role: 'operator',
@@ -33,10 +31,9 @@ const AdminSignup = () => {
         // 임시 가입 성공 처리
         setIsSuccess(true);
 
-        // 자동 로그인
+        // 임시 성공 화면 후 로그인 페이지 이동
         setTimeout(() => {
-            login(formData);
-            navigate('/operator/control');
+            navigate('/operator/login');
         }, 1500);
     };
 
@@ -104,14 +101,14 @@ const AdminSignup = () => {
 
                         {/* 이메일 */}
                         <Input
-                            label="이메일 (사번)"
-                            name="email"
-                            type="email"
+                            label="관리자 아이디"
+                            name="username"
+                            type="text"
                             required
-                            value={formData.email}
+                            value={formData.username}
                             onChange={handleChange}
-                            placeholder="admin@vitalconnect.co.kr"
-                            iconLeft={<Mail className="h-4 w-4" />}
+                            placeholder="operator_admin"
+                            iconLeft={<User className="h-4 w-4" />}
                         />
 
                         {/* 비밀번호 */}

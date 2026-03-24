@@ -12,8 +12,7 @@ import { getHomePathForRole, getRoleDisplayName } from '../../utils/authRouting'
 
 const primaryEntries = [
     {
-        title: '보호자/환자 포털',
-        badge: '정식 웹 진입',
+        title: '보호자/환자',
         description: '승인된 보호자가 환자 포털에서 진료일, 소견서, 처방전을 조회합니다.',
         icon: Users,
         actions: [
@@ -23,7 +22,6 @@ const primaryEntries = [
     },
     {
         title: '관리자/관제',
-        badge: '정식 웹 진입',
         description: '관제 운영 담당자가 예약, 세션, 환자 연결 요청을 관리하는 콘솔입니다.',
         icon: ShieldCheck,
         actions: [
@@ -35,7 +33,6 @@ const primaryEntries = [
 const internalEntries = [
     {
         title: '의사 EMR',
-        badge: '시연/내부 전용',
         description: '의사는 평소 사용하는 EMR 흐름 안에서 예약을 수락하고 원격진료로 진입합니다.',
         icon: Stethoscope,
         actions: [
@@ -44,7 +41,6 @@ const internalEntries = [
     },
     {
         title: '로봇 단말',
-        badge: '시연/내부 전용',
         description: '차량 태블릿에서 본인 확인, 활력징후 측정, 환자 세션 입장을 진행하는 전용 화면입니다.',
         icon: Bot,
         actions: [
@@ -69,7 +65,7 @@ const ActionLink = ({ to, label, tone = 'primary' }) => (
     </Link>
 );
 
-const EntryCard = ({ title, badge, description, icon, actions, highlighted = false }) => {
+const EntryCard = ({ title, description, icon, actions, highlighted = false }) => {
     const IconComponent = icon;
 
     return (
@@ -82,14 +78,7 @@ const EntryCard = ({ title, badge, description, icon, actions, highlighted = fal
         >
             <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
-                    <span
-                        className={`inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${
-                            highlighted ? 'bg-white/15 text-secondary' : 'bg-secondary/50 text-accent-2'
-                        }`}
-                    >
-                        {badge}
-                    </span>
-                    <h2 className={`mt-4 text-2xl font-bold tracking-tight ${highlighted ? 'text-white' : 'text-slate-900'}`}>
+                    <h2 className={`text-2xl font-bold tracking-tight ${highlighted ? 'text-white' : 'text-slate-900'}`}>
                         {title}
                     </h2>
                 </div>

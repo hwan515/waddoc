@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Activity, ShieldCheck } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
 import apiClient from '../../../utils/api';
-import { getHomePathForRole } from '../../../utils/authRouting';
 
 const EMRLogin = () => {
     const navigate = useNavigate();
@@ -15,9 +14,8 @@ const EMRLogin = () => {
     });
 
     useEffect(() => {
-        const destination = getHomePathForRole(authenticatedRole);
-        if (destination) {
-            navigate(destination, { replace: true });
+        if (authenticatedRole === 'DOCTOR') {
+            navigate('/emr/dashboard', { replace: true });
         }
     }, [authenticatedRole, navigate]);
 
@@ -39,15 +37,27 @@ const EMRLogin = () => {
             });
 
             const { accessToken, user } = response.data;
-            const destination = getHomePathForRole(user?.role);
-
-            if (!destination) {
-                alert('지원하지 않는 계정 권한입니다. 관리자에게 문의해주세요.');
+            if (user?.role !== 'DOCTOR') {
+                useAuthStore.getState().logout();
+                try {
+                    await apiClient.post(
+                        '/auth/logout',
+                        {},
+                        {
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                        }
+                    );
+                } catch (logoutError) {
+                    console.error('Doctor-only logout cleanup failed:', logoutError);
+                }
+                alert('EMR 로그인은 의사 계정으로만 사용할 수 있습니다.');
                 return;
             }
 
             useAuthStore.getState().setAuth(accessToken, user);
-            navigate(destination, { replace: true });
+            navigate('/emr/dashboard', { replace: true });
         } catch (error) {
             console.error('Login Failed:', error);
             alert('로그인에 실패했습니다. 사번과 비밀번호를 다시 확인해주세요.');
@@ -63,7 +73,7 @@ const EMRLogin = () => {
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4 shadow-lg shadow-primary/20">
                         <Activity className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">EMR(Mock)</h1>
+                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">EMR</h1>
                 </div>
 
                 {/* 로그인 카드 */}

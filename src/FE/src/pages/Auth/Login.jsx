@@ -5,7 +5,6 @@ import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
-import { getHomePathForRole } from '../../utils/authRouting';
 
 const Login = () => {
     const navigate = useNavigate();
@@ -19,9 +18,8 @@ const Login = () => {
     const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
-        const destination = getHomePathForRole(authenticatedRole);
-        if (destination) {
-            navigate(destination, { replace: true });
+        if (authenticatedRole === 'GUARDIAN') {
+            navigate('/patient/portal', { replace: true });
         }
     }, [authenticatedRole, navigate]);
 
@@ -43,15 +41,27 @@ const Login = () => {
             });
 
             const { accessToken, user } = response.data;
-            const destination = getHomePathForRole(user?.role);
-
-            if (!destination) {
-                alert('지원하지 않는 계정 권한입니다. 관리자에게 문의해주세요.');
+            if (user?.role !== 'GUARDIAN') {
+                useAuthStore.getState().logout();
+                try {
+                    await apiClient.post(
+                        '/auth/logout',
+                        {},
+                        {
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                        }
+                    );
+                } catch (logoutError) {
+                    console.error('Guardian-only logout cleanup failed:', logoutError);
+                }
+                alert('보호자 포털은 보호자 계정으로만 로그인할 수 있습니다.');
                 return;
             }
 
             useAuthStore.getState().setAuth(accessToken, user);
-            navigate(destination, { replace: true });
+            navigate('/patient/portal', { replace: true });
         } catch (error) {
             console.error('Login Failed:', error);
             alert('로그인에 실패했습니다. 아이디와 비밀번호를 다시 확인해주세요.');
@@ -65,28 +75,22 @@ const Login = () => {
             <div className="w-full lg:w-[45%] h-full flex flex-col px-8 sm:px-16 xl:px-24 py-8 relative z-10 bg-white overflow-y-auto custom-scrollbar">
 
                 {/* 로고 */}
-                <div className="flex items-center gap-3">
+                <Link to="/" className="flex items-center gap-3 w-fit">
                     <div className="bg-primary/10 p-2 rounded-xl">
                         <Activity className="w-8 h-8 text-primary" strokeWidth={2.5} />
                     </div>
                     <span className="font-bold text-2xl text-dark tracking-tight">
                         Waddoc<span className="text-primary"> 왔닥</span>
                     </span>
-                </div>
+                </Link>
 
                 {/* 폼 컨테이너 */}
                 <div className="w-full max-w-sm mx-auto flex-1 flex flex-col justify-center py-6">
                     <div className="mb-8 text-center lg:text-left">
-                        <h1 className="text-3xl font-bold mb-3 text-slate-900 tracking-tight">보호자 포털 로그인</h1>
+                        <h1 className="text-3xl font-bold mb-3 text-slate-900 tracking-tight">보호자/환자 로그인</h1>
                         <p className="text-sm text-slate-500 font-medium">
                             승인된 보호자 계정으로 환자 포털에 접속하세요.
                         </p>
-                        <Link
-                            to="/"
-                            className="mt-3 inline-flex text-sm font-semibold text-primary transition-colors hover:text-accent-1"
-                        >
-                            다른 역할 진입 경로 보기
-                        </Link>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
@@ -122,22 +126,6 @@ const Login = () => {
                             }
                         />
 
-                        {/* 로그인 유지 & 비밀번호 찾기 */}
-                        <div className="flex items-center justify-between pt-2">
-                            <label className="flex items-center text-sm text-slate-500 font-medium cursor-pointer group">
-                                <div className="relative flex items-center justify-center w-5 h-5 mr-3 border-2 border-slate-300 rounded group-hover:border-primary transition-colors">
-                                    <input type="checkbox" className="opacity-0 absolute inset-0 cursor-pointer peer" />
-                                    <div className="peer-checked:bg-primary absolute inset-0 rounded-[2px] transition-colors flex items-center justify-center">
-                                        <svg className="w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                </div>
-                                로그인 상태 유지
-                            </label>
-                            <a href="#" className="text-sm text-primary font-bold hover:text-accent-1 transition-colors">비밀번호를 잊으셨나요?</a>
-                        </div>
-
                         {/* 로그인 버튼 */}
                         <Button type="submit" fullWidth className="mt-4">
                             포털 로그인
@@ -154,7 +142,7 @@ const Login = () => {
 
                 {/* Footer */}
                 <div className="flex items-center justify-between text-xs sm:text-sm text-slate-400 font-medium">
-                    <span>Copyright © 2026 VitalConnect.</span>
+                    <span>Copyright © 2026 Waddoc.</span>
                     <a href="#" className="hover:text-slate-600 transition-colors">개인정보처리방침</a>
                 </div>
             </div>
@@ -175,10 +163,10 @@ const Login = () => {
 
                     <div className="mt-8 mb-16">
                         <h2 className="text-4xl xl:text-5xl font-bold leading-tight text-white tracking-tight mb-6">
-                            환자의 생명을 잇는 <br />원격 관제 시스템
+                            가족의 진료 기록을 <br />안전하게 확인하세요
                         </h2>
                         <p className="text-lg xl:text-xl text-secondary/90 max-w-md font-medium">
-                            도서·산간 지역에 자율주행 모빌리티를 파견하고, 실시간 환자 생체 데이터를 모니터링합니다.
+                            관리자 승인 후 진료 내역과 소견서, 처방전을 <br /> 간편하게 조회할 수 있습니다.
                         </p>
                     </div>
 
