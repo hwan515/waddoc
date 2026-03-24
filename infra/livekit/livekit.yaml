@@ -9,5 +9,9 @@ rtc:
       protocol: udp
       username: waddoc
       credential: $TURN_SECRET
+webhook:
+  api_key: $LIVEKIT_API_KEY
+  urls:
+    - $LIVEKIT_WEBHOOK_URL
 turn:
   enabled: false

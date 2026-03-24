@@ -1,0 +1,9 @@
+port: 7880
+rtc:
+  use_external_ip: false
+  udp_port: 7882
+  tcp_port: 7881
+webhook:
+  api_key: $LIVEKIT_API_KEY
+  urls:
+    - $LIVEKIT_WEBHOOK_URL

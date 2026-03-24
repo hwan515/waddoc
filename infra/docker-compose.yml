@@ -34,6 +34,8 @@ services:
       - DB_HOST=postgres
       - REDIS_HOST=redis
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
       - LIVEKIT_HOST=http://livekit:7880
       - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
       - FILE_STORAGE_ROOT=/data/uploads
@@ -104,13 +106,20 @@ services:
   # === WebRTC ===
   livekit:
     image: livekit/livekit-server:latest
+    entrypoint: ["/bin/sh", "/etc/entrypoint.sh"]
     ports:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
       - "3478:3478/udp"
+    volumes:
+      - ./livekit/livekit.local.yaml:/etc/livekit.yaml.tpl:ro
+      - ./livekit/entrypoint.sh:/etc/entrypoint.sh:ro
     environment:
-      LIVEKIT_KEYS: "devkey: devsecret"
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://spring-api:8080/api/v1/sessions/webhook/livekit}"
     networks:
       - waddoc-net
 
