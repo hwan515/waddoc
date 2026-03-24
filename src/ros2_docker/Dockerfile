@@ -30,8 +30,8 @@ RUN apt-get update && apt-get install -y \
 
 
 # 3. PyTorch 및 비전 AI 설치 
-# RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-# RUN pip3 install ultralytics opencv-python "numpy<2"
+RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+RUN pip3 install ultralytics opencv-python "numpy<2"
 
 # 4. ROS2 환경변수 및 폴더 숨기기 (.hidden) 적용
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \

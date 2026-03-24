@@ -13,13 +13,18 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Int32
+from std_msgs.msg import Bool, Int32, String
 
 try:
     from ament_index_python.packages import get_package_share_directory
 except ImportError:
     get_package_share_directory = None
 from cv_bridge import CvBridge
+
+try:
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
 
 
 class HybridDijkstraVisionFollower(Node):
@@ -42,20 +47,43 @@ class HybridDijkstraVisionFollower(Node):
         )
 
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.estop_pub = self.create_publisher(Bool, '/ec2_cmd/e_stop', 1)
         self.pub_state_stop = self.create_publisher(Int32, '/cmd_state/e_stop', 1)
         self.pub_state_waypoint = self.create_publisher(
             Int32, '/cmd_state/target_waypoint', 1
         )
+        self.pub_minimap_route = self.create_publisher(
+            String, '/ec2_state/minimap_route', 1
+        )
         self.timer = self.create_timer(0.05, self.control_loop)
 
         map_path = self.resolve_map_path()
+        default_yolo_model_path = self.resolve_default_yolo_model_path()
         self.declare_parameter('waypoint_json_path', str(map_path))
         self.declare_parameter('goal_waypoint_id', '')
-        self.declare_parameter('show_debug_windows', True)
+        self.declare_parameter('show_debug_windows', False)
         default_route_export_path = self.resolve_route_export_path(
             'vision_detect_route.json'
         )
         self.declare_parameter('route_export_path', str(default_route_export_path))
+        self.declare_parameter('enable_yolo_estop', True)
+        self.declare_parameter('yolo_model', str(default_yolo_model_path))
+        self.declare_parameter('yolo_device', '')
+        self.declare_parameter('yolo_confidence', 0.45)
+        self.declare_parameter('yolo_input_size', 640)
+        self.declare_parameter(
+            'yolo_hazard_labels',
+            [
+                'person',
+                'tractor',
+                'cultivator',
+                'power tiller',
+                'walking tractor',
+                'agricultural tractor',
+                '경운기',
+                '트랙터',
+            ],
+        )
 
         self.waypoint_json_path = str(self.get_parameter('waypoint_json_path').value)
         configured_goal = str(self.get_parameter('goal_waypoint_id').value).strip()
@@ -64,8 +92,27 @@ class HybridDijkstraVisionFollower(Node):
         self.pending_goal_state_value = self.goal_id_to_state_value(self.goal_wp_id)
         self.show_debug_windows = bool(self.get_parameter('show_debug_windows').value)
         self.cv_windows_enabled = self.show_debug_windows
+        if not self.show_debug_windows:
+            self.get_logger().info(
+                'OpenCV debug windows are disabled. Use show_debug_windows:=true only when X11 access is available.'
+            )
         self.route_export_path = Path(str(self.get_parameter('route_export_path').value))
         self.route_export_seq = 0
+        self.enable_yolo_estop = bool(self.get_parameter('enable_yolo_estop').value)
+        self.yolo_model_name = str(self.get_parameter('yolo_model').value).strip()
+        self.yolo_device = str(self.get_parameter('yolo_device').value).strip()
+        self.yolo_confidence = float(self.get_parameter('yolo_confidence').value)
+        self.yolo_input_size = max(320, int(self.get_parameter('yolo_input_size').value))
+        raw_hazard_labels = self.get_parameter('yolo_hazard_labels').value
+        if isinstance(raw_hazard_labels, str):
+            raw_hazard_labels = [raw_hazard_labels]
+        self.yolo_hazard_labels = {
+            self.normalize_detection_label(label)
+            for label in raw_hazard_labels
+            if str(label).strip()
+        }
+        if not self.yolo_hazard_labels:
+            self.yolo_hazard_labels = {'person'}
 
         # =========================
         # odom
@@ -140,6 +187,8 @@ class HybridDijkstraVisionFollower(Node):
         self.vision_image_center = None
         self.vision_lane_error_px = None
         self.vision_roi_width = None
+        self.yolo_last_detections = []
+        self.yolo_last_reason = ''
 
         # =========================
         # vision 파라미터
@@ -193,9 +242,19 @@ class HybridDijkstraVisionFollower(Node):
         self.vision_soft_error_px = 55.0
         self.recovery_speed = 0.26
 
+        # =========================
+        # YOLO ROI e-stop
+        # =========================
+        self.yolo_model = None
+        self.yolo_ready = False
+        self.yolo_model_reference = ''
+        self.yolo_last_error_log_time = 0.0
+        self.estop_reason = ''
+
         self.current_mode = 'waiting_goal'
 
         self.load_map(self.waypoint_json_path)
+        self.initialize_yolo_detector()
 
         self.get_logger().info(
             f'Hybrid follower started. json={self.waypoint_json_path}, '
@@ -236,8 +295,102 @@ class HybridDijkstraVisionFollower(Node):
         msg.data = int(value)
         publisher.publish(msg)
 
+    def normalize_detection_label(self, label):
+        return ' '.join(
+            str(label).strip().lower().replace('_', ' ').replace('-', ' ').split()
+        )
+
     def resolve_route_export_path(self, filename):
         return Path('/tmp/lane_follow_pkg') / filename
+
+    def resolve_default_yolo_model_path(self):
+        candidates = [
+            Path('/root/workspace/models/yolov8n.pt'),
+            Path.cwd() / 'models' / 'yolov8n.pt',
+        ]
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        return candidates[0]
+
+    def resolve_model_reference(self, model_value):
+        model_value = str(model_value).strip()
+        if not model_value:
+            return ''
+
+        candidate = Path(model_value).expanduser()
+        candidates = []
+
+        if candidate.is_absolute():
+            candidates.append(candidate)
+        else:
+            candidates.append(Path.cwd() / candidate)
+            candidates.append(Path(__file__).resolve().parents[1] / candidate)
+
+            if get_package_share_directory is not None:
+                try:
+                    candidates.append(
+                        Path(get_package_share_directory('lane_follow_pkg')) / candidate
+                    )
+                except Exception:
+                    pass
+
+        for path in candidates:
+            if path.exists():
+                return str(path)
+
+        return model_value
+
+    def publish_minimap_route_payload(self, payload):
+        msg = String()
+        msg.data = json.dumps(payload, ensure_ascii=False)
+        self.pub_minimap_route.publish(msg)
+
+    def build_empty_route_snapshot(self, reason='navigation_cleared'):
+        goal_wp = self.waypoints.get(self.goal_wp_id)
+
+        return {
+            'route_version': self.route_export_seq,
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'source_node': self.get_name(),
+            'planner_type': 'vision+spline',
+            'start_waypoint_id': None,
+            'goal_waypoint_id': self.goal_wp_id,
+            'target_waypoint_value': 0,
+            'current_pose': {
+                'x': float(self.current_x),
+                'z': float(self.current_z),
+                'yaw': float(self.current_yaw),
+            },
+            'start_waypoint': None,
+            'goal_waypoint': None if goal_wp is None else {
+                'id': self.goal_wp_id,
+                'x': float(goal_wp['x']),
+                'z': float(goal_wp['z']),
+            },
+            'path_waypoint_ids': [],
+            'path_waypoints': [],
+            'trajectory_point_count': 0,
+            'trajectory': [],
+            'bounds': {
+                'min_x': float(self.current_x),
+                'max_x': float(self.current_x),
+                'min_z': float(self.current_z),
+                'max_z': float(self.current_z),
+                'width': 0.0,
+                'height': 0.0,
+            },
+            'cleared': True,
+            'clear_reason': reason,
+        }
+
+    def publish_cleared_minimap_route(self, reason='navigation_cleared'):
+        self.route_export_seq += 1
+        self.publish_minimap_route_payload(
+            self.build_empty_route_snapshot(reason=reason)
+        )
 
     def build_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
         path_waypoints = []
@@ -323,6 +476,7 @@ class HybridDijkstraVisionFollower(Node):
                 encoding='utf-8',
             )
             tmp_path.replace(self.route_export_path)
+            self.publish_minimap_route_payload(payload)
             self.get_logger().info(
                 f'route json saved: {self.route_export_path} (version={self.route_export_seq})'
             )
@@ -333,7 +487,7 @@ class HybridDijkstraVisionFollower(Node):
         self.pending_goal_id = None
         self.pending_goal_state_value = None
 
-    def clear_navigation(self, clear_goal=False, clear_pending=False):
+    def clear_navigation(self, clear_goal=False, clear_pending=False, clear_reason='navigation_cleared'):
         self.path = []
         self.trajectory = []
         self.clear_tracking_state()
@@ -341,6 +495,7 @@ class HybridDijkstraVisionFollower(Node):
             self.goal_wp_id = None
         if clear_pending:
             self.clear_pending_goal()
+        self.publish_cleared_minimap_route(reason=clear_reason)
 
     def stop_vehicle(self):
         self.cmd_pub.publish(Twist())
@@ -370,6 +525,209 @@ class HybridDijkstraVisionFollower(Node):
         except cv2.error as e:
             self.cv_windows_enabled = False
             self.get_logger().warn(f'OpenCV waitKey unavailable. Debug window disabled: {e}')
+
+    def initialize_yolo_detector(self):
+        if not self.enable_yolo_estop:
+            self.get_logger().info('YOLO ROI e-stop disabled by parameter.')
+            return
+
+        if YOLO is None:
+            self.get_logger().warn(
+                'ultralytics 패키지가 없어 YOLO ROI e-stop을 비활성화합니다. '
+                '컨테이너에서 pip3 install ultralytics 를 실행하거나 이미지를 다시 빌드하세요.'
+            )
+            return
+
+        if not self.yolo_model_name:
+            self.get_logger().warn(
+                'yolo_model 파라미터가 비어 있어 YOLO ROI e-stop을 비활성화합니다.'
+            )
+            return
+
+        self.yolo_model_reference = self.resolve_model_reference(self.yolo_model_name)
+
+        try:
+            model_ref_path = Path(self.yolo_model_reference).expanduser()
+            if model_ref_path.suffix == '.pt':
+                model_ref_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        try:
+            self.yolo_model = YOLO(self.yolo_model_reference)
+            self.yolo_ready = True
+            hazard_labels = ', '.join(sorted(self.yolo_hazard_labels))
+            device_name = self.yolo_device if self.yolo_device else 'auto'
+            self.get_logger().info(
+                'YOLO ROI e-stop 활성화: '
+                f'model={self.yolo_model_reference}, '
+                f'device={device_name}, '
+                f'conf={self.yolo_confidence:.2f}, '
+                f'hazards=[{hazard_labels}]'
+            )
+        except Exception as e:
+            self.yolo_model = None
+            self.yolo_ready = False
+            self.get_logger().error(
+                f'YOLO 모델 로드 실패 ({self.yolo_model_reference}): {e}'
+            )
+
+    def label_matches_hazard(self, label):
+        normalized = self.normalize_detection_label(label)
+        if not normalized:
+            return False
+
+        for hazard_label in self.yolo_hazard_labels:
+            if (
+                normalized == hazard_label
+                or hazard_label in normalized
+                or normalized in hazard_label
+            ):
+                return True
+        return False
+
+    def run_yolo_hazard_detection(self, frame, roi_rect):
+        self.yolo_last_detections = []
+
+        if not self.enable_yolo_estop or not self.yolo_ready or self.yolo_model is None:
+            return []
+
+        predict_kwargs = {
+            'source': frame,
+            'conf': self.yolo_confidence,
+            'imgsz': self.yolo_input_size,
+            'verbose': False,
+        }
+        if self.yolo_device:
+            predict_kwargs['device'] = self.yolo_device
+
+        try:
+            results = self.yolo_model.predict(**predict_kwargs)
+        except Exception as e:
+            now = time.time()
+            if now - self.yolo_last_error_log_time >= 5.0:
+                self.get_logger().error(f'YOLO 추론 실패: {e}')
+                self.yolo_last_error_log_time = now
+            return []
+
+        if not results:
+            return []
+
+        result = results[0]
+        boxes = getattr(result, 'boxes', None)
+        if boxes is None:
+            return []
+
+        names = getattr(result, 'names', {})
+        rx0, ry0, rx1, ry1 = roi_rect
+
+        for box in boxes:
+            cls_idx = int(box.cls[0].item()) if box.cls is not None else -1
+            if isinstance(names, dict):
+                label = str(names.get(cls_idx, cls_idx))
+            elif isinstance(names, (list, tuple)) and 0 <= cls_idx < len(names):
+                label = str(names[cls_idx])
+            else:
+                label = str(cls_idx)
+
+            if not self.label_matches_hazard(label):
+                continue
+
+            confidence = float(box.conf[0].item()) if box.conf is not None else 0.0
+            bx0, by0, bx1, by1 = [int(v) for v in box.xyxy[0].tolist()]
+
+            ix0 = max(bx0, rx0)
+            iy0 = max(by0, ry0)
+            ix1 = min(bx1, rx1)
+            iy1 = min(by1, ry1)
+            overlap_area = max(0, ix1 - ix0) * max(0, iy1 - iy0)
+
+            if overlap_area <= 0:
+                continue
+
+            self.yolo_last_detections.append({
+                'label': label,
+                'confidence': confidence,
+                'bbox': (bx0, by0, bx1, by1),
+                'overlap_bbox': (ix0, iy0, ix1, iy1),
+            })
+
+        return list(self.yolo_last_detections)
+
+    def draw_yolo_detections(self, frame_vis, detections):
+        for detection in detections:
+            bx0, by0, bx1, by1 = detection['bbox']
+            ix0, iy0, ix1, iy1 = detection['overlap_bbox']
+            label = detection['label']
+            confidence = detection['confidence']
+
+            cv2.rectangle(frame_vis, (bx0, by0), (bx1, by1), (0, 0, 255), 2)
+            cv2.rectangle(frame_vis, (ix0, iy0), (ix1, iy1), (0, 255, 255), 2)
+            cv2.putText(
+                frame_vis,
+                f'{label} {confidence:.2f}',
+                (bx0, max(24, by0 - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (0, 0, 255),
+                2,
+            )
+
+    def reset_vision_tracking(self):
+        self.prev_vision_error = 0.0
+        self.prev_target = None
+        self.latest_vision_twist = Twist()
+        self.vision_has_target = False
+        self.vision_lane_error_px = None
+
+    def set_estop_state(self, active, reason=None):
+        active = bool(active)
+        was_active = self.estop_active
+        self.estop_active = active
+        self.publish_int_state(self.pub_state_stop, int(self.estop_active))
+
+        if self.estop_active:
+            if reason:
+                self.estop_reason = reason
+            elif not self.estop_reason:
+                self.estop_reason = 'EMERGENCY STOP!'
+
+            if not was_active:
+                self.get_logger().warn(self.estop_reason)
+                self.clear_navigation(
+                    clear_goal=True,
+                    clear_pending=True,
+                    clear_reason='estop',
+                )
+                self.reset_vision_tracking()
+                self.publish_int_state(self.pub_state_waypoint, 0)
+
+            self.stop_vehicle()
+            self.current_mode = 'estop'
+            return
+
+        if was_active:
+            self.get_logger().info('EMERGENCY STOP 해제')
+
+        self.estop_reason = ''
+        self.yolo_last_reason = ''
+
+    def trigger_yolo_estop(self, detections):
+        if self.estop_active or not detections:
+            return
+
+        labels = ', '.join(
+            f"{d['label']}({d['confidence']:.2f})" for d in detections[:3]
+        )
+        if len(detections) > 3:
+            labels += ', ...'
+
+        self.yolo_last_reason = f'YOLO ROI hazard detected: {labels}'
+        self.set_estop_state(True, reason=self.yolo_last_reason)
+
+        estop_msg = Bool()
+        estop_msg.data = True
+        self.estop_pub.publish(estop_msg)
 
     # =====================================================
     # map / path
@@ -675,17 +1033,7 @@ class HybridDijkstraVisionFollower(Node):
         self.has_odom = True
 
     def estop_callback(self, msg):
-        self.estop_active = bool(msg.data)
-        self.publish_int_state(self.pub_state_stop, int(self.estop_active))
-
-        if self.estop_active:
-            self.get_logger().warn('EMERGENCY STOP!')
-            self.clear_navigation(clear_goal=True, clear_pending=True)
-            self.stop_vehicle()
-            self.publish_int_state(self.pub_state_waypoint, 0)
-            self.current_mode = 'estop'
-        else:
-            self.get_logger().info('EMERGENCY STOP 해제')
+        self.set_estop_state(bool(msg.data))
 
     def target_waypoint_callback(self, msg):
         if self.estop_active:
@@ -1046,6 +1394,37 @@ class HybridDijkstraVisionFollower(Node):
 
         frame_vis = frame.copy()
         cv2.rectangle(frame_vis, (x0, y0), (x1, y1), (0, 0, 255), 2)
+        yolo_detections = self.run_yolo_hazard_detection(frame, (x0, y0, x1, y1))
+        self.draw_yolo_detections(frame_vis, yolo_detections)
+
+        yolo_status = 'off'
+        if self.enable_yolo_estop:
+            yolo_status = 'ready' if self.yolo_ready else 'not_ready'
+
+        cv2.putText(
+            frame_vis,
+            f'yolo_estop={yolo_status} hazard={len(yolo_detections)}',
+            (20, 35),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 255) if not yolo_detections else (0, 0, 255),
+            2,
+        )
+
+        if yolo_detections:
+            self.trigger_yolo_estop(yolo_detections)
+
+        if self.estop_reason:
+            cv2.putText(
+                frame_vis,
+                self.estop_reason[:70],
+                (20, height - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (0, 0, 255),
+                2,
+            )
+
         mask_vis = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
 
         self.show_window('camera_with_roi', frame_vis)
@@ -1244,7 +1623,7 @@ class HybridDijkstraVisionFollower(Node):
         goal_dist = self.get_goal_distance()
         if goal_dist < self.goal_tolerance:
             self.get_logger().info('최종 목적지 도착!')
-            self.clear_navigation(clear_goal=True)
+            self.clear_navigation(clear_goal=True, clear_reason='goal_reset')
             self.publish_int_state(self.pub_state_waypoint, 0)
             self.stop_vehicle()
             self.current_mode = 'goal_reached'
@@ -1261,7 +1640,7 @@ class HybridDijkstraVisionFollower(Node):
         end_dist = self.dist_xy(self.current_x, self.current_z, end_x, end_z)
         if lookahead_idx >= len(self.trajectory) - 1 and end_dist < self.traj_reach_tolerance:
             self.get_logger().info('trajectory 끝점 도달')
-            self.clear_navigation(clear_goal=True)
+            self.clear_navigation(clear_goal=True, clear_reason='goal_reset')
             self.publish_int_state(self.pub_state_waypoint, 0)
             self.stop_vehicle()
             self.current_mode = 'traj_end_reached'
