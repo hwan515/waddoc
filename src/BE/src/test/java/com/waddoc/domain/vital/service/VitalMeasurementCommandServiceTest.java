@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -64,7 +65,7 @@ class VitalMeasurementCommandServiceTest {
                 new BigDecimal("0.12"),
                 new BigDecimal("0.18")
         );
-        assertThat(response.getMeasuredAt()).isEqualTo(measuredAt);
+        assertThat(response.getMeasuredAt()).isEqualTo(OffsetDateTime.parse("2026-03-23T14:23:10+09:00"));
         verify(vitalMeasurementRepository).save(any(VitalMeasurement.class));
     }
 
@@ -103,7 +104,7 @@ class VitalMeasurementCommandServiceTest {
         assertThat(response.getBloodPressureDia()).isEqualTo(80);
         assertThat(response.getHeartRate()).isEqualTo(74);
         assertThat(response.getSpO2()).isEqualTo(97);
-        assertThat(response.getMeasuredAt()).isEqualTo(LocalDateTime.of(2026, 3, 23, 14, 5, 0));
+        assertThat(response.getMeasuredAt()).isEqualTo(OffsetDateTime.parse("2026-03-23T14:05:00+09:00"));
         verify(vitalMeasurementRepository, never()).save(any(VitalMeasurement.class));
     }
 

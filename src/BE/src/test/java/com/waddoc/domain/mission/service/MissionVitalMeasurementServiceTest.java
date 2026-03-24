@@ -29,6 +29,7 @@ import org.springframework.security.core.Authentication;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,7 +71,7 @@ class MissionVitalMeasurementServiceTest {
                 .caseId("case_test123")
                 .temperature(new BigDecimal("36.7"))
                 .heartRate(72)
-                .measuredAt(LocalDateTime.of(2026, 3, 23, 14, 23, 10))
+                .measuredAt(OffsetDateTime.parse("2026-03-23T14:23:10+09:00"))
                 .build();
 
         when(accessControlService.assertAdminOrMissionTerminal(

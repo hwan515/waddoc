@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 /**
@@ -18,6 +19,8 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class VitalMeasurementCommandService {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final VitalMeasurementRepository vitalMeasurementRepository;
 
@@ -42,7 +45,7 @@ public class VitalMeasurementCommandService {
                 request.getEcgWaveform(),
                 request.getEcgSamplingHz(),
                 request.getEcgDurationSeconds(),
-                request.resolveMeasuredAt(LocalDateTime.now())
+                request.resolveMeasuredAt(LocalDateTime.now(KST))
         );
 
         VitalMeasurement saved = vitalMeasurement.getId() == null

@@ -286,7 +286,7 @@ class MissionControllerTest {
                                 .temperature(new BigDecimal("36.7"))
                                 .heartRate(72)
                                 .spO2(98)
-                                .measuredAt(java.time.LocalDateTime.of(2026, 3, 23, 14, 23, 10))
+                                .measuredAt(java.time.OffsetDateTime.parse("2026-03-23T14:23:10+09:00"))
                                 .build())
                         .build());
 
@@ -305,6 +305,6 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.vitals.temperature").value(36.7))
                 .andExpect(jsonPath("$.vitals.heartRate").value(72))
                 .andExpect(jsonPath("$.vitals.spO2").value(98))
-                .andExpect(jsonPath("$.vitals.measuredAt").value("2026-03-23T14:23:10"));
+                .andExpect(jsonPath("$.vitals.measuredAt").value("2026-03-23T14:23:10+09:00"));
     }
 }

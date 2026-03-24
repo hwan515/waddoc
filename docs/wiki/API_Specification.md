@@ -816,7 +816,7 @@
     "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
     "ecgSamplingHz": 25,
     "ecgDurationSeconds": 8,
-    "measuredAt": "2026-03-23T14:23:10",
+    "measuredAt": "2026-03-23T14:23:10+09:00",
     "createdAt": "2026-03-23T14:15:00",
     "updatedAt": "2026-03-23T14:23:10"
   },
@@ -843,7 +843,7 @@
 | `vitals.ecgWaveform` | number[] \| null | 측정 시점 ECG sample waveform. 실시간 스트림 아님 |
 | `vitals.ecgSamplingHz` | integer \| null | ECG 샘플링 주파수 |
 | `vitals.ecgDurationSeconds` | integer \| null | ECG 샘플 길이(초) |
-| `vitals.measuredAt` | string \| null | 마지막 측정 시각 |
+| `vitals.measuredAt` | string \| null | 마지막 측정 시각 (`OffsetDateTime`, KST) |
 | `vitals.createdAt` | string \| null | 해당 케이스 생체데이터 row 생성 시각 |
 | `vitals.updatedAt` | string \| null | 마지막 partial upsert 시각 |
 
@@ -1429,7 +1429,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 > 차량 태블릿 플로우에서는 mission claim에서 발급받은 같은 `MISSION_TERMINAL` 토큰으로 체온/혈압/심박수/SpO2/ECG sample을 단계별 저장하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
 > 서버는 `missionId -> case -> vital_measurement` 순서로 대상을 해석하며, 첫 저장이면 row를 생성하고 이후에는 같은 `case_id` row를 partial upsert 한다.
 > 허용 미션 phase는 `ARRIVED`, `VERIFYING`, `CONSULTING` 이다.
-> `measuredAt`은 선택 입력이며, 생략하면 서버 현재 시각을 사용한다.
+> `measuredAt`은 선택 입력이며, 생략하면 서버 현재 시각(KST)을 사용한다.
 > `ecgWaveform`은 측정 시점 sample waveform이며 실시간 스트림이 아니다.
 
 **Request Body**
@@ -1464,7 +1464,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
     "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
     "ecgSamplingHz": 25,
     "ecgDurationSeconds": 8,
-    "measuredAt": "2026-03-23T14:23:10",
+    "measuredAt": "2026-03-23T14:23:10+09:00",
     "createdAt": "2026-03-23T14:15:00",
     "updatedAt": "2026-03-23T14:23:10"
   }
