@@ -124,7 +124,7 @@ const Signup = () => {
 
                     <div className="space-y-3">
                         <Link
-                            to="/"
+                            to="/login"
                             className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-4 text-base font-bold text-white shadow-lg shadow-primary/30 transition-all hover:-translate-y-0.5 hover:bg-accent-1"
                         >
                             로그인 화면으로 이동
@@ -237,7 +237,7 @@ const Signup = () => {
 
                     <div className="mt-6 text-center text-sm">
                         <span className="text-slate-500">이미 계정이 있으신가요? </span>
-                        <Link to="/" className="font-semibold text-primary hover:text-accent-1">
+                        <Link to="/login" className="font-semibold text-primary hover:text-accent-1">
                             로그인
                         </Link>
                     </div>
