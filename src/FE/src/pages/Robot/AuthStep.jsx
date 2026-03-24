@@ -59,13 +59,70 @@ const AuthStep = () => {
 
     // base64를 Blob으로 변환하는 유틸 함수
     const base64ToBlob = (base64, mimeType = 'image/jpeg') => {
+        const resolvedMimeType = mimeType || base64.match(/^data:([^;]+);base64,/)?.[1] || 'image/jpeg';
         const byteString = atob(base64.split(',')[1]);
         const ab = new ArrayBuffer(byteString.length);
         const ia = new Uint8Array(ab);
         for (let i = 0; i < byteString.length; i++) {
             ia[i] = byteString.charCodeAt(i);
         }
-        return new Blob([ab], { type: mimeType });
+        return new Blob([ab], { type: resolvedMimeType });
+    };
+
+    const captureVideoFrame = ({ cropRect } = {}) => {
+        const video = videoRef.current;
+        if (!video) {
+            throw new Error('Video stream is not ready');
+        }
+
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+            throw new Error('Canvas context is not available');
+        }
+
+        if (!cropRect) {
+            canvas.width = sourceWidth;
+            canvas.height = sourceHeight;
+            ctx.drawImage(video, 0, 0, sourceWidth, sourceHeight);
+            return canvas;
+        }
+
+        const containerWidth = video.clientWidth || sourceWidth;
+        const containerHeight = video.clientHeight || sourceHeight;
+        const scale = Math.max(containerWidth / sourceWidth, containerHeight / sourceHeight);
+        const renderedWidth = sourceWidth * scale;
+        const renderedHeight = sourceHeight * scale;
+        const offsetX = Math.max(0, (renderedWidth - containerWidth) / 2);
+        const offsetY = Math.max(0, (renderedHeight - containerHeight) / 2);
+
+        const overlayX = containerWidth * cropRect.x;
+        const overlayY = containerHeight * cropRect.y;
+        const overlayWidth = containerWidth * cropRect.width;
+        const overlayHeight = containerHeight * cropRect.height;
+
+        const sourceX = Math.max(0, Math.round((overlayX + offsetX) / scale));
+        const sourceY = Math.max(0, Math.round((overlayY + offsetY) / scale));
+        const sourceCropWidth = Math.min(sourceWidth - sourceX, Math.round(overlayWidth / scale));
+        const sourceCropHeight = Math.min(sourceHeight - sourceY, Math.round(overlayHeight / scale));
+
+        canvas.width = Math.max(1, sourceCropWidth);
+        canvas.height = Math.max(1, sourceCropHeight);
+        ctx.drawImage(
+            video,
+            sourceX,
+            sourceY,
+            sourceCropWidth,
+            sourceCropHeight,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+        return canvas;
     };
 
     // Load face-api models on mount
@@ -175,18 +232,8 @@ const AuthStep = () => {
         setAuthStatus('capturing');
 
         try {
-            // 1. Canvas에 현재 비디오 프레임 그리기
-            const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth;
-            canvas.height = videoRef.current.videoHeight;
-            const ctx = canvas.getContext('2d');
-
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(videoRef.current, 0, 0);
-
-            // 2. Base64 이미지 추출
-            const base64Image = canvas.toDataURL('image/jpeg', 0.9);
+            const canvas = captureVideoFrame();
+            const base64Image = canvas.toDataURL('image/jpeg', 0.95);
             setFaceImgData(base64Image); // 얼굴 이미지 상태 저장
 
             // 3. 신분증 촬영 단계로 넘어감
@@ -204,16 +251,10 @@ const AuthStep = () => {
     const captureIdCard = async () => {
         setAuthStatus('capturing');
         try {
-            const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth;
-            canvas.height = videoRef.current.videoHeight;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(videoRef.current, 0, 0);
-
-            const idCardBase64 = canvas.toDataURL('image/jpeg', 0.9);
+            const canvas = captureVideoFrame({
+                cropRect: { x: 0.25, y: 0.30, width: 0.50, height: 0.40 }
+            });
+            const idCardBase64 = canvas.toDataURL('image/png');
             
             setCaptureStep('submitting');
             await submitAuth(faceImgData, idCardBase64);
@@ -243,7 +284,7 @@ const AuthStep = () => {
             
             const formData = new FormData();
             formData.append('faceImage', base64ToBlob(faceBase64), 'face.jpg');
-            formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.jpg');
+            formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.png');
 
             await apiClient.post(`/missions/${missionId}/identity-check`, formData, {
                 headers: { 
