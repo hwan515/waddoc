@@ -48,6 +48,8 @@ services:
     image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - DB_HOST=postgres
