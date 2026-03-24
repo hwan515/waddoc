@@ -14,7 +14,7 @@ const ControlCenter = () => {
     const logout = useAuthStore((state) => state.logout);
 
     // '지도' | '대시보드'
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const [activeTab, setActiveTab] = useState('map');
 
     // 캘린더 모드
     const [calendarMode, setCalendarMode] = useState('weekly');

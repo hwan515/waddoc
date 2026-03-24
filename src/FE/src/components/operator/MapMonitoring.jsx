@@ -1,6 +1,29 @@
-import { Map as MapIcon, Navigation, Truck, Video } from 'lucide-react';
+import { Map as MapIcon, Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
 
 const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) => {
+    // E-Stop REST API POST 요청 핸들러
+    const handleEStop = async () => {
+        if (!window.confirm("정말로 E-Stop (긴급 정지)을 작동하시겠습니까?")) return;
+
+        try {
+            // Zenoh-server API E-Stop 요청 (Nginx 프록시를 통해 포트 8000으로 전달됨)
+            const targetUrl = `/api/cmd/estop/1`;
+            const response = await fetch(targetUrl, {
+                method: 'POST',
+                headers: { 'accept': 'application/json' }
+            });
+
+            if (response.ok) {
+                alert("E-Stop 명령이 성공적으로 전송되었습니다.");
+            } else {
+                alert("E-Stop 전송 중 오류가 발생했습니다.");
+            }
+        } catch (error) {
+            console.error("E-Stop Error:", error);
+            alert("E-Stop 명령 전송에 실패했습니다.");
+        }
+    };
+
     // 상태에 따른 배지 색상 결정 헬퍼 함수
     const getStatusBadge = (status) => {
         switch (status) {
@@ -41,9 +64,18 @@ const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) =>
                 </div>
             </div>
 
-            {/* 우측: 사이드 패널 (차량 리스트 + 카메라) */}
+            {/* 우측: 사이드 패널 (E-Stop + 차량 리스트 + 카메라) */}
             <div className="w-[400px] flex flex-col gap-4 shrink-0">
-                {/* 상단: 차량 리스트 */}
+                {/* 1. 상단: E-Stop 버튼 (최소한의 높이 h-12 고정, 너비 가득 참) */}
+                <button
+                    onClick={handleEStop}
+                    className="w-full h-12 shrink-0 bg-red-600 hover:bg-red-700 text-white text-[15px] font-bold rounded-xl shadow-[0_4px_14px_0_rgba(220,38,38,0.39)] flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
+                >
+                    <AlertOctagon className="w-5 h-5 animate-pulse" />
+                    EMERGENCY STOP (긴급 정지)
+                </button>
+
+                {/* 2. 중단: 차량 리스트 */}
                 <div className="flex-[3] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-12 border-b border-slate-100 flex items-center px-4 bg-slate-50/50 shrink-0">
                         <h3 className="font-bold text-slate-800 text-[15px] flex items-center gap-2">
