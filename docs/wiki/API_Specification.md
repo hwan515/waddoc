@@ -1597,7 +1597,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.8 진료 종료 및 요약 기록
+### 9.8 진료 요약 저장 및 진료 종료 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1605,17 +1605,51 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Path | `/api/v1/sessions/{sessionId}/summary` |
 | Auth | Bearer Token (DOCTOR) |
 
+> 이 API는 **중간 저장**과 **최종 저장(진료 완료)**에 공통으로 사용한다.
+> `PUT` 의미를 유지하기 위해 클라이언트는 호출 시점의 최신 진료 요약 상태를 항상 전체 필드로 보낸다.
+> `내역에 추가`, `임시저장`, `진료 완료` 모두 동일한 endpoint를 호출하되 `summaryNote`, `isPrescriptionIssued`, `prescriptionNote`, `needsFollowUp`를 함께 전송한다.
+
 **Request Body**
 ```json
 {
   "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장. 증상 지속 시 재진료 필요.",
   "isPrescriptionIssued": true,
-  "prescriptionNote": "타이레놀 500mg",
+  "prescriptionNote": "[\"M001\",\"M005\"]",
   "needsFollowUp": true
 }
 ```
 
-**Response** `200 OK`
+**Field Rules**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `summaryNote` | string | O | 진료 경과 기록지. `임시저장`, `진료 완료` 시 최신 값으로 전체 갱신 |
+| `isPrescriptionIssued` | boolean | O | 처방 코드가 1개 이상 저장되면 `true`, 없으면 `false` |
+| `prescriptionNote` | string | O | 약품 코드 배열의 JSON 문자열. 예: `"[\"M001\",\"M005\"]"` |
+| `needsFollowUp` | boolean | O | 재진 필요 여부 |
+
+> `prescriptionNote`는 현재 문자열 필드를 재사용하므로, **약품 코드 리스트를 JSON 문자열로 직렬화한 값**을 저장한다.
+> 처방이 없을 경우 `prescriptionNote`는 `"[]"`를 권장한다.
+> 하위 호환을 위해 기존 자유 텍스트 처방 문자열도 조회 API에서 그대로 반환될 수 있다.
+
+**중간 저장 Response 예시** `200 OK`
+```json
+{
+  "sessionId": "ses_L6pQr1",
+  "caseId": "case_T7nLp4",
+  "status": "IN_PROGRESS",
+  "summary": {
+    "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
+    "isPrescriptionIssued": true,
+    "prescriptionNote": "[\"M001\",\"M005\"]",
+    "needsFollowUp": true
+  },
+  "endedAt": null,
+  "durationMinutes": null
+}
+```
+
+**진료 완료 Response 예시** `200 OK`
 ```json
 {
   "sessionId": "ses_L6pQr1",
@@ -1624,7 +1658,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
   "summary": {
     "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
     "isPrescriptionIssued": true,
-    "prescriptionNote": "타이레놀 500mg",
+    "prescriptionNote": "[\"M001\",\"M005\"]",
     "needsFollowUp": true
   },
   "endedAt": "2026-03-11T10:25:00+09:00",
@@ -1720,13 +1754,20 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
       "doctorName": "김의사",
       "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
       "isPrescriptionIssued": true,
-      "prescriptionNote": "타이레놀 500mg",
+      "prescriptionNote": "[\"M001\",\"M005\"]",
       "needsFollowUp": true
     }
   ],
   "totalCount": 1
 }
 ```
+
+> `prescriptionNote`는 다음 두 형식 중 하나로 조회될 수 있다.
+> 1. 최신 형식: 약품 코드 배열의 JSON 문자열. 예: `"[\"M001\",\"M005\"]"`
+> 2. 레거시 형식: 자유 텍스트 처방 문자열
+>
+> 클라이언트는 먼저 `prescriptionNote`를 JSON 배열(`string[]`)로 파싱 시도하고, 성공하면 공통 `MEDICINE_CATALOG` 기준으로 약품명, 분류, 용법/용량을 매핑해 렌더링한다.
+> JSON 파싱에 실패하면 레거시 자유 텍스트 처방전으로 간주하고 원문을 그대로 표시한다.
 
 **Errors**
 
