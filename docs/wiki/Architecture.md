@@ -250,9 +250,10 @@ Content-Type: multipart/form-data
 Parts:
   - verificationId: "vrf_001"
   - patientId: "patient_001"
-  - referenceImage: (binary)
-  - probeImage: (binary)
-  - thresholdProfile: "MEDICAL_REMOTE_VISIT"
+  - verificationMode: "FACE_AND_IDCARD"
+  - referenceImage: (binary, optional)
+  - faceImage: (binary)
+  - idCardImage: (binary)
 
 Spring Boot ↔ STT AI
 Connect: wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
@@ -506,9 +507,10 @@ Content-Type: multipart/form-data
 Parts:
   - verificationId: "vrf_001"
   - patientId: "patient_001"
-  - referenceImage: (binary) ← 사전 등록 사진 파일
-  - probeImage: (binary)     ← 현재 촬영 사진 파일
-  - thresholdProfile: "MEDICAL_REMOTE_VISIT"
+  - verificationMode: "FACE_AND_IDCARD"
+  - referenceImage: (binary, optional) ← 사전 등록 사진 파일
+  - faceImage: (binary)                ← 현재 촬영 얼굴 사진 파일
+  - idCardImage: (binary)              ← 신분증 촬영 이미지
 
 Response (JSON):
 {
@@ -577,7 +579,7 @@ AI 서버는 **업무 성격에 따라 프로토콜을 분리**한다.
 **요청 모드**
 ```
 Content-Type: multipart/form-data
-Parts: verificationId, referenceImage(file), probeImage(file)
+Parts: verificationId, verificationMode, referenceImage(file, optional), faceImage(file), idCardImage(file)
 ```
 
 **응답 (공통)**
@@ -610,7 +612,7 @@ Content-Type: multipart/form-data
 Parts:
   - verificationId: "vrf_001"
   - patientId: "patient_001"
-  - referenceImage: (binary)   ← 사전 등록 얼굴 사진
+  - referenceImage: (binary, optional)   ← 사전 등록 얼굴 사진
   - faceImage: (binary)        ← 실시간 촬영 얼굴 사진
   - idCardImage: (binary)      ← 신분증 촬영 이미지
   - verificationMode: "FACE_AND_IDCARD"
@@ -626,11 +628,8 @@ Response:
     "rrnMasked": "580315-1******",
     "address": "강원도 강릉시 ..."
   },
-  "matches": {
-    "liveVsRegisteredScore": 0.94,
-    "liveVsIdCardFaceScore": 0.91,
-    "idCardFaceVsRegisteredScore": 0.89
-  },
+  "faceSimilarityScore": 0.94,
+  "idCardFaceSimilarityScore": 0.91,
   "qualityChecks": {
     "faceDetected": true,
     "singleFace": true,
@@ -645,9 +644,9 @@ Response:
 Spring Boot는 위 응답을 받아 다음을 수행한다.
 
 1. OCR 추출 이름과 `PATIENT.name` 비교
-2. 생년월일 또는 주민등록번호 마스킹값과 `PATIENT.birth_date6` 비교
+2. 생년월일 또는 주민등록번호 마스킹값과 `PATIENT.birthDate6` 비교
 3. OCR 주소와 `PATIENT.address` 비교
-4. 얼굴 3자 점수와 OCR 신뢰도를 함께 사용해 최종 `VERIFIED`, `FAILED`, `MANUAL_REVIEW` 판정
+4. AI 응답 `matched=true`이고 OCR 이름, 생년월일 6자리, 주소 중 하나 이상이 일치하면 최종 `VERIFIED` 판정
 5. `VERIFIED`인 경우 영속 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 활력징후 단계 이후 환자 토큰 발급 시 재사용
 
 보안 원칙:
@@ -922,8 +921,8 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 | 참가자 | 발급 시점 | API | Auth | 발급 조건 |
 |--------|-----------|-----|------|-----------|
 | 의사 | 세션 생성 시 | `POST /cases/{caseId}/sessions` | Bearer Token (DOCTOR) | 로그인 + 케이스 배정 확인 |
-| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 미션의 케이스 환자 조회, 기준 이미지 존재 |
-| 환자 | 세션 입장 시 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | 최근 본인 확인 성공 상태 + 세션 준비 완료 |
+| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (MISSION_TERMINAL 또는 ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 미션의 케이스 환자 조회, 기준 이미지 유무와 무관하게 AI 본인확인 수행 |
+| 환자 | 세션 입장 시 | `POST /missions/{missionId}/participants/patient/token` | Bearer Token (MISSION_TERMINAL 또는 ADMIN) — 차량 태블릿(운영 단말) | 최근 본인 확인 성공 상태 + 세션 준비 완료 |
 
 | 항목 | 정책 |
 |------|------|
@@ -942,10 +941,10 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 환자 현장 진료 준비 흐름:
 1. 차량 도착 → 환자 탑승 → "진료 시작" 클릭
 2. 서버: MISSION.phase = VERIFYING
-3. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/missions/{missionId}/identity-check (ADMIN Bearer)
-4. 서버: `missionId -> case -> patient` 조회 → 기준 이미지 조회 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
+3. 차량 태블릿(운영 단말, 미션 단말 토큰)에서 POST /api/v1/missions/{missionId}/identity-check (MISSION_TERMINAL Bearer)
+4. 서버: `missionId -> case -> patient` 조회 → 기준 이미지 확인 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
 5. 차량 태블릿: 활력징후 단계 진행
-6. 의사 세션 준비 후 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
+6. 의사 세션 준비 후 POST /api/v1/missions/{missionId}/participants/patient/token (MISSION_TERMINAL Bearer)
 7. 서버: 최근 본인 확인 성공 상태 검증 → patientToken 발급
 8. 환자 WebRTC 입장
 

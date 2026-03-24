@@ -189,7 +189,7 @@ docker compose -f docker-compose.prod.yml up -d --build --scale spring-api=3
 - `idv-ai`는 최소 다음 경로를 제공해야 한다:
   - `GET https://<GPU_HOST>/idv/api/v1/health`
   - `POST https://<GPU_HOST>/idv/api/v1/verify`
-- `POST /idv/api/v1/verify`는 `referenceImage`, `faceImage`, `idCardImage` multipart 업로드를 받아야 한다.
+- `POST /idv/api/v1/verify`는 `faceImage`, `idCardImage` multipart 업로드를 받아야 하고, `referenceImage`는 optional 이어야 한다.
 
 ## SSL 인증서 배치
 
