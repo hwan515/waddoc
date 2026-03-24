@@ -1353,10 +1353,11 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 > 차량 태블릿 플로우에서는 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로 호출하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
 > `진료 시작` 버튼은 환자 세션 생성이 아니라, 미션 단계 전환과 본인 확인/현장 진료 준비 시작을 의미한다.
-> 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
+> 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 확인하고, 기준 이미지가 있으면 함께, 없으면 `referenceImage` 없이 차량에서 촬영한 `faceImage`, `idCardImage`만 GPU 서버로 전송한다.
 > GPU 서버 내부 응답 필수 필드: `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`
-> Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
+> Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. `matched=true`이고 OCR 이름, 생년월일 6자리, 주소 중 하나 이상이 환자 정보와 일치하면 최종 통과로 판정한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
 > 검증 성공 시 서버는 별도 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 차량 태블릿은 활력징후 단계로 이동한다.
+> FE는 얼굴 이미지를 원본 방향 전체 프레임으로 업로드하고, 신분증 이미지는 가이드 영역만 crop한 PNG로 업로드한다.
 > 이후 차량 태블릿은 같은 `MISSION_TERMINAL` 토큰으로 `PUT /api/v1/missions/{missionId}/vitals`를 단계별 반복 호출한다.
 
 **Request Body** (`multipart/form-data`)
@@ -1364,7 +1365,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `faceImage` | file | O | 차량에서 촬영한 환자 얼굴 이미지 |
-| `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지 |
+| `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지. FE는 가이드 영역 crop 결과를 PNG로 업로드 |
 
 **Response** `200 OK`
 ```json
@@ -1389,6 +1390,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 }
 ```
 
+> `identityCheck.faceSimilarityScore`는 기준 이미지가 없는 경로에서는 `null`일 수 있다.
 > `identityCheck.ocr.rrnMasked`는 GPU 서버가 반환한 주민등록번호 원문을 백엔드에서 마스킹한 값이다. 원문은 영속 저장하지 않는다.
 
 **본인 확인 실패 응답 예시** `403 Forbidden`
@@ -1411,7 +1413,6 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 404 | `MISSION_NOT_FOUND` | 미션 없음 |
 | 403 | `MISSION_NOT_READY` | 미션이 본인 확인 가능한 준비 상태가 아님 |
 | 403 | `IDENTITY_CHECK_FAILED` | GPU 본인 확인 실패 |
-| 409 | `REFERENCE_IMAGE_MISSING` | 환자 기준 이미지가 등록되지 않음 |
 | 502 | `AI_IDV_REQUEST_FAILED` | 본인 확인 AI 서버 호출 실패 |
 
 ---
