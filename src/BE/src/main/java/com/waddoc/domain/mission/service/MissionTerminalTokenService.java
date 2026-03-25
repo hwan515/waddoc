@@ -53,6 +53,7 @@ public class MissionTerminalTokenService {
         List<String> scopes = List.of(
                 MissionTerminalScopes.IDENTITY_CHECK,
                 MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                MissionTerminalScopes.SESSION_STATUS_READ,
                 MissionTerminalScopes.VITALS_WRITE
         );
         String terminalToken = jwtTokenProvider.createMissionTerminalToken(

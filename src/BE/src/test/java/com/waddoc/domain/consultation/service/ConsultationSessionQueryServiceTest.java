@@ -8,18 +8,24 @@ import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.MissionTerminalPrincipal;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.security.jwt.MissionTerminalScopes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -36,6 +42,9 @@ class ConsultationSessionQueryServiceTest {
 
     @Mock
     private ConsultationSessionRepository consultationSessionRepository;
+
+    @Mock
+    private MissionRepository missionRepository;
 
     @Mock
     private AccessControlService accessControlService;
@@ -69,6 +78,37 @@ class ConsultationSessionQueryServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
+    }
+
+    @Test
+    void getSessionStatusByMission_returnsSessionStatusForMissionTerminal() {
+        ConsultationSession session = buildSession();
+        Mission mission = buildMission(session);
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new MissionTerminalPrincipal(
+                        "mission-terminal:ms_test123",
+                        "ms_test123",
+                        "case_test123",
+                        java.util.List.of(MissionTerminalScopes.SESSION_STATUS_READ)
+                ),
+                null
+        );
+
+        when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
+        when(consultationSessionRepository.findWithParticipantsByCareCase(session.getCareCase())).thenReturn(Optional.of(session));
+
+        ConsultationSessionStatusResponse response = consultationSessionQueryService.getSessionStatusByMission(
+                "ms_test123",
+                authentication
+        );
+
+        assertThat(response.getSessionId()).isEqualTo("ses_test123");
+        assertThat(response.getStatus().name()).isEqualTo("IN_PROGRESS");
+        verify(accessControlService).assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.SESSION_STATUS_READ
+        );
     }
 
     private ConsultationSession buildSession() {
@@ -134,6 +174,16 @@ class ConsultationSessionQueryServiceTest {
         setField(session, "patientJoinedAt", LocalDateTime.of(2026, 3, 18, 10, 1, 0));
         setField(session, "startedAt", LocalDateTime.of(2026, 3, 18, 10, 0, 0));
         return session;
+    }
+
+    private Mission buildMission(ConsultationSession session) {
+        Mission mission = Mission.builder()
+                .careCase(session.getCareCase())
+                .vehicleId("VEH-01")
+                .destination(session.getCareCase().getPatient().getAddress())
+                .build();
+        setField(mission, "publicId", "ms_test123");
+        return mission;
     }
 
     private void setField(Object target, String fieldName, Object value) {

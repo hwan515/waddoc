@@ -56,6 +56,21 @@ public class ConsultationLiveKitService {
         }
     }
 
+    public void deleteRoom(String roomId) {
+        try {
+            Response<Void> response = roomServiceClient.deleteRoom(roomId).execute();
+            if (response.isSuccessful() || response.code() == 404) {
+                return;
+            }
+
+            log.error("LiveKit room deletion failed. roomId={}, code={}", roomId, response.code());
+            throw new BusinessException(ErrorCode.LIVEKIT_ROOM_CREATE_FAILED);
+        } catch (IOException e) {
+            log.error("LiveKit room deletion failed due to IO error. roomId={}", roomId, e);
+            throw new BusinessException(ErrorCode.LIVEKIT_ROOM_CREATE_FAILED);
+        }
+    }
+
     public String issueDoctorToken(ConsultationSession session, DoctorProfile doctorProfile) {
         AccessToken accessToken = new AccessToken(apiKey, apiSecret);
         accessToken.setIdentity("doctor:" + doctorProfile.getPublicId());

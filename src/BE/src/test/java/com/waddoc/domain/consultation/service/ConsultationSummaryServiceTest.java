@@ -12,6 +12,9 @@ import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
@@ -46,7 +49,13 @@ class ConsultationSummaryServiceTest {
     private ConsultationSummaryRepository consultationSummaryRepository;
 
     @Mock
+    private MissionRepository missionRepository;
+
+    @Mock
     private AccessControlService accessControlService;
+
+    @Mock
+    private ConsultationLiveKitService consultationLiveKitService;
 
     @Mock
     private AuditLogService auditLogService;
@@ -103,11 +112,13 @@ class ConsultationSummaryServiceTest {
         DoctorProfile doctor = buildDoctorProfile("usr_doctor");
         ConsultationSession session = buildSession(doctor);
         session.start();
+        Mission mission = buildMission(session, MissionPhase.CONSULTING);
 
         when(accessControlService.getDoctorProfileOrThrow(new AuthenticatedUser("usr_doctor", Role.DOCTOR))).thenReturn(doctor);
         when(consultationSessionRepository.findWithDoctorAndCaseByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
         when(consultationSummaryRepository.findBySession(session)).thenReturn(Optional.empty());
         when(consultationSummaryRepository.save(any(ConsultationSummary.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(missionRepository.findByCareCase(session.getCareCase())).thenReturn(Optional.of(mission));
 
         ConsultationSummaryResponse response = consultationSummaryService.saveSummary(
                 session.getPublicId(),
@@ -123,6 +134,9 @@ class ConsultationSummaryServiceTest {
         assertThat(response.getDurationMinutes()).isNotNegative();
         assertThat(session.getCareCase().getStatus().name()).isEqualTo("COMPLETED");
         assertThat(session.getCareCase().getBooking().getStatus()).isEqualTo(BookingStatus.COMPLETED);
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.RETURNING);
+        verify(missionRepository).save(mission);
+        verify(consultationLiveKitService).deleteRoom("room-1");
         verify(auditLogService).log(any(), any(), any(), any(), any(), any(), any());
     }
 
@@ -228,6 +242,16 @@ class ConsultationSummaryServiceTest {
                 .roomId("room-1")
                 .livekitUrl("wss://livekit.test")
                 .build();
+    }
+
+    private Mission buildMission(ConsultationSession session, MissionPhase missionPhase) {
+        Mission mission = Mission.builder()
+                .careCase(session.getCareCase())
+                .vehicleId("VEH-01")
+                .destination(session.getCareCase().getPatient().getAddress())
+                .build();
+        mission.updatePhase(missionPhase);
+        return mission;
     }
 
     private DoctorProfile buildDoctorProfile(String userPublicId) {

@@ -23,7 +23,7 @@ const MONITOR_STATE_LABELS = {
     '운행 중': '주행 중',
     '주행 중': '주행 중',
     ARRIVED: '도착',
-    COMPLETED: '도착',
+    COMPLETED: '대기',
     '도착': '도착',
     VERIFYING: '진료중',
     CONSULTING: '진료중',
