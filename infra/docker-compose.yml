@@ -4,8 +4,14 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
+    environment:
+      - DEV_ROBOT_API_PROXY_TARGET=${DEV_ROBOT_API_PROXY_TARGET:-https://www.waddoc.site}
     volumes:
-      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/dev.conf.template:/etc/nginx/templates/dev.conf.template:ro
+    command:
+      - /bin/sh
+      - -c
+      - envsubst '$$DEV_ROBOT_API_PROXY_TARGET' < /etc/nginx/templates/dev.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'
     depends_on:
       - spring-api
       - frontend
@@ -130,39 +136,6 @@ services:
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-devsecret}"
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
       LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://spring-api:8080/api/v1/sessions/webhook/livekit}"
-    networks:
-      - waddoc-net
-
-  # === Zenoh (ROS2 메시지 라우터) — 선택 프로필 ===
-  zenoh:
-    image: eclipse/zenoh:1.7.2
-    profiles: [ "zenoh" ]
-    ports:
-      - "8081:8081"
-    volumes:
-      - ../src/BE/zenoh-server/router/zenoh.json5:/zenoh.json5:ro
-    command: [ "-c", "/zenoh.json5" ]
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    networks:
-      - waddoc-net
-
-  # === Zenoh Subscriber — 선택 프로필 ===
-  zenoh-subscriber:
-    build: ../src/BE/zenoh-server/router_app
-    profiles: [ "zenoh" ]
-    depends_on:
-      - zenoh
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     networks:
       - waddoc-net
 

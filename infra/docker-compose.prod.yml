@@ -10,6 +10,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
       - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro # SSL 인증서는 repo 밖 경로를 사용
@@ -185,38 +187,43 @@ services:
       --fingerprint
     restart: unless-stopped
 
-  # === Zenoh (ROS2 메시지 라우터) — 로봇 통신 브릿지 ===
-  zenoh:
-    image: eclipse/zenoh:1.7.2
-    profiles: [ "zenoh" ] # 수동 운영 중일 때는 기본 배포 대상에서 제외 (Todo: 합치면 삭제)
-    ports:
-      - "8081:8081" # Zenoh REST/WebSocket 포트
-    volumes:
-      - ../src/BE/zenoh-server/router/zenoh.json5:/zenoh.json5:ro
-    command: [ "-c", "/zenoh.json5" ]
+  # === Zenoh TCP Bridge (운영 기본 포함) ===
+  zenoh_bridge_ec2:
+    image: eclipse/zenoh-bridge-ros2dds:1.7.2
+    container_name: zenoh_bridge_ec2
+    network_mode: host
+    environment:
+      - ROS_DISTRO=humble
+      - ROS_DOMAIN_ID=0
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General></Domain></CycloneDDS>
+    command: [ "-l", "tcp/0.0.0.0:8081" ]
     restart: unless-stopped
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - waddoc-net
 
-  # === Zenoh Subscriber — Zenoh 메시지를 수신하여 처리하는 앱 ===
-  zenoh-subscriber:
-    build: ../src/BE/zenoh-server/router_app # 로컬 빌드 (DockerHub X)
-    profiles: [ "zenoh" ] # zenoh profile을 명시적으로 켤 때만 함께 기동 (Todo: 합치면 삭제)
+  # === ROS2 FastAPI App — minimap/제어 API ===
+  ros2_app_ec2:
+    build:
+      context: ../src/zenoh-server/router_app
+      dockerfile: Dockerfile
+    container_name: ros2_app_ec2
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - PYTHONUNBUFFERED=1
+      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General></Domain></CycloneDDS>
     depends_on:
-      - zenoh
+      - zenoh_bridge_ec2
     restart: unless-stopped
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - waddoc-net
 
 volumes:
   pg_data:
