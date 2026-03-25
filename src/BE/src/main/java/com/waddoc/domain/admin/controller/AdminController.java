@@ -1,6 +1,7 @@
 package com.waddoc.domain.admin.controller;
 
 import com.waddoc.domain.admin.dto.*;
+import com.waddoc.domain.admin.service.AdminDemoMissionService;
 import com.waddoc.domain.admin.service.AdminService;
 import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.carecase.entity.CaseStatus;
@@ -26,6 +27,7 @@ import java.time.LocalDate;
 public class AdminController {
 
     private final AdminService adminService;
+    private final AdminDemoMissionService adminDemoMissionService;
 
     @GetMapping("/bookings")
     public ResponseEntity<AdminBookingListResponse> getBookings(
@@ -97,5 +99,29 @@ public class AdminController {
             @RequestBody(required = false) RejectGuardianLinkRequest request
     ) {
         return ResponseEntity.ok(adminService.rejectGuardianLinkRequest(authenticatedUser, linkId));
+    }
+
+    @PostMapping("/demo/missions/{missionId}/dispatch")
+    public ResponseEntity<AdminDemoMissionActionResponse> dispatchDemoMission(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String missionId
+    ) {
+        return ResponseEntity.ok(adminDemoMissionService.dispatchMission(authenticatedUser, missionId));
+    }
+
+    @PostMapping("/demo/missions/{missionId}/arrive")
+    public ResponseEntity<AdminDemoMissionActionResponse> arriveDemoMission(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String missionId
+    ) {
+        return ResponseEntity.ok(adminDemoMissionService.arriveMission(authenticatedUser, missionId));
+    }
+
+    @PostMapping("/demo/missions/{missionId}/complete")
+    public ResponseEntity<AdminDemoMissionActionResponse> completeDemoMission(
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser,
+            @PathVariable String missionId
+    ) {
+        return ResponseEntity.ok(adminDemoMissionService.completeMission(authenticatedUser, missionId));
     }
 }

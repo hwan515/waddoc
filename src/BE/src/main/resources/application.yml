@@ -49,3 +49,7 @@ dispatch:
   outbox-relay-interval-ms: 1000
   default-vehicle-id: ${DISPATCH_DEFAULT_VEHICLE_ID:veh_GIMCHEON_01}
   waypoint-mapping-resource: ${DISPATCH_WAYPOINT_MAPPING_RESOURCE:classpath:waypoint_address.json}
+
+robot:
+  command-base-url: ${ROBOT_COMMAND_BASE_URL:http://localhost}
+  command-timeout-ms: ${ROBOT_COMMAND_TIMEOUT_MS:5000}

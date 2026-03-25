@@ -59,6 +59,7 @@ services:
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
       - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
+      - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
