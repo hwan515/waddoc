@@ -7,6 +7,8 @@ services:
     environment:
       - ROS_DISTRO=humble  # <== 이 줄을 반드시 추가하십시오!
       - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=1
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General></Domain></CycloneDDS>
     command: [ "-l", "tcp/0.0.0.0:8081" ]
     restart: unless-stopped
@@ -20,6 +22,7 @@ services:
     network_mode: "host"
     environment:
       - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=1
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - PYTHONUNBUFFERED=1
       # DDS 통신을 강제로 루프백(lo) 인터페이스에 묶습니다.
