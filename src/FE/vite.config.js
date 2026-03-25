@@ -49,8 +49,9 @@ const createRobotProxy = (target) => ({
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const robotApiProxyTarget = env.VITE_ROBOT_API_PROXY_TARGET
+    || env.DEV_ROBOT_API_PROXY_TARGET
     || env.VITE_ROBOT_API_BASE_URL
-    || 'http://3.34.123.145:8000'
+    || 'https://www.waddoc.site'
 
   return {
     plugins: [react(), tailwindcss(), localSavePlugin()],

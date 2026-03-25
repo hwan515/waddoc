@@ -4,9 +4,10 @@
  * 배포 흐름:
  *   1. GitLab (dev 브랜치 - 추후 master로 수정) push
  *   2. Jenkins agent(EC2)에서 코드 checkout
- *   3. 변경 감지: src/BE, src/FE, src/FE-phone, infra 중 변경된 부분만 처리
- *   4. 변경된 서비스만 Docker buildx → DockerHub push
- *   5. docker compose pull → up -d
+ *   3. 변경 감지: src/BE, src/FE, src/FE-phone, src/zenoh-server, infra 중 변경된 부분만 처리
+ *   4. 변경된 이미지 서비스만 Docker buildx → DockerHub push
+ *      - ros2_app_ec2는 배포 서버에서 로컬 build
+ *   5. docker compose pull/build → up -d
  *      - 변경된 서비스만 교체
  *      - spring-api는 배포 후 항상 3개 유지
  *
@@ -96,11 +97,15 @@ pipeline {
                         env.BE_CHANGED = 'true'
                         env.FE_CHANGED = 'true'
                         env.FP_CHANGED = 'true'
+                        env.ZENOH_CHANGED = 'true'
                         env.INFRA_CHANGED = 'true'
                     } else {
                         env.BE_CHANGED    = changedFiles.any { it.startsWith('src/BE/') } ? 'true' : 'false'
                         env.FE_CHANGED    = changedFiles.any { it.startsWith('src/FE/') && !it.startsWith('src/FE-phone/') } ? 'true' : 'false'
                         env.FP_CHANGED    = changedFiles.any { it.startsWith('src/FE-phone/') } ? 'true' : 'false'
+                        env.ZENOH_CHANGED = changedFiles.any {
+                            it.startsWith('src/zenoh-server/') || it.startsWith('src/BE/zenoh-server/')
+                        } ? 'true' : 'false'
                         // Jenkinsfile 변경만으로 운영 스택 전체 재기동이 일어나지 않도록 제외한다.
                         env.INFRA_CHANGED = changedFiles.any { it.startsWith('infra/') && it != 'infra/Jenkinsfile' } ? 'true' : 'false'
                     }
@@ -108,6 +113,7 @@ pipeline {
                     echo "BE_CHANGED: ${env.BE_CHANGED}"
                     echo "FE_CHANGED: ${env.FE_CHANGED}"
                     echo "FP_CHANGED: ${env.FP_CHANGED}"
+                    echo "ZENOH_CHANGED: ${env.ZENOH_CHANGED}"
                     echo "INFRA_CHANGED: ${env.INFRA_CHANGED}"
                 }
             }
@@ -204,11 +210,14 @@ pipeline {
             when {
                 expression {
                     env.BE_CHANGED == 'true' || env.FE_CHANGED == 'true' ||
-                    env.FP_CHANGED == 'true' || env.INFRA_CHANGED == 'true'
+                    env.FP_CHANGED == 'true' || env.ZENOH_CHANGED == 'true' ||
+                    env.INFRA_CHANGED == 'true'
                 }
             }
             steps {
                 script {
+                    def pullableInfraServices = 'nginx frontend frontend-phone spring-api postgres redis zookeeper kafka livekit coturn zenoh_bridge_ec2'
+
                     // 변경되지 않은 서비스는 현재 떠 있는 컨테이너의 이미지 태그를 그대로 사용
                     def resolveRunningTag = { service, fallback ->
                         def imageRef = sh(
@@ -250,26 +259,49 @@ pipeline {
                                 docker buildx use ${BUILDX_BUILDER} 2>/dev/null || \
                                 docker buildx create --name ${BUILDX_BUILDER} --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/infra && \
-                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull && \
-                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --scale spring-api=${SPRING_API_REPLICAS}
+                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${pullableInfraServices} && \
+                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --build --scale spring-api=${SPRING_API_REPLICAS}
                             '''
                         } else {
-                            def services = []
-                            if (env.BE_CHANGED == 'true') services << 'spring-api'
-                            if (env.FE_CHANGED == 'true') services << 'frontend'
-                            if (env.FP_CHANGED == 'true') services << 'frontend-phone'
+                            def pullServices = []
+                            def buildServices = []
+                            def deployServices = []
 
-                            if (services) {
-                                def svc = services.join(' ')
+                            if (env.BE_CHANGED == 'true') {
+                                pullServices << 'spring-api'
+                                deployServices << 'spring-api'
+                            }
+                            if (env.FE_CHANGED == 'true') {
+                                pullServices << 'frontend'
+                                deployServices << 'frontend'
+                            }
+                            if (env.FP_CHANGED == 'true') {
+                                pullServices << 'frontend-phone'
+                                deployServices << 'frontend-phone'
+                            }
+                            if (env.ZENOH_CHANGED == 'true') {
+                                buildServices << 'ros2_app_ec2'
+                                deployServices << 'ros2_app_ec2'
+                            }
+
+                            if (deployServices) {
+                                def svc = deployServices.join(' ')
+                                def pullSvc = pullServices.join(' ')
                                 // backend가 배포 대상이면 spring-api를 3개로 맞춘다
-                                def scaleArg = services.contains('spring-api')
+                                def scaleArg = deployServices.contains('spring-api')
                                         ? "--scale spring-api=${env.SPRING_API_REPLICAS}"
                                         : ''
+                                def buildArg = buildServices ? '--build' : ''
                                 echo "=== Deploying services: ${svc} ==="
+                                if (pullServices) {
+                                    sh """
+                                        cd ${PROJECT_PATH}/infra && \
+                                        docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${pullSvc}
+                                    """
+                                }
                                 sh """
                                     cd ${PROJECT_PATH}/infra && \
-                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${svc} && \
-                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --no-deps ${scaleArg} ${svc}
+                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --no-deps ${buildArg} ${scaleArg} ${svc}
                                 """
                             } else {
                                 echo 'No services to deploy.'
@@ -302,6 +334,7 @@ pipeline {
                 if (env.BE_CHANGED == 'true') msg += ' [Backend]'
                 if (env.FE_CHANGED == 'true') msg += ' [Frontend]'
                 if (env.FP_CHANGED == 'true') msg += ' [Phone]'
+                if (env.ZENOH_CHANGED == 'true') msg += ' [Zenoh]'
                 if (env.INFRA_CHANGED == 'true') msg += ' [Infra]'
                 echo msg
             }

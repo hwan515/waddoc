@@ -31,7 +31,7 @@ services:
       - ROS_DOMAIN_ID=0
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
     network_mode: "host"
-    command: [ "-e", "tcp/3.34.123.145:8081" ]
+    command: [ "-e", "tcp/zenoh.waddoc.site:8081" ]
     restart: unless-stopped
 
   mediamtx:
