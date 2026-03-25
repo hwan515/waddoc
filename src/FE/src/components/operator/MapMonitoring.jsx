@@ -109,11 +109,11 @@ const MapMonitoring = ({
 
                 {/* 2. 중단: 차량 리스트 */}
                 <div className="flex-[3] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="h-12 border-b border-slate-100 flex items-center px-4 bg-slate-50/50 shrink-0">
-                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                            <Truck className="w-4 h-4 text-primary" /> 운영 차량 리스트
+                    <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
+                        <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                            <Truck className="w-5 h-5 text-primary" /> 운영 차량 리스트
                         </h3>
-                        <span className="ml-auto bg-primary text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-xs font-bold">
                             {vehicles.length}대
                         </span>
                     </div>

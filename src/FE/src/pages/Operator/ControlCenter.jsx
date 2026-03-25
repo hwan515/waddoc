@@ -141,6 +141,8 @@ const ControlCenter = () => {
     const [statistics, setStatistics] = useState({
         totalMissions: 0,
         activeMissions: 0,
+        dispatchingMissions: 0,
+        consultingMissions: 0,
         completedMissions: 0,
         incidentCount: 0
     });
@@ -237,6 +239,8 @@ const ControlCenter = () => {
                 setStatistics({
                     totalMissions: rawMissions.length,
                     activeMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+                    dispatchingMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
+                    consultingMissions: rawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
                     completedMissions: rawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
                     incidentCount: rawMissions.filter((mission) => mission.phase === 'INCIDENT').length
                 });
