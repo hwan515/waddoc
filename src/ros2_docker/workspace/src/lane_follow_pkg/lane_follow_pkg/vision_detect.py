@@ -1098,4 +1098,12 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()
+    #main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()

@@ -1,5 +1,0 @@
-paths:
-  all:
-    source: publisher
-    # TCP 전송 강제 (패킷 손실 방지)
-    protocols: [tcp]
