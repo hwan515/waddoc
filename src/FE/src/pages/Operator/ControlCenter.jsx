@@ -93,11 +93,42 @@ const normalizeVehicleSpeed = (value, state, unit = 'm/s') => {
     return convertMetersPerSecondToKilometersPerHour(parsed);
 };
 
+const createVehicleLocation = (latitudeValue, longitudeValue) => {
+    const lat = toFiniteNumber(latitudeValue);
+    const lng = toFiniteNumber(longitudeValue);
+
+    if (lat === null || lng === null) {
+        return null;
+    }
+
+    return { lat, lng };
+};
+
+const extractVehicleLocation = (...candidates) => {
+    for (const candidate of candidates) {
+        if (!candidate || typeof candidate !== 'object') {
+            continue;
+        }
+
+        const nextLocation = createVehicleLocation(
+            candidate.latitude ?? candidate.lat,
+            candidate.longitude ?? candidate.lng
+        );
+
+        if (nextLocation) {
+            return nextLocation;
+        }
+    }
+
+    return null;
+};
+
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
     const minimapRequestInFlightRef = useRef(false);
     const minimapErrorLoggedAtRef = useRef(0);
+    const selectedVehicleIdRef = useRef(null);
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
@@ -120,6 +151,10 @@ const ControlCenter = () => {
     const [minimapVehicleSpeed, setMinimapVehicleSpeed] = useState(null);
 
     useEffect(() => {
+        selectedVehicleIdRef.current = selectedVehicleId;
+    }, [selectedVehicleId]);
+
+    useEffect(() => {
         const fetchDashboardData = async () => {
             try {
                 const today = new Date().toISOString().split('T')[0];
@@ -135,14 +170,27 @@ const ControlCenter = () => {
                 ]);
 
                 const rawMissions = missionsRes.data.missions || [];
+                const missionDetailResponses = await Promise.all(
+                    rawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
+                );
+                const missionDetailsById = new Map(
+                    rawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
+                );
                 const mappedVehicles = rawMissions.map((mission) => {
                     const statusLabel = phaseToMonitorState(mission.phase);
                     const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
+                    const missionDetail = missionDetailsById.get(mission.missionId);
+                    const location = extractVehicleLocation(
+                        mission.currentLocation,
+                        missionDetail?.currentLocation,
+                        mission.location,
+                        mission
+                    );
 
                     return {
                         id: mission.vehicleId,
                         status: statusLabel,
-                        location: { lat: 37.4845, lng: 130.9057 },
+                        location,
                         battery: 85,
                         speed: missionSpeed,
                         lastUpdated: mission.updatedAt || new Date().toISOString(),
@@ -278,11 +326,28 @@ const ControlCenter = () => {
                 const nextSpeed = nextSpeedKmh !== null
                     ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
                     : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
+                const nextLocation = extractVehicleLocation(
+                    data?.currentLocation,
+                    data?.vehicleLocation,
+                    data?.location,
+                    data,
+                    {
+                        latitude: data?.latitude,
+                        longitude: data?.longitude
+                    }
+                );
 
                 setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
                 setMinimapPathPoints(sanitizePathPoints(pathPayload));
                 setMinimapMonitorState(nextState);
                 setMinimapVehicleSpeed(nextSpeed);
+                if (nextLocation && selectedVehicleIdRef.current) {
+                    setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
+                        vehicle.id === selectedVehicleIdRef.current
+                            ? { ...vehicle, location: nextLocation }
+                            : vehicle
+                    )));
+                }
             } catch (error) {
                 if (isMounted) {
                     const now = Date.now();
@@ -308,17 +373,26 @@ const ControlCenter = () => {
     const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || vehicles[0] || null;
     const vehicleState = minimapMonitorState || selectedVehicle?.status || '대기';
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
+    const vehicleLocation = selectedVehicle?.location || null;
 
     const handleLogout = () => {
         logout();
         navigate('/operator/login');
     };
 
+    const handleGoHome = () => {
+        navigate('/');
+    };
+
     return (
         <div className="h-screen bg-[#F5F6F8] flex flex-col font-sans overflow-hidden">
             <header className="h-16 bg-dark text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
                 <div className="flex items-center gap-8">
-                    <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={handleGoHome}
+                        className="flex items-center gap-3 text-left transition-opacity hover:opacity-90"
+                    >
                         <div className="bg-white/10 p-2 rounded-lg">
                             <Activity className="w-5 h-5 text-secondary" />
                         </div>
@@ -326,7 +400,7 @@ const ControlCenter = () => {
                             Waddoc<span className="text-secondary"> 왔닥</span>
                             <span className="ml-3 pl-3 border-l border-white/20 text-sm font-medium text-slate-300">통합 관제 센터</span>
                         </span>
-                    </div>
+                    </button>
 
                     <div className="flex items-center gap-1 bg-accent-2 p-1 rounded-lg">
                         <button
@@ -402,6 +476,7 @@ const ControlCenter = () => {
                         minimapPathPoints={minimapPathPoints}
                         vehicleState={vehicleState}
                         vehicleSpeed={vehicleSpeed}
+                        vehicleLocation={vehicleLocation}
                         updateIntervalMs={MINIMAP_POLL_INTERVAL_MS}
                         useMockMinimapData={false}
                     />
