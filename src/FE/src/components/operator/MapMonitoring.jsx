@@ -7,6 +7,11 @@ const formatSpeed = (value) => {
     return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
 };
 
+const formatCoordinate = (value) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) return '-';
+    return value.toFixed(4);
+};
+
 const MapMonitoring = ({
     vehicles,
     selectedVehicleId,
@@ -15,6 +20,7 @@ const MapMonitoring = ({
     minimapPathPoints,
     vehicleState = '대기',
     vehicleSpeed = 0,
+    vehicleLocation = null,
     updateIntervalMs = 100,
     useMockMinimapData = false,
 }) => {
@@ -76,13 +82,14 @@ const MapMonitoring = ({
 
     return (
         <div className="h-full flex p-4 gap-4">
-            <div className="flex-1 min-w-0 overflow-hidden relative">
-                <div className="h-full">
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-4xl">
+                <div className="h-full overflow-hidden rounded-4xl">
                     <MinimapPanel
                         vehiclePose={minimapVehiclePose}
                         pathPoints={minimapPathPoints}
                         vehicleState={vehicleState}
                         vehicleSpeed={vehicleSpeed}
+                        vehicleLocation={vehicleLocation}
                         updateIntervalMs={updateIntervalMs}
                         showMockBadge={useMockMinimapData}
                     />
@@ -135,7 +142,9 @@ const MapMonitoring = ({
                                     <div className="space-y-1.5 text-xs text-slate-600 font-medium">
                                         <div className="flex items-center gap-2">
                                             <Navigation className="w-3.5 h-3.5 text-slate-400" />
-                                            <span className="font-mono">{vehicle.location.lat.toFixed(4)}, {vehicle.location.lng.toFixed(4)}</span>
+                                            <span className="font-mono">
+                                                {formatCoordinate(vehicle.location?.lat)}, {formatCoordinate(vehicle.location?.lng)}
+                                            </span>
                                         </div>
                                         <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60">
                                             <span className="flex items-center gap-1.5">
@@ -159,12 +168,12 @@ const MapMonitoring = ({
                         <span className="ml-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                     </div>
 
-                    <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-                        <div className="absolute inset-0 z-20 w-full h-full bg-black">
+                    <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-4xl">
+                        <div className="absolute inset-0 z-20 h-full w-full overflow-hidden rounded-4xl bg-black">
                             <iframe
                                 src="/unity_cam/"
                                 title="Camera stream"
-                                className="w-full h-full border-none"
+                                className="h-full w-full rounded-4xl border-none"
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowFullScreen
                             ></iframe>

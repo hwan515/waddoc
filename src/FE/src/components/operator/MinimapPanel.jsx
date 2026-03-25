@@ -9,9 +9,9 @@ const UNITY_MINIMAP_OPTIONS = {
     invertY: true
 };
 
-const formatWorldNumber = (value) => {
+const formatCoordinate = (value) => {
     if (typeof value !== 'number' || Number.isNaN(value)) return '-';
-    return value.toFixed(1);
+    return value.toFixed(4);
 };
 
 const formatSpeed = (value) => {
@@ -100,6 +100,7 @@ const MinimapPanel = ({
     imageSrc = '/minimap.png',
     vehicleState = '대기',
     vehicleSpeed = 0,
+    vehicleLocation = null,
     updateIntervalMs = 100,
     showMockBadge = false
 }) => {
@@ -127,20 +128,20 @@ const MinimapPanel = ({
     const statePresentation = getStatePresentation(vehicleState);
 
     return (
-            <div className="relative h-full overflow-hidden rounded-4xl bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.28),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.14),transparent_24%),linear-gradient(180deg,#082041_0%,#04142B_58%,#020817_100%)]" />
-                    <div className="absolute inset-y-0 left-0 w-[28%] min-w-52.5 max-w-62.5 bg-linear-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
+        <div className="relative h-full overflow-hidden rounded-4xl bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
+            <div className="absolute inset-0 rounded-4xl bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.28),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.14),transparent_24%),linear-gradient(180deg,#082041_0%,#04142B_58%,#020817_100%)]" />
+            <div className="absolute inset-y-0 left-0 w-[28%] min-w-52.5 max-w-62.5 rounded-l-4xl bg-linear-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
 
             {imageReady ? (
                 <img
                     src={imageSrc}
                     alt="Unity minimap"
-                    className="absolute inset-0 h-full w-full select-none object-contain object-right"
+                    className="absolute inset-0 h-full w-full rounded-4xl object-contain object-right select-none"
                     draggable="false"
                     onError={() => setImageReady(false)}
                 />
             ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-[#0F172A] text-center text-sm text-slate-300">
+                <div className="absolute inset-0 flex items-center justify-center rounded-4xl bg-[#0F172A] text-center text-sm text-slate-300">
                     <div>
                         <p className="font-semibold">`public/minimap.png`를 찾을 수 없습니다.</p>
                         <p className="mt-1 text-xs text-slate-400">이미지를 복사하면 실제 미니맵 배경으로 교체됩니다.</p>
@@ -148,11 +149,11 @@ const MinimapPanel = ({
                 </div>
             )}
 
-                    <div className="absolute inset-0 bg-linear-to-b from-dark/10 via-transparent to-[#020817]/38" />
+            <div className="absolute inset-0 rounded-4xl bg-linear-to-b from-dark/10 via-transparent to-[#020817]/38" />
 
             <svg
                 viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-                className="absolute inset-0 h-full w-full"
+                className="absolute inset-0 h-full w-full rounded-4xl"
                 preserveAspectRatio="xMaxYMid meet"
             >
                 {minimapPathPoints.length > 1 && (
@@ -228,10 +229,10 @@ const MinimapPanel = ({
 
                     <StatCard icon={Navigation} label="실시간 좌표">
                         <div className="mt-3 space-y-2">
-                            <CoordinateRow axis="X" value={formatWorldNumber(vehiclePose?.x)} />
-                            <CoordinateRow axis="Z" value={formatWorldNumber(vehiclePose?.z)} />
+                            <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
+                            <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
                         </div>
-                        <p className="mt-3 text-xs text-slate-400">Unity 월드 좌표 기준 위치</p>
+                        <p className="mt-3 text-xs text-slate-400">운영 차량 리스트와 동일한 위도/경도 기준 위치</p>
                     </StatCard>
                 </div>
             </div>
