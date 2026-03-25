@@ -71,15 +71,19 @@ const getStatePresentation = (state) => {
     }
 };
 
-const StatCard = ({ icon: Icon, label, children }) => (
-    <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md shadow-lg">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-            <Icon className="h-3.5 w-3.5 text-[#B9D6F2]" />
-            {label}
+const StatCard = ({ icon, label, children }) => {
+    const IconComponent = icon;
+
+    return (
+        <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md shadow-lg">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">
+                <IconComponent className="h-3.5 w-3.5 text-[#B9D6F2]" />
+                {label}
+            </div>
+            {children}
         </div>
-        {children}
-    </div>
-);
+    );
+};
 
 const CoordinateRow = ({ axis, value }) => (
     <div className="flex items-center justify-between rounded-2xl bg-white/5 px-3 py-2">
