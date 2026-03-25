@@ -274,7 +274,7 @@ class MissionIdentityCheckServiceTest {
     }
 
     @Test
-    void verify_rejectsWhenIdentityCheckFails() throws Exception {
+    void verify_succeedsWhenAnyOcrFieldMatchesEvenIfAiMatchedIsFalse() throws Exception {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
         Authentication authentication = adminAuthentication(admin);
         Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
@@ -294,12 +294,59 @@ class MissionIdentityCheckServiceTest {
                         .matched(false)
                         .faceSimilarityScore(0.42)
                         .idCardFaceSimilarityScore(0.38)
-                        .reasonCodes(List.of("LOW_SIMILARITY"))
+                        .reasonCodes(List.of("MULTIPLE_FACES_DETECTED"))
                         .ocr(IdentityVerificationResult.OcrData.builder()
-                                .name("홍길동")
+                                .name("다른이름")
                                 .rrnMasked("580315-1******")
                                 .birthDate6("580315")
-                                .address("김천시 증산면 장전1길 69")
+                                .address("다른 주소")
+                                .build())
+                        .build());
+        when(missionIdentityCheckCacheService.saveVerified("ms_test123", "pat_test123"))
+                .thenReturn(new MissionIdentityCheckCacheService.VerifiedIdentityCheck(
+                        OffsetDateTime.parse("2026-03-18T10:05:00+09:00"),
+                        600
+                ));
+
+        MissionIdentityCheckResponse response = missionIdentityCheckService.verify(
+                "ms_test123",
+                new MockMultipartFile("faceImage", "face.jpg", "image/jpeg", new byte[]{1, 2, 3}),
+                new MockMultipartFile("idCardImage", "id-card.jpg", "image/jpeg", new byte[]{4, 5, 6}),
+                authentication
+        );
+
+        assertThat(response.getStatus()).isEqualTo("VERIFIED");
+        assertThat(response.getIdentityCheck().isMatched()).isFalse();
+        verify(missionIdentityCheckCacheService).saveVerified("ms_test123", "pat_test123");
+    }
+
+    @Test
+    void verify_rejectsWhenNoOcrFieldMatchesPatient() throws Exception {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Authentication authentication = adminAuthentication(admin);
+        Mission mission = buildMission("pat_test123", "patients/pat_test123/reference.jpg");
+        mission.updatePhase(MissionPhase.VERIFYING);
+        Files.createDirectories(tempDir.resolve("patients/pat_test123"));
+        Files.write(tempDir.resolve("patients/pat_test123/reference.jpg"), new byte[]{10, 20, 30});
+        setField(missionIdentityCheckService, "fileStorageRoot", tempDir.toString());
+
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.IDENTITY_CHECK
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
+        when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
+        when(consultationIdentityVerificationClient.verify(eq("pat_test123"), any(), eq("reference.jpg"), any(), eq("face.jpg"), any(), eq("id-card.jpg")))
+                .thenReturn(IdentityVerificationResult.builder()
+                        .matched(true)
+                        .faceSimilarityScore(0.98)
+                        .idCardFaceSimilarityScore(0.97)
+                        .reasonCodes(List.of("OCR_MISMATCH"))
+                        .ocr(IdentityVerificationResult.OcrData.builder()
+                                .name("다른이름")
+                                .rrnMasked("700101-1******")
+                                .birthDate6("700101")
+                                .address("서울특별시 마포구 성암로 330")
                                 .build())
                         .build());
 
