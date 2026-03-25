@@ -184,7 +184,6 @@ const getMissionPhaseLabel = (phase) => {
 const getDemoActionAvailability = (phase) => ({
     canDispatch: phase === 'CREATED',
     canArrive: ['DISPATCHED', 'EN_ROUTE'].includes(phase),
-    canComplete: ['ARRIVED', 'VERIFYING', 'CONSULTING'].includes(phase),
 });
 
 const getErrorMessage = (error, fallbackMessage) => (
@@ -648,7 +647,6 @@ const ControlCenter = () => {
                         pendingDemoAction={pendingDemoAction}
                         onDemoDispatch={(missionId) => handleDemoMissionAction(missionId, 'dispatch')}
                         onDemoArrive={(missionId) => handleDemoMissionAction(missionId, 'arrive')}
-                        onDemoComplete={(missionId) => handleDemoMissionAction(missionId, 'complete')}
                     />
                 )}
                 {activeTab === 'patients' && <PatientManagement />}

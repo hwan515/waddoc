@@ -84,8 +84,7 @@ const DashboardView = ({
     statistics,
     pendingDemoAction = null,
     onDemoDispatch,
-    onDemoArrive,
-    onDemoComplete
+    onDemoArrive
 }) => {
     const [referenceDate, setReferenceDate] = useState(() => new Date());
     const [now, setNow] = useState(() => new Date());
@@ -505,21 +504,6 @@ const DashboardView = ({
                                                 {pendingDemoAction?.missionId === m.id && pendingDemoAction?.action === 'arrive'
                                                     ? '도착 처리 중...'
                                                     : '도착 처리'}
-                                            </button>
-                                        )}
-                                        {m.canComplete && (
-                                            <button
-                                                type="button"
-                                                onClick={() => onDemoComplete?.(m.id)}
-                                                disabled={pendingDemoAction !== null}
-                                                className={`rounded-md border px-3 py-2 text-xs font-bold transition-colors ${getDemoButtonClass(
-                                                    'complete',
-                                                    pendingDemoAction !== null
-                                                )}`}
-                                            >
-                                                {pendingDemoAction?.missionId === m.id && pendingDemoAction?.action === 'complete'
-                                                    ? '종료 처리 중...'
-                                                    : '진료 종료'}
                                             </button>
                                         )}
                                     </div>
