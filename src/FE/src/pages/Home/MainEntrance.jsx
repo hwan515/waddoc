@@ -4,11 +4,14 @@ import {
     ArrowRight,
     Bot,
     ShieldCheck,
+    Smartphone,
     Stethoscope,
     Users,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { getHomePathForRole, getRoleDisplayName } from '../../utils/authRouting';
+
+const phoneSimulationTarget = import.meta.env.DEV ? 'http://localhost:5174' : '/phone';
 
 const primaryEntries = [
     {
@@ -47,6 +50,18 @@ const internalEntries = [
             { label: '로봇 화면 열기', to: '/robot', tone: 'outline' },
         ],
     },
+    {
+        title: '\uD734\uB300\uD3F0 \uC2DC\uBBAC',
+        description: '\uC804\uD654 \uC608\uC57D \uD750\uB984\uC744 \uC2DC\uC5F0\uD558\uB294 \uD734\uB300\uD3F0 \uC2DC\uBBAC\uB808\uC774\uD130 \uD654\uBA74\uC785\uB2C8\uB2E4.',
+        icon: Smartphone,
+        actions: [
+            {
+                label: '\uD734\uB300\uD3F0 \uC2DC\uBBAC \uC5F4\uAE30',
+                href: phoneSimulationTarget,
+                tone: 'outline',
+            },
+        ],
+    },
 ];
 
 const actionStyles = {
@@ -55,15 +70,25 @@ const actionStyles = {
     outline: 'border border-slate-200 bg-white text-slate-800 hover:border-primary hover:text-primary',
 };
 
-const ActionLink = ({ to, label, tone = 'primary' }) => (
-    <Link
-        to={to}
-        className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${actionStyles[tone]}`}
-    >
-        <span>{label}</span>
-        <ArrowRight className="h-4 w-4" />
-    </Link>
-);
+const ActionLink = ({ to, href, label, tone = 'primary', reloadDocument = false }) => {
+    const className = `inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${actionStyles[tone]}`;
+
+    if (href) {
+        return (
+            <a href={href} className={className}>
+                <span>{label}</span>
+                <ArrowRight className="h-4 w-4" />
+            </a>
+        );
+    }
+
+    return (
+        <Link to={to} reloadDocument={reloadDocument} className={className}>
+            <span>{label}</span>
+            <ArrowRight className="h-4 w-4" />
+        </Link>
+    );
+};
 
 const EntryCard = ({ title, description, icon, actions, highlighted = false }) => {
     const IconComponent = icon;
@@ -91,9 +116,9 @@ const EntryCard = ({ title, description, icon, actions, highlighted = false }) =
                 {description}
             </p>
 
-            <div className="flex flex-wrap gap-3">
-                {actions.map((action) => (
-                    <ActionLink key={`${title}-${action.to}`} {...action} />
+                <div className="flex flex-wrap gap-3">
+                    {actions.map((action) => (
+                    <ActionLink key={`${title}-${action.to ?? action.href}`} {...action} />
                 ))}
             </div>
         </article>
@@ -161,11 +186,11 @@ const MainEntrance = () => {
                                 <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">시연 및 내부 전용</h2>
                             </div>
                             <p className="hidden text-sm text-slate-500 md:block">
-                                의사와 로봇 단말은 실제 운영 흐름에 맞는 별도 화면으로 분리했습니다.
+                                EMR/로봇 단말/휴대폰 시뮬은 실제 운영 흐름에 맞는 별도 화면으로 분리했습니다.
                             </p>
                         </div>
 
-                        <div className="grid gap-5 lg:grid-cols-2">
+                        <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
                             {internalEntries.map((entry) => (
                                 <EntryCard key={entry.title} {...entry} />
                             ))}
