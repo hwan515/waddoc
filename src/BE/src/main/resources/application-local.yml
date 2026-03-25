@@ -28,8 +28,8 @@ robot-terminal:
 
 ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
-  idv-url: ${AI_IDV_URL:https://localhost/idv/api/v1/verify}
-  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:5000}
+  idv-url: ${AI_IDV_URL:http://70.12.130.107:8010/idv/api/v1/verify}
+  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:20000}
 
 file:
   storage-root: ${FILE_STORAGE_ROOT:./local-storage/uploads}

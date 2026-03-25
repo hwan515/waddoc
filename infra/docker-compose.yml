@@ -9,6 +9,7 @@ services:
     depends_on:
       - spring-api
       - frontend
+      - frontend-phone
       - livekit
     networks:
       - waddoc-net
@@ -21,6 +22,14 @@ services:
     environment:
       - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
+    networks:
+      - waddoc-net
+
+  # === Frontend (Phone) ===
+  frontend-phone:
+    build: ../src/FE-phone
+    expose:
+      - "3001"
     networks:
       - waddoc-net
 
@@ -37,8 +46,8 @@ services:
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
       - LIVEKIT_HOST=http://livekit:7880
-      - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
-      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-5000}
+      - AI_IDV_URL=http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
+      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-20000}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
@@ -107,7 +116,7 @@ services:
   # === WebRTC ===
   livekit:
     image: livekit/livekit-server:latest
-    entrypoint: ["/bin/sh", "/etc/entrypoint.sh"]
+    entrypoint: [ "/bin/sh", "/etc/entrypoint.sh" ]
     ports:
       - "7880:7880"
       - "7881:7881"
@@ -121,6 +130,39 @@ services:
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-devsecret}"
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
       LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://spring-api:8080/api/v1/sessions/webhook/livekit}"
+    networks:
+      - waddoc-net
+
+  # === Zenoh (ROS2 메시지 라우터) — 선택 프로필 ===
+  zenoh:
+    image: eclipse/zenoh:1.7.2
+    profiles: [ "zenoh" ]
+    ports:
+      - "8081:8081"
+    volumes:
+      - ../src/BE/zenoh-server/router/zenoh.json5:/zenoh.json5:ro
+    command: [ "-c", "/zenoh.json5" ]
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - waddoc-net
+
+  # === Zenoh Subscriber — 선택 프로필 ===
+  zenoh-subscriber:
+    build: ../src/BE/zenoh-server/router_app
+    profiles: [ "zenoh" ]
+    depends_on:
+      - zenoh
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - waddoc-net
 
