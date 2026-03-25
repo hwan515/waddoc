@@ -76,8 +76,8 @@ const StatCard = ({ icon, label, children }) => {
 
     return (
         <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md shadow-lg">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
-                <IconComponent className="h-3.5 w-3.5 text-secondary" />
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-slate-200">
+                <IconComponent className="h-4 w-4 text-secondary" />
                 {label}
             </div>
             {children}
@@ -214,17 +214,17 @@ const MinimapPanel = ({
                             <span className={`h-2 w-2 rounded-full ${statePresentation.dotClass}`}></span>
                             {statePresentation.label}
                         </div>
-                        <p className="mt-3 text-xs text-slate-400">실시간 미션 단계가 연결되면 이 카드가 그대로 반영됩니다.</p>
+                        <p className="mt-3 text-xs text-slate-400">실시간 상태 반영</p>
                     </StatCard>
 
                     <StatCard icon={Gauge} label="차량 속도">
                         <p className="mt-3 text-2xl font-semibold text-white">{formatSpeed(vehicleSpeed)}</p>
-                        <p className="mt-1 text-xs text-slate-400">정지 상태는 자동으로 0 km/h 처리</p>
+                        <p className="mt-1 text-xs text-slate-400">정지 시 0 km/h</p>
                     </StatCard>
 
                     <StatCard icon={Radio} label="업데이트 주기">
                         <p className="mt-3 text-2xl font-semibold text-white">{formatUpdateInterval(updateIntervalMs)}</p>
-                        <p className="mt-1 text-xs text-slate-400">실시간 미니맵 폴링 {Math.round(1000 / Math.max(updateIntervalMs, 1))}Hz</p>
+                        <p className="mt-1 text-xs text-slate-400">미니맵 폴링 간격</p>
                     </StatCard>
 
                     <StatCard icon={Navigation} label="실시간 좌표">
@@ -232,7 +232,7 @@ const MinimapPanel = ({
                             <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
                             <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
                         </div>
-                        <p className="mt-3 text-xs text-slate-400">운영 차량 리스트와 동일한 위도/경도 기준 위치</p>
+                        <p className="mt-3 text-xs text-slate-400">차량 리스트와 동일</p>
                     </StatCard>
                 </div>
             </div>

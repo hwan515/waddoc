@@ -1,4 +1,4 @@
-import { Activity, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight, User, Phone, MapPin } from 'lucide-react';
+import { Activity, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 
 const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missionsList = [], statistics }) => {
     // 월간 달력 계산 (현재 년/월 기준)
@@ -63,7 +63,7 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
     return (
         <div className="h-full flex p-4 gap-4">
             {/* 좌측: 통합 캘린더 */}
-            <div className="flex-[7] min-w-150 rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+            <div className="flex-7 min-w-150 rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
                 {/* Toolbar */}
                 <div className="h-16 border-b border-slate-100 flex items-center justify-between px-6 shrink-0 bg-white z-10">
                     <div className="flex bg-[#F8F9FA] border border-slate-200 rounded-md overflow-hidden p-0.5">
@@ -93,7 +93,7 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                     {calendarMode === 'weekly' ? (
                         <div className="flex-1 overflow-y-auto custom-scrollbar flex relative">
                             {/* 동기화 스크롤 시간 표시 */}
-                            <div className="w-20 flex-shrink-0 border-r border-slate-100 flex flex-col bg-white">
+                            <div className="w-20 shrink-0 border-r border-slate-100 flex flex-col bg-white">
                                 <div className="h-12.5 sticky top-0 bg-white z-30" />
                                 <div className="flex flex-col relative">
                                     {timeSlots.map((time, idx) => (
