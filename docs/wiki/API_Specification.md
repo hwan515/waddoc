@@ -615,6 +615,13 @@
 ```
 
 > 예약 생성 성공 후 시스템은 환자의 기본 휴대전화 번호로 예약 확정 SMS를 비동기 발송한다. SMS 발송 실패는 예약 생성을 롤백하지 않으며, 운영 로그와 재시도 정책으로 후속 처리한다.
+>
+> 추가로 서버는 같은 트랜잭션 문맥에서 다음 리소스를 함께 준비한다.
+> - `CARE_CASE` 생성
+> - `MISSION` 생성 (`phase=CREATED`, `vehicleId=veh_GIMCHEON_01`)
+> - `DISPATCH_OUTBOX` 생성
+>
+> 주소가 waypoint 매핑 대상이면 `MISSION.targetWaypointNumber`에 저장하고, 운영/데모 환경에서 이후 출동 트리거에 사용한다.
 
 **Errors**
 
@@ -2057,6 +2064,102 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 404 | `VEHICLE_NOT_FOUND` | 차량을 찾을 수 없음 |
+
+---
+
+### 11.10 데모 미션 출동
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/demo/missions/{missionId}/dispatch` |
+| Auth | Bearer Token (ADMIN) |
+
+> 데모 모드에서만 사용할 수 있는 관리자 제어 API다.
+> - `MISSION.targetWaypointNumber`가 있으면 Spring이 FastAPI `POST /api/cmd/waypoint/{target}`를 호출한다.
+> - 호출 성공 후 mission은 `DISPATCHED`로 전이된다.
+> - waypoint 매핑이 없는 주소는 로봇 호출 없이 더미 완료 mission으로 처리된다.
+> - 처리 완료 후 연결된 `DISPATCH_OUTBOX`는 `COMPLETED`로 정리한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_demo_01",
+  "phase": "DISPATCHED",
+  "previousPhase": "CREATED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59,
+  "waypointCommandSent": true,
+  "dummyCompleted": false
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `DEMO_MODE_DISABLED` | 데모 모드가 비활성화되어 있음 |
+| 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없음 |
+| 400 | `MISSION_PHASE_TRANSITION_INVALID` | `CREATED` 상태가 아닌 미션에 출동 요청 |
+| 502 | `ROBOT_COMMAND_REQUEST_FAILED` | waypoint 명령 API 호출 실패 |
+
+---
+
+### 11.11 데모 미션 도착 처리
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/demo/missions/{missionId}/arrive` |
+| Auth | Bearer Token (ADMIN) |
+
+> 데모 모드에서 `DISPATCHED` 또는 `EN_ROUTE` 상태의 mission을 `ARRIVED`까지 전이시킨다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_demo_01",
+  "phase": "ARRIVED",
+  "previousPhase": "DISPATCHED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59,
+  "waypointCommandSent": false,
+  "dummyCompleted": false
+}
+```
+
+---
+
+### 11.12 데모 미션 종료 처리
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/demo/missions/{missionId}/complete` |
+| Auth | Bearer Token (ADMIN) |
+
+> 데모 모드에서 진행 중 mission을 `COMPLETED`까지 전이시킨다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_demo_01",
+  "phase": "COMPLETED",
+  "previousPhase": "ARRIVED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59,
+  "waypointCommandSent": false,
+  "dummyCompleted": false
+}
+```
+
+**Errors** (`11.10`, `11.11`, `11.12` 공통)
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `DEMO_MODE_DISABLED` | 데모 모드가 비활성화되어 있음 |
+| 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없음 |
+| 400 | `MISSION_PHASE_TRANSITION_INVALID` | 현재 상태에서 허용되지 않는 데모 전이 |
 
 ---
 
