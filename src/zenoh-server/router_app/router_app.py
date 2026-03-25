@@ -33,6 +33,7 @@ current_state = {
         'current_pose': None,
         'speed_ms': 0.0,
         'speed_kmh': 0.0,
+        'battery_soc': 100.0,
         'cleared': False,
         'clear_reason': None,
     },
@@ -89,6 +90,13 @@ def round_or_none(value, digits=3):
 
 def speed_ms_to_kmh(speed_ms: float) -> float:
     return float(speed_ms) * 3.6
+
+
+def sanitize_battery_soc(value, default=100.0):
+    parsed = to_float(value)
+    if parsed is None:
+        parsed = float(default)
+    return max(0.0, min(100.0, float(parsed)))
 
 
 def sanitize_pose(pose):
@@ -255,6 +263,8 @@ def get_minimap_state():
         if speed_kmh is None:
             speed_kmh = speed_ms_to_kmh(speed_ms)
 
+        battery_soc = sanitize_battery_soc(route_snapshot.get('battery_soc', 100.0))
+
         explicit_state = current_state.get('robot_state')
         if isinstance(explicit_state, str) and explicit_state.strip():
             status = explicit_state.strip()
@@ -280,6 +290,8 @@ def get_minimap_state():
             'speedKmh': float(speed_kmh),
             'vehicleSpeedMs': float(speed_ms),
             'vehicleSpeedKmh': float(speed_kmh),
+            'battery_soc': float(battery_soc),
+            'batterySoc': float(battery_soc),
             'hasOdom': has_pose,
         }
 
@@ -397,6 +409,7 @@ class Ec2ControlNode(Node):
                 'current_pose': current_pose,
                 'speed_ms': float(speed_ms),
                 'speed_kmh': float(speed_kmh),
+                'battery_soc': sanitize_battery_soc(payload.get('battery_soc', 100.0)),
                 'cleared': bool(payload.get('cleared', False)),
                 'clear_reason': payload.get('clear_reason'),
             }
