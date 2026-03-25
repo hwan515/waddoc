@@ -145,6 +145,19 @@ class JwtSecurityIntegrationTest {
     }
 
     @Test
+    void swaggerApiDocsIsAccessibleWithoutAuthentication() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/v3/api-docs",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).contains("\"openapi\"");
+    }
+
+    @Test
     void bearerAccessTokenCanReadAdminPatientsWithoutFilters() {
         String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
         HttpHeaders headers = new HttpHeaders();

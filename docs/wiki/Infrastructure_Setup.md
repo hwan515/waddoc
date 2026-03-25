@@ -6,8 +6,8 @@
 infra/
 ├── .env.example              # 환경 변수 템플릿
 ├── Jenkinsfile               # Jenkins CI/CD 파이프라인 정의
-├── docker-compose.yml        # 개발 메인 스택 (phone 포함, AI 제외)
-├── docker-compose.prod.yml   # 배포 메인 서버 (9+ 서비스, coturn/frontend-phone/zenoh 포함)
+├── docker-compose.yml        # 개발 메인 스택 (AI, coturn 제외)
+├── docker-compose.prod.yml   # 배포 메인 서버 (9+ 서비스, coturn/zenoh 포함)
 ├── nginx/
 │   ├── dev.conf              # 개발 Nginx (HTTP)
 │   └── prod.conf             # 배포 Nginx (SSL + WSS 프록시)
