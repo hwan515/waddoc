@@ -11,6 +11,8 @@ import {
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 
+const TERMINAL_SESSION_STATUSES = new Set(['COMPLETED', 'FAILED', 'ABANDONED']);
+
 const ConferenceUI = () => {
     const { localParticipant } = useLocalParticipant();
     const localVideoTrack = useTracks([Track.Source.Camera]).find((trackRef) => trackRef.participant.identity === localParticipant.identity);
@@ -103,8 +105,52 @@ const Conference = () => {
         };
     }, []);
 
+    useEffect(() => {
+        let isPolling = true;
+        let timerId = null;
+
+        const terminalToken = localStorage.getItem('robot_mission_terminal_token');
+        const missionId = localStorage.getItem('current_mission_id');
+
+        const pollConsultationStatus = async () => {
+            if (!isPolling || !terminalToken || !missionId) {
+                return;
+            }
+
+            try {
+                const response = await apiClient.get(`/missions/${missionId}/consultation-status`, {
+                    headers: { Authorization: `Bearer ${terminalToken}` }
+                });
+                const sessionStatus = response?.data?.status;
+
+                if (TERMINAL_SESSION_STATUSES.has(sessionStatus)) {
+                    navigate('/robot/finish', { replace: true });
+                    return;
+                }
+            } catch (error) {
+                const status = error?.response?.status;
+                if (status && status !== 404) {
+                    console.warn('진료 상태 조회에 실패했습니다.', error?.response?.data || error.message);
+                }
+            }
+
+            if (isPolling) {
+                timerId = setTimeout(pollConsultationStatus, 2000);
+            }
+        };
+
+        pollConsultationStatus();
+
+        return () => {
+            isPolling = false;
+            if (timerId) {
+                clearTimeout(timerId);
+            }
+        };
+    }, [navigate]);
+
     const handleDisconnected = () => {
-        navigate('/robot/finish');
+        navigate('/robot/finish', { replace: true });
     };
 
     if (isWaiting) {

@@ -64,6 +64,7 @@ class MissionTerminalTokenServiceTest {
                 eq(List.of(
                         MissionTerminalScopes.IDENTITY_CHECK,
                         MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                        MissionTerminalScopes.SESSION_STATUS_READ,
                         MissionTerminalScopes.VITALS_WRITE
                 ))
         )).thenReturn("mission-terminal-token");
@@ -78,6 +79,7 @@ class MissionTerminalTokenServiceTest {
         assertThat(response.getScopes()).containsExactly(
                 MissionTerminalScopes.IDENTITY_CHECK,
                 MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                MissionTerminalScopes.SESSION_STATUS_READ,
                 MissionTerminalScopes.VITALS_WRITE
         );
         verify(accessControlService).assertAssignedDoctorOrAdmin(doctor, careCase);

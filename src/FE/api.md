@@ -1385,6 +1385,54 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
+### 9.4a 진료 세션 상태 조회 (차량 태블릿 — 미션 단말 토큰)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/missions/{missionId}/consultation-status` |
+| Auth | Bearer Token (MISSION_TERMINAL) |
+
+> 차량 태블릿은 현재 미션에 연결된 진료 세션의 종료 여부를 polling 용도로 조회한다.
+> 이 API는 `missionId -> consultationSession`을 서버에서 해석하고, 요청에 사용한 미션 단말 토큰이 같은 미션 범위인지 확인한 뒤 세션 상태 스냅샷을 반환한다.
+
+**Response** `200 OK`
+```json
+{
+  "sessionId": "ses_L6pQr1",
+  "caseId": "case_T7nLp4",
+  "status": "COMPLETED",
+  "room": {
+    "roomId": "room_ses_L6pQr1",
+    "livekitUrl": "wss://<DOMAIN>/livekit"
+  },
+  "doctor": {
+    "doctorId": "doc_P5wMn4",
+    "name": "김의사",
+    "connectionState": "DISCONNECTED",
+    "joinedAt": "2026-03-11T10:00:30+09:00"
+  },
+  "patient": {
+    "patientId": "pat_Zk3mQ9",
+    "name": "홍길동",
+    "connectionState": "DISCONNECTED",
+    "joinedAt": "2026-03-11T10:01:00+09:00"
+  },
+  "reconnectCount": 0,
+  "startedAt": "2026-03-11T10:01:00+09:00"
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `AUTH_FORBIDDEN` | 다른 미션 범위 토큰 또는 scope 부족 |
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+| 404 | `SESSION_NOT_FOUND` | 연결된 진료 세션 없음 |
+
+---
+
 ### 9.5 세션 토큰 재발급
 
 | 항목 | 값 |

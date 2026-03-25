@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
@@ -79,6 +79,7 @@ const VideoConference = () => {
     const [livekitToken, setLivekitToken] = useState('');
     const [livekitUrl, setLivekitUrl] = useState('');
     const [sessionId, setSessionId] = useState(null);
+    const isDoctorEndingRef = useRef(false);
 
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
@@ -150,6 +151,7 @@ const VideoConference = () => {
 
     const handleEndCall = async (summaryData) => {
         if (summaryData) {
+            isDoctorEndingRef.current = true;
             const result = await saveSummary(summaryData, {
                 successMessage: '진료 요약을 저장하고 진료를 종료했습니다.',
                 savingMessage: '진료 종료 기록을 저장하는 중입니다.',
@@ -157,6 +159,7 @@ const VideoConference = () => {
             });
 
             if (!result.ok) {
+                isDoctorEndingRef.current = false;
                 return;
             }
         }
@@ -230,7 +233,12 @@ const VideoConference = () => {
             serverUrl={livekitUrl}
             data-lk-theme="default"
             className="w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
-            onDisconnected={() => handleEndCall(null)}
+            onDisconnected={() => {
+                if (isDoctorEndingRef.current) {
+                    return;
+                }
+                handleEndCall(null);
+            }}
         >
             <ConsultationRoom
                 details={consultationDetails}

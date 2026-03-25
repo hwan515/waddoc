@@ -1,7 +1,9 @@
 package com.waddoc.domain.mission.controller;
 
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.dto.ConsultationSessionStatusResponse;
 import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionQueryService;
 import com.waddoc.domain.mission.dto.CreateMissionRequest;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
@@ -54,6 +56,7 @@ public class MissionController {
     private final MissionQueryService missionQueryService;
     private final MissionTerminalTokenService missionTerminalTokenService;
     private final ConsultationPatientTokenService consultationPatientTokenService;
+    private final ConsultationSessionQueryService consultationSessionQueryService;
     private final MissionVitalMeasurementService missionVitalMeasurementService;
 
     @PostMapping
@@ -125,6 +128,17 @@ public class MissionController {
     ) {
         return ResponseEntity.ok(
                 consultationPatientTokenService.issuePatientTokenByMission(missionId, authentication)
+        );
+    }
+
+    @GetMapping("/{missionId}/consultation-status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MISSION_TERMINAL')")
+    public ResponseEntity<ConsultationSessionStatusResponse> getConsultationStatusByMission(
+            @PathVariable String missionId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(
+                consultationSessionQueryService.getSessionStatusByMission(missionId, authentication)
         );
     }
 
