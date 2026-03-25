@@ -324,16 +324,16 @@ const AuthStep = () => {
         }
     };
     return (
-        <div className="min-h-screen bg-[#061A40] flex flex-col items-center justify-center relative overflow-hidden text-white font-sans">
+        <div className="min-h-screen bg-dark flex flex-col items-center justify-center relative overflow-hidden text-white font-sans">
             {/* Background Decorations */}
-            <div className="absolute top-1/4 left-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
-            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
+            <div className="absolute top-1/4 left-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
+            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
             <main className="z-10 flex flex-col items-center max-w-5xl w-full p-8">
 
                 {/* Header Info */}
                 <div className="text-center mb-8 animate-fade-in-up">
-                    <h1 className="text-4xl font-extrabold text-[#B9D6F2] tracking-tight mb-3 flex items-center justify-center gap-3">
+                    <h1 className="text-4xl font-extrabold text-secondary tracking-tight mb-3 flex items-center justify-center gap-3">
                         <ScanFace className="w-10 h-10" />
                         본인 인증
                     </h1>
@@ -355,12 +355,12 @@ const AuthStep = () => {
                 </div>
 
                 {/* Camera View Box */}
-                <div className="relative w-full max-w-3xl aspect-[16/10] bg-[#001D3D] rounded-3xl border border-white/20 shadow-2xl overflow-hidden backdrop-blur-md">
+                <div className="relative w-full max-w-3xl aspect-[16/10] bg-dark rounded-3xl border border-white/20 shadow-2xl overflow-hidden backdrop-blur-md">
 
                     {!isModelLoaded ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-[#061A40]/80">
-                            <div className="w-12 h-12 border-4 border-[#0353A4] border-t-transparent rounded-full animate-spin mb-4"></div>
-                            <span className="text-[#B9D6F2] font-bold text-lg animate-pulse">인식 모델을 불러오는 중입니다...</span>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-dark/80">
+                            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <span className="text-secondary font-bold text-lg animate-pulse">인식 모델을 불러오는 중입니다...</span>
                         </div>
                     ) : (
                         <video
@@ -427,7 +427,7 @@ const AuthStep = () => {
                         <div className="absolute bottom-8 left-0 right-0 z-20 flex justify-center animate-fade-in-up">
                             <button 
                                 onClick={captureIdCard}
-                                className="bg-[#B9D6F2] hover:bg-white text-[#061A40] font-bold text-xl px-10 py-4 rounded-full shadow-[0_0_20px_rgba(185,214,242,0.4)] transition-all flex items-center gap-2"
+                                className="bg-secondary hover:bg-white text-dark font-bold text-xl px-10 py-4 rounded-full shadow-[0_0_20px_rgba(185,214,242,0.4)] transition-all flex items-center gap-2"
                             >
                                 <ScanFace className="w-6 h-6" />
                                 신분증 촬영하기
@@ -437,7 +437,7 @@ const AuthStep = () => {
 
                     {/* Countdown UI */}
                     {countdown !== null && authStatus === 'idle' && (
-                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#061A40]/30 backdrop-blur-sm animate-fade-in">
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-dark/30 backdrop-blur-sm animate-fade-in">
                             <div className="text-8xl font-black text-white drop-shadow-[0_0_20px_rgba(50,215,75,0.8)] animate-bounce-custom">
                                 {countdown}
                             </div>
@@ -447,18 +447,18 @@ const AuthStep = () => {
                     {/* Capturing / Submitting States */}
                     {(authStatus === 'capturing' || authStatus === 'submitting') && (
                         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/90 animate-flash">
-                            <div className="w-16 h-16 border-4 border-[#0353A4] border-t-transparent rounded-full animate-spin mb-4"></div>
-                            <span className="text-3xl font-bold text-[#061A40]">
+                            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <span className="text-3xl font-bold text-dark">
                                 {authStatus === 'capturing' ? '촬영 중...' : '신원 검증 중입니다...'}
                             </span>
                         </div>
                     )}
 
                     {authStatus === 'success' && (
-                        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#061A40]/90 backdrop-blur-md animate-fade-in">
+                        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-dark/90 backdrop-blur-md animate-fade-in">
                             <CheckCircle2 className="w-24 h-24 text-green-400 mb-4 animate-scale-up" />
                             <h2 className="text-3xl font-bold text-white mb-2">본인 인증 완료</h2>
-                            <p className="text-[#B9D6F2] text-lg font-medium">건강정보 측정 단계로 넘어갑니다...</p>
+                            <p className="text-secondary text-lg font-medium">건강정보 측정 단계로 넘어갑니다...</p>
                         </div>
                     )}
                 </div>

@@ -86,7 +86,7 @@ const EcgMeasurementCard = ({ onRetry }) => {
                 />
             ) : (
                 <div className="flex h-80 items-center justify-center rounded-3xl border border-white/10 bg-slate-950/60">
-                    <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
+                    <div className="h-14 w-14 rounded-full border-4 border-secondary/30 border-t-secondary animate-spin"></div>
                 </div>
             )}
             {errorMsg && (
@@ -97,7 +97,7 @@ const EcgMeasurementCard = ({ onRetry }) => {
             {saveStatus === 'error' && (
                 <button
                     onClick={onRetry}
-                    className="mt-4 w-full rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
+                    className="mt-4 w-full rounded-2xl border border-white/20 bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-1"
                 >
                     심전도 저장 다시 시도
                 </button>
@@ -110,9 +110,9 @@ const Ecg = () => {
     const [retryKey, setRetryKey] = useState(0);
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-[#061A40] font-sans relative overflow-y-auto text-white">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
+        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-dark font-sans relative overflow-y-auto text-white">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
             <main className="relative z-10 w-full max-w-6xl flex flex-col items-center">
                 <div className="w-full flex items-center justify-between relative bg-white/10 p-4 rounded-3xl backdrop-blur-md border border-white/20 mb-4">
@@ -132,15 +132,15 @@ const Ecg = () => {
                         </div>
                     </div>
                     <div className="flex flex-col items-center flex-1 relative">
-                        <div className="mt-2 bg-[#B9D6F2] text-[#061A40] px-3 py-1 rounded-full font-bold text-sm shadow-md whitespace-nowrap">
+                        <div className="mt-2 bg-secondary text-dark px-3 py-1 rounded-full font-bold text-sm shadow-md whitespace-nowrap">
                             4. 심전도
                         </div>
-                        <div className="mt-1 text-[#B9D6F2] text-xs font-semibold tracking-wider">측정 중</div>
+                        <div className="mt-1 text-secondary text-xs font-semibold tracking-wider">측정 중</div>
                     </div>
                 </div>
 
                 <h1 className="text-4xl font-bold tracking-tight">
-                    <span className="text-[#B9D6F2]">심전도 측정기</span> 사용 방법
+                    <span className="text-secondary">심전도 측정기</span> 사용 방법
                 </h1>
 
                 <div className="w-full max-w-6xl mt-8 mb-8 flex flex-col justify-center items-center">

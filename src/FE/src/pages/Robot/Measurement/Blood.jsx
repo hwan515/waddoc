@@ -84,13 +84,13 @@ const BloodMeasurementCard = ({ onRetry }) => {
                         {measurement.bloodPressureDia}
                         <span className="ml-2 text-lg font-semibold text-slate-300">mmHg</span>
                     </div>
-                    <div className="mt-2 text-lg font-semibold text-[#B9D6F2]">
+                    <div className="mt-2 text-lg font-semibold text-secondary">
                         심박수 {measurement.heartRate} bpm
                     </div>
                 </>
             ) : (
                 <div className="flex justify-center">
-                    <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
+                    <div className="h-14 w-14 rounded-full border-4 border-secondary/30 border-t-secondary animate-spin"></div>
                 </div>
             )}
             <p className="mt-4 whitespace-pre-line text-lg font-semibold leading-relaxed text-slate-200 md:text-xl">{statusMessage}</p>
@@ -102,7 +102,7 @@ const BloodMeasurementCard = ({ onRetry }) => {
             {saveStatus === 'error' && (
                 <button
                     onClick={onRetry}
-                    className="mt-4 rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
+                    className="mt-4 rounded-2xl border border-white/20 bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-1"
                 >
                     혈압 저장 다시 시도
                 </button>
@@ -115,9 +115,9 @@ const Blood = () => {
     const [retryKey, setRetryKey] = useState(0);
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-[#061A40] font-sans relative overflow-y-auto text-white">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
+        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-dark font-sans relative overflow-y-auto text-white">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
             <main className="relative z-10 w-full max-w-6xl flex flex-col items-center">
                 <div className="w-full flex items-center justify-between relative bg-white/10 p-4 rounded-3xl backdrop-blur-md border border-white/20 mb-4">
@@ -127,10 +127,10 @@ const Blood = () => {
                         </div>
                     </div>
                     <div className="flex flex-col items-center flex-1 relative">
-                        <div className="mt-2 bg-[#B9D6F2] text-[#061A40] px-3 py-1 rounded-full font-bold text-sm shadow-md whitespace-nowrap">
+                        <div className="mt-2 bg-secondary text-dark px-3 py-1 rounded-full font-bold text-sm shadow-md whitespace-nowrap">
                             2. 혈압
                         </div>
-                        <div className="mt-1 text-[#B9D6F2] text-xs font-semibold tracking-wider">측정 중</div>
+                        <div className="mt-1 text-secondary text-xs font-semibold tracking-wider">측정 중</div>
                     </div>
                     <div className="flex flex-col items-center flex-1 opacity-50 relative">
                         <div className="mt-2 bg-slate-700/50 text-white px-3 py-1 rounded-full font-medium text-sm whitespace-nowrap border border-slate-500">
@@ -145,7 +145,7 @@ const Blood = () => {
                 </div>
 
                 <h1 className="text-4xl font-bold tracking-tight">
-                    <span className="text-[#B9D6F2]">혈압계</span> 사용 방법
+                    <span className="text-secondary">혈압계</span> 사용 방법
                 </h1>
 
                 <BloodMeasurementCard key={retryKey} onRetry={() => setRetryKey((prev) => prev + 1)} />
@@ -157,7 +157,7 @@ const Blood = () => {
                                 <img src={blood1} alt="혈압계 전원 작동" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                커프 부분에 팔을 넣고<br /><span className="text-[#B9D6F2]">검정색 시작 버튼을 누릅니다</span>
+                                커프 부분에 팔을 넣고<br /><span className="text-secondary">검정색 시작 버튼을 누릅니다</span>
                             </p>
                         </div>
 
@@ -166,7 +166,7 @@ const Blood = () => {
                                 <img src={blood2} alt="혈압 측정" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                측정이 완료될 때까지<br /><span className="text-[#B9D6F2]">움직이거나 말하지 않습니다</span>
+                                측정이 완료될 때까지<br /><span className="text-secondary">움직이거나 말하지 않습니다</span>
                             </p>
                         </div>
 
@@ -175,7 +175,7 @@ const Blood = () => {
                                 <img src={blood3} alt="혈압 결과 확인" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                액정화면에 측정된<br /><span className="text-[#B9D6F2]">혈압을 확인</span>합니다
+                                액정화면에 측정된<br /><span className="text-secondary">혈압을 확인</span>합니다
                             </p>
                         </div>
                     </div>

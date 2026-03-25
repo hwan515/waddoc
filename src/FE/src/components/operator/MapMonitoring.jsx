@@ -90,11 +90,11 @@ const MapMonitoring = ({
             </div>
 
             {/* 우측: 사이드 패널 (E-Stop + 차량 리스트 + 카메라) */}
-            <div className="w-[400px] flex flex-col gap-4 shrink-0">
+            <div className="w-100 flex flex-col gap-4 shrink-0">
                 {/* 1. 상단: E-Stop 버튼 (최소한의 높이 h-12 고정, 너비 가득 참) */}
                 <button
                     onClick={handleEStop}
-                    className="w-full h-12 shrink-0 bg-red-600 hover:bg-red-700 text-white text-[15px] font-bold rounded-xl shadow-[0_4px_14px_0_rgba(220,38,38,0.39)] flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
+                    className="w-full h-12 shrink-0 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-[0_4px_14px_0_rgba(220,38,38,0.39)] flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
                 >
                     <AlertOctagon className="w-5 h-5 animate-pulse" />
                     EMERGENCY STOP (긴급 정지)
@@ -103,10 +103,10 @@ const MapMonitoring = ({
                 {/* 2. 중단: 차량 리스트 */}
                 <div className="flex-[3] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-12 border-b border-slate-100 flex items-center px-4 bg-slate-50/50 shrink-0">
-                        <h3 className="font-bold text-slate-800 text-[15px] flex items-center gap-2">
-                            <Truck className="w-4 h-4 text-[#0353A4]" /> 운영 차량 리스트
+                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <Truck className="w-4 h-4 text-primary" /> 운영 차량 리스트
                         </h3>
-                        <span className="ml-auto bg-[#0353A4] text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                        <span className="ml-auto bg-primary text-white px-2 py-0.5 rounded-full text-xs font-bold">
                             {vehicles.length}대
                         </span>
                     </div>
@@ -122,12 +122,12 @@ const MapMonitoring = ({
                                     key={vehicle.id}
                                     onClick={() => setSelectedVehicleId(vehicle.id)}
                                     className={`p-3 rounded-xl border cursor-pointer transition-all ${selectedVehicleId === vehicle.id
-                                        ? 'border-[#0353A4] bg-[#F0F7FF] shadow-sm'
-                                        : 'border-slate-200 hover:border-[#006DAA]/30 hover:bg-slate-50'
+                                        ? 'border-primary bg-primary/5 shadow-sm'
+                                        : 'border-slate-200 hover:border-accent-1/30 hover:bg-slate-50'
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
-                                        <div className="font-bold text-slate-800 text-[15px]">{vehicle.id}</div>
+                                        <div className="font-bold text-slate-800 text-sm">{vehicle.id}</div>
                                         <div className={`text-xs px-2 py-0.5 rounded-md border font-bold ${getStatusBadge(displayStatus)}`}>
                                             {displayStatus}
                                         </div>
@@ -152,7 +152,7 @@ const MapMonitoring = ({
                     </div>
                 </div>
 
-                <div className="flex-[2] bg-slate-950 rounded-[28px] shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
+                <div className="flex-[2] bg-slate-950 rounded-4xl shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
                     <div className="absolute top-3 left-3 z-10 bg-black/55 backdrop-blur-sm px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-white/10">
                         <Video className="w-3.5 h-3.5 text-red-400" />
                         {selectedVehicleId ? `${selectedVehicleId} 카메라` : '차량을 선택하세요'}

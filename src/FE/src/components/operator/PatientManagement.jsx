@@ -95,7 +95,7 @@ const PatientManagement = () => {
                 </div>
                 <button 
                     onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-[#0353A4] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#023E7A] transition-colors shadow-sm"
+                    className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors shadow-sm"
                 >
                     <UserPlus className="w-5 h-5" />
                     새로운 환자 등록
@@ -110,7 +110,7 @@ const PatientManagement = () => {
                             placeholder="이름 또는 전화번호 검색..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0353A4]/50"
+                            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                         />
                         <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                     </div>
@@ -122,7 +122,7 @@ const PatientManagement = () => {
                             데이터를 불러오는 중입니다...
                         </div>
                     ) : (
-                        <table className="w-full text-left border-collapse min-w-[800px]">
+                        <table className="w-full text-left border-collapse min-w-200">
                             <thead className="bg-gray-50 sticky top-0 text-sm font-semibold text-gray-600">
                                 <tr>
                                     <th className="p-4 border-b w-[15%]">환자 ID</th>
@@ -201,11 +201,11 @@ const PatientManagement = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">기준 얼굴 이미지</label>
-                                <input type="file" accept="image/jpeg,image/png" onChange={handleFileChange} className="w-full p-2 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[#0353A4] hover:file:bg-blue-100" />
+                                <input type="file" accept="image/jpeg,image/png" onChange={handleFileChange} className="w-full p-2 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-primary hover:file:bg-blue-100" />
                             </div>
                             <div className="mt-4 flex justify-end gap-2">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-                                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-[#0353A4] rounded-lg hover:bg-[#023E7A]">등록하기</button>
+                                <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90">등록하기</button>
                             </div>
                         </form>
                     </div>

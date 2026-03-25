@@ -31,7 +31,7 @@ const ConferenceUI = () => {
                 )}
             </div>
 
-            <div className="absolute bottom-0 right-0 w-[480px] h-[360px] bg-slate-800 border-l border-t border-slate-700 shadow-2xl overflow-hidden z-10">
+            <div className="absolute bottom-0 right-0 w-120 h-90 bg-slate-800 border-l border-t border-slate-700 shadow-2xl overflow-hidden z-10">
                 {localVideoTrack ? (
                     <VideoTrack trackRef={localVideoTrack} className="w-full h-full object-cover custom-video-mirror" />
                 ) : (
@@ -111,7 +111,7 @@ const Conference = () => {
         return (
             <div className="w-screen h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center text-white font-sans">
                 <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-                <h2 className="text-3xl font-bold mb-3 tracking-widest text-[#B9D6F2]">
+                <h2 className="text-3xl font-bold mb-3 tracking-widest text-secondary">
                     의사 선생님을 기다리고 있습니다
                 </h2>
                 <p className="text-xl text-slate-400 font-medium">연결 시 잠시 화면이 깜빡일 수 있습니다...</p>

@@ -316,23 +316,23 @@ const ControlCenter = () => {
 
     return (
         <div className="h-screen bg-[#F5F6F8] flex flex-col font-sans overflow-hidden">
-            <header className="h-16 bg-[#061A40] text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
+            <header className="h-16 bg-dark text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
                 <div className="flex items-center gap-8">
                     <div className="flex items-center gap-3">
                         <div className="bg-white/10 p-2 rounded-lg">
-                            <Activity className="w-5 h-5 text-[#B9D6F2]" />
+                            <Activity className="w-5 h-5 text-secondary" />
                         </div>
                         <span className="font-bold text-xl tracking-tight">
-                            Waddoc<span className="text-[#B9D6F2]"> 왔닥</span>
+                            Waddoc<span className="text-secondary"> 왔닥</span>
                             <span className="ml-3 pl-3 border-l border-white/20 text-sm font-medium text-slate-300">통합 관제 센터</span>
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-[#003559] p-1 rounded-lg">
+                    <div className="flex items-center gap-1 bg-accent-2 p-1 rounded-lg">
                         <button
                             onClick={() => setActiveTab('map')}
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
-                                ? 'bg-white text-[#0353A4] shadow-sm'
+                                ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
                         >
@@ -342,7 +342,7 @@ const ControlCenter = () => {
                         <button
                             onClick={() => setActiveTab('dashboard')}
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
-                                ? 'bg-white text-[#0353A4] shadow-sm'
+                                ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
                         >
@@ -352,7 +352,7 @@ const ControlCenter = () => {
                         <button
                             onClick={() => setActiveTab('patients')}
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
-                                ? 'bg-white text-[#0353A4] shadow-sm'
+                                ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
                         >
@@ -362,7 +362,7 @@ const ControlCenter = () => {
                         <button
                             onClick={() => setActiveTab('approvals')}
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
-                                ? 'bg-white text-[#0353A4] shadow-sm'
+                                ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
                         >
@@ -379,7 +379,7 @@ const ControlCenter = () => {
                     </div>
                     <div className="w-px h-5 bg-white/20"></div>
                     <div className="text-sm font-medium flex items-center">
-                        <span className="bg-[#003559] px-2.5 py-1 rounded text-xs mr-2 border border-white/10">관리자</span>
+                        <span className="bg-accent-2 px-2.5 py-1 rounded text-xs mr-2 border border-white/10">관리자</span>
                         operator님
                     </div>
                     <button

@@ -83,7 +83,7 @@ const SpO2MeasurementCard = ({ onRetry }) => {
                 </div>
             ) : (
                 <div className="flex justify-center">
-                    <div className="h-14 w-14 rounded-full border-4 border-[#B9D6F2]/30 border-t-[#B9D6F2] animate-spin"></div>
+                    <div className="h-14 w-14 rounded-full border-4 border-secondary/30 border-t-secondary animate-spin"></div>
                 </div>
             )}
             <p className="mt-4 whitespace-pre-line text-lg font-semibold leading-relaxed text-slate-200 md:text-xl">{statusMessage}</p>
@@ -95,7 +95,7 @@ const SpO2MeasurementCard = ({ onRetry }) => {
             {saveStatus === 'error' && (
                 <button
                     onClick={onRetry}
-                    className="mt-4 rounded-2xl border border-white/20 bg-[#0353A4] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#006DAA]"
+                    className="mt-4 rounded-2xl border border-white/20 bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-accent-1"
                 >
                     산소포화도 저장 다시 시도
                 </button>
@@ -108,9 +108,9 @@ const SpO2 = () => {
     const [retryKey, setRetryKey] = useState(0);
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-[#061A40] font-sans relative overflow-y-auto text-white">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
+        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-dark font-sans relative overflow-y-auto text-white">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
             <main className="relative z-10 w-full max-w-6xl flex flex-col items-center">
                 <div className="w-full flex items-center justify-between relative bg-white/10 p-4 rounded-3xl backdrop-blur-md border border-white/20 mb-4">
@@ -125,10 +125,10 @@ const SpO2 = () => {
                         </div>
                     </div>
                     <div className="flex flex-col items-center flex-1 relative">
-                        <div className="mt-2 bg-[#B9D6F2] text-[#061A40] px-3 py-1 rounded-full font-bold text-sm shadow-md whitespace-nowrap">
+                        <div className="mt-2 bg-secondary text-dark px-3 py-1 rounded-full font-bold text-sm shadow-md whitespace-nowrap">
                             3. 산소포화도
                         </div>
-                        <div className="mt-1 text-[#B9D6F2] text-xs font-semibold tracking-wider">측정 중</div>
+                        <div className="mt-1 text-secondary text-xs font-semibold tracking-wider">측정 중</div>
                     </div>
                     <div className="flex flex-col items-center flex-1 opacity-50 relative">
                         <div className="mt-2 bg-slate-700/50 text-white px-3 py-1 rounded-full font-medium text-sm whitespace-nowrap border border-slate-500">
@@ -138,7 +138,7 @@ const SpO2 = () => {
                 </div>
 
                 <h1 className="text-4xl font-bold tracking-tight">
-                    <span className="text-[#B9D6F2]">산소포화도 측정기</span> 사용 방법
+                    <span className="text-secondary">산소포화도 측정기</span> 사용 방법
                 </h1>
 
                 <SpO2MeasurementCard key={retryKey} onRetry={() => setRetryKey((prev) => prev + 1)} />
@@ -150,7 +150,7 @@ const SpO2 = () => {
                                 <img src={spo2_1} alt="산소포화도 측정 준비" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                전원 버튼을 누르거나 제품을 벌려<br /><span className="text-[#B9D6F2]">손가락 하나를 넣습니다</span>
+                                전원 버튼을 누르거나 제품을 벌려<br /><span className="text-secondary">손가락 하나를 넣습니다</span>
                             </p>
                         </div>
 
@@ -159,7 +159,7 @@ const SpO2 = () => {
                                 <img src={spo2_2} alt="산소포화도 측정" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                측정이 완료될 때까지<br /><span className="text-[#B9D6F2]">바른 자세를 유지합니다</span>
+                                측정이 완료될 때까지<br /><span className="text-secondary">바른 자세를 유지합니다</span>
                             </p>
                         </div>
 
@@ -168,7 +168,7 @@ const SpO2 = () => {
                                 <img src={spo2_3} alt="산소포화도 결과 확인" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                액정화면에 측정된<br /><span className="text-[#B9D6F2]">산소포화도를 확인</span>합니다
+                                액정화면에 측정된<br /><span className="text-secondary">산소포화도를 확인</span>합니다
                             </p>
                         </div>
                     </div>

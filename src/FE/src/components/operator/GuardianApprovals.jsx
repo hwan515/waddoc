@@ -80,7 +80,7 @@ const GuardianApprovals = () => {
                                         <div className="text-sm font-bold text-gray-800">{req.guardianName} <span className="text-gray-400 font-normal">({req.guardianUserId})</span></div>
                                     </div>
                                     <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                                        <div className="text-xs text-[#0353A4] font-medium mb-1">대상 환자 정보</div>
+                                        <div className="text-xs text-primary font-medium mb-1">대상 환자 정보</div>
                                         <div className="text-sm font-bold text-gray-800">{req.patientName}</div>
                                         <div className="text-xs text-gray-600">{req.patientPhone}</div>
                                         <div className="text-xs font-semibold text-gray-800 mt-1">관계: {req.relation}</div>
@@ -95,7 +95,7 @@ const GuardianApprovals = () => {
                                     </button>
                                     <button 
                                         onClick={() => openModal('approve', req.linkId)}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-bold text-white bg-[#0353A4] hover:bg-[#023E7A] rounded-lg transition-colors shadow-sm">
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-bold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors shadow-sm">
                                         <Check className="w-4 h-4" /> 승인
                                     </button>
                                 </div>
@@ -109,7 +109,7 @@ const GuardianApprovals = () => {
             {modalConfig.isOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                     <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden flex flex-col">
-                        <div className={`px-6 py-4 border-b border-gray-100 flex justify-between items-center ${modalConfig.action === 'approve' ? 'bg-blue-50 text-[#0353A4]' : 'bg-red-50 text-red-600'}`}>
+                        <div className={`px-6 py-4 border-b border-gray-100 flex justify-between items-center ${modalConfig.action === 'approve' ? 'bg-blue-50 text-primary' : 'bg-red-50 text-red-600'}`}>
                             <h2 className="text-lg font-bold">
                                 {modalConfig.action === 'approve' ? '가입 요청 승인' : '가입 요청 반려'}
                             </h2>
@@ -124,12 +124,12 @@ const GuardianApprovals = () => {
                             <textarea 
                                 value={modalConfig.comment}
                                 onChange={(e) => setModalConfig({ ...modalConfig, comment: e.target.value })}
-                                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0353A4]/50 resize-none h-24"
+                                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none h-24"
                                 placeholder={modalConfig.action === 'approve' ? '승인 참고사항을 입력하세요' : '반려 사유를 자세히 적어주세요'}
                             />
                             <div className="mt-6 flex justify-end gap-2">
                                 <button type="button" onClick={() => setModalConfig({ ...modalConfig, isOpen: false })} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">취소</button>
-                                <button type="button" onClick={submitModal} className={`px-4 py-2 text-sm font-bold text-white rounded-lg transition-colors ${modalConfig.action === 'approve' ? 'bg-[#0353A4] hover:bg-[#023E7A]' : 'bg-red-600 hover:bg-red-700'}`}>
+                                <button type="button" onClick={submitModal} className={`px-4 py-2 text-sm font-bold text-white rounded-lg transition-colors ${modalConfig.action === 'approve' ? 'bg-primary hover:bg-primary/90' : 'bg-red-600 hover:bg-red-700'}`}>
                                     {modalConfig.action === 'approve' ? '승인 완료' : '반려 완료'}
                                 </button>
                             </div>

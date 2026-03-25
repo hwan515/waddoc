@@ -144,12 +144,12 @@ const Setup = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-[#061A40] font-sans relative overflow-hidden">
-            <div className="absolute top-1/4 left-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
-            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-dark font-sans relative overflow-hidden">
+            <div className="absolute top-1/4 left-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
+            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
             <div className="relative z-10 w-full max-w-3xl bg-white/10 backdrop-blur-md border border-white/20 p-8 flex flex-col items-center rounded-2xl shadow-2xl text-white">
-                <h1 className="text-3xl font-bold mb-4 text-center text-[#B9D6F2]">진료 대상 확인</h1>
+                <h1 className="text-3xl font-bold mb-4 text-center text-secondary">진료 대상 확인</h1>
                 <p className="text-slate-300 mb-8 text-center whitespace-pre-line leading-relaxed text-sm">
                     {hasCandidates
                         ? '조회된 차량 진료 대상 중에서\n진료를 시작할 환자를 선택해주세요.'
@@ -170,7 +170,7 @@ const Setup = () => {
                                     value={phoneLast4}
                                     onChange={(event) => setPhoneLast4(event.target.value.replace(/\D/g, '').slice(0, 4))}
                                     placeholder="예: 3720"
-                                    className="w-full px-4 py-3 bg-[#061A40] border border-[#3B62A4] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-[#B9D6F2] text-xl tracking-widest text-center"
+                                    className="w-full px-4 py-3 bg-dark border border-primary/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-secondary text-xl tracking-widest text-center"
                                 />
                             </div>
                             <div>
@@ -184,7 +184,7 @@ const Setup = () => {
                                     value={birthDate6}
                                     onChange={(event) => setBirthDate6(event.target.value.replace(/\D/g, '').slice(0, 6))}
                                     placeholder="예: 580315"
-                                    className="w-full px-4 py-3 bg-[#061A40] border border-[#3B62A4] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-[#B9D6F2] text-xl tracking-widest text-center"
+                                    className="w-full px-4 py-3 bg-dark border border-primary/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-secondary text-xl tracking-widest text-center"
                                 />
                             </div>
                         </div>
@@ -193,7 +193,7 @@ const Setup = () => {
                             <button
                                 onClick={handleLookup}
                                 disabled={isSubmitting}
-                                className="px-10 py-4 bg-[#0353A4] hover:bg-[#006DAA] disabled:opacity-60 disabled:cursor-not-allowed text-white text-xl font-semibold border border-[#B9D6F2]/30 rounded-xl shadow-lg transition-colors w-full flex items-center justify-center gap-2"
+                                className="px-10 py-4 bg-primary hover:bg-accent-1 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xl font-semibold border border-secondary/30 rounded-xl shadow-lg transition-colors w-full flex items-center justify-center gap-2"
                             >
                                 {isSubmitting ? '조회 중...' : '대상 조회하기'}
                             </button>
@@ -209,14 +209,14 @@ const Setup = () => {
 
                 {hasCandidates && (
                     <div className="mt-2 w-full max-w-2xl">
-                        <h2 className="text-xl font-semibold text-[#B9D6F2] mb-4 text-center">차량 진료 대상 선택</h2>
+                        <h2 className="text-xl font-semibold text-secondary mb-4 text-center">차량 진료 대상 선택</h2>
                         <div className="space-y-3">
                             {candidates.map((candidate) => (
                                 <button
                                     key={candidate.missionId}
                                     onClick={() => handleCandidateSelect(candidate.missionId)}
                                     disabled={isSubmitting}
-                                    className="w-full rounded-2xl border border-white/20 bg-[#061A40]/80 px-5 py-4 text-left transition hover:border-[#B9D6F2]/60 hover:bg-[#0B2447] disabled:opacity-60"
+                                    className="w-full rounded-2xl border border-white/20 bg-dark/80 px-5 py-4 text-left transition hover:border-secondary/60 hover:bg-dark/90 disabled:opacity-60"
                                 >
                                     <div className="flex items-center justify-between gap-4">
                                         <div>
@@ -225,7 +225,7 @@ const Setup = () => {
                                                 {candidate.appointmentDate} {candidate.appointmentTime} / 담당 {candidate.doctorMaskedName}
                                             </p>
                                         </div>
-                                        <span className="text-xs font-medium text-[#B9D6F2]">
+                                        <span className="text-xs font-medium text-secondary">
                                             {candidate.missionPhase}
                                         </span>
                                     </div>

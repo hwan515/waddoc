@@ -63,18 +63,18 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
     return (
         <div className="h-full flex p-4 gap-4">
             {/* 좌측: 통합 캘린더 */}
-            <div className="flex-[7] min-w-[600px] rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+            <div className="flex-[7] min-w-150 rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
                 {/* Toolbar */}
                 <div className="h-16 border-b border-slate-100 flex items-center justify-between px-6 shrink-0 bg-white z-10">
                     <div className="flex bg-[#F8F9FA] border border-slate-200 rounded-md overflow-hidden p-0.5">
                         <button
-                            className={`px-6 py-2 text-[13px] font-bold transition-all rounded-sm ${calendarMode === 'weekly' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`px-6 py-2 text-sm font-bold transition-all rounded-sm ${calendarMode === 'weekly' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
                             onClick={() => setCalendarMode('weekly')}
                         >
                             주 단위
                         </button>
                         <button
-                            className={`px-6 py-2 text-[13px] font-bold transition-all rounded-sm ${calendarMode === 'monthly' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            className={`px-6 py-2 text-sm font-bold transition-all rounded-sm ${calendarMode === 'monthly' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
                             onClick={() => setCalendarMode('monthly')}
                         >
                             월 단위
@@ -94,10 +94,10 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                         <div className="flex-1 overflow-y-auto custom-scrollbar flex relative">
                             {/* 동기화 스크롤 시간 표시 */}
                             <div className="w-20 flex-shrink-0 border-r border-slate-100 flex flex-col bg-white">
-                                <div className="h-[50px] sticky top-0 bg-white z-30" />
+                                <div className="h-12.5 sticky top-0 bg-white z-30" />
                                 <div className="flex flex-col relative">
                                     {timeSlots.map((time, idx) => (
-                                        <div key={idx} className="h-20 flex items-start justify-center text-[12px] text-slate-400 font-medium pt-2 border-b border-transparent">
+                                        <div key={idx} className="h-20 flex items-start justify-center text-xs text-slate-400 font-medium pt-2 border-b border-transparent">
                                             {time}
                                         </div>
                                     ))}
@@ -106,17 +106,17 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                             {/* 일별 컬럼 */}
                             <div className="flex-1 flex flex-col min-w-0">
                                 {/* 헤더 (고정) */}
-                                <div className="flex bg-white border-b border-slate-100 h-[50px] shadow-sm sticky top-0 z-30">
+                                <div className="flex bg-white border-b border-slate-100 h-12.5 shadow-sm sticky top-0 z-30">
                                     {currentWeekDays.map((day, idx) => (
                                         <div key={idx} className={`flex-1 border-r border-slate-100 flex flex-col items-center justify-center ${day.isToday ? 'bg-blue-50/70' : 'bg-white'}`}>
-                                            <span className={`text-[14px] font-bold ${idx === 0 ? 'text-red-500' : idx === 6 ? 'text-blue-500' : 'text-slate-700'} ${day.isToday ? 'text-[#0353A4]' : ''}`}>
+                                            <span className={`text-sm font-bold ${idx === 0 ? 'text-red-500' : idx === 6 ? 'text-blue-500' : 'text-slate-700'} ${day.isToday ? 'text-primary' : ''}`}>
                                                 {day.dateStr}
                                             </span>
                                         </div>
                                     ))}
                                 </div>
                                 {/* 그리드 컨텐츠 */}
-                                <div className="relative flex min-h-[880px]">
+                                <div className="relative flex min-h-220">
                                     <div className="absolute inset-0 pointer-events-none flex flex-col z-0">
                                         {timeSlots.map((_, i) => (
                                             <div key={i} className="h-20 border-b border-slate-100 w-full" />
@@ -130,16 +130,16 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                                                     <div
                                                         key={ev.id}
                                                         style={{ top: `${topOffsetPx}px`, height: '60px' }}
-                                                        className={`absolute inset-x-2 p-2 rounded shadow-sm text-xs opacity-90 hover:opacity-100 transition-opacity cursor-pointer border-l-[4px] ${getEventColor(ev.status, false)}`}
+                                                        className={`absolute inset-x-2 p-2 rounded shadow-sm text-xs opacity-90 hover:opacity-100 transition-opacity cursor-pointer border-l-4 ${getEventColor(ev.status, false)}`}
                                                     >
-                                                        <div className="font-bold text-slate-800 text-[13px]">{ev.name}
-                                                            <br /><span className="text-[11px] font-normal text-slate-500 ml-1">({ev.doctor})</span>
+                                                        <div className="font-bold text-slate-800 text-sm">{ev.name}
+                                                            <br /><span className="text-xs font-normal text-slate-500 ml-1">({ev.doctor})</span>
                                                         </div>
                                                     </div>
                                                 );
                                             })}
                                             {dayIdx === 2 && (
-                                                <div className="absolute top-[140px] left-0 right-0 h-px bg-red-400 z-20 flex items-center -ml-1">
+                                                <div className="absolute top-35 left-0 right-0 h-px bg-red-400 z-20 flex items-center -ml-1">
                                                     <div className="w-2.5 h-2.5 rounded-full bg-red-400"></div>
                                                 </div>
                                             )}
@@ -153,7 +153,7 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                             {/* 요일 헤더 */}
                             <div className="grid grid-cols-7 border-b border-slate-200 h-10 shrink-0 bg-white">
                                 {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
-                                    <div key={i} className={`flex items-center justify-center text-[13px] font-bold border-r border-slate-200 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-slate-600'}`}>
+                                    <div key={i} className={`flex items-center justify-center text-sm font-bold border-r border-slate-200 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-slate-600'}`}>
                                         {day}
                                     </div>
                                 ))}
@@ -169,15 +169,15 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                                     }).sort((a, b) => (a.timeStr || '').localeCompare(b.timeStr || '')) : [];
 
                                     return (
-                                        <div key={idx} className={`border-b border-r border-slate-200 flex flex-col overflow-hidden transition-colors p-[3px] ${isToday ? 'bg-blue-50/40 hover:bg-blue-50/60' : 'bg-white hover:bg-slate-50/50'}`}>
+                                        <div key={idx} className={`border-b border-r border-slate-200 flex flex-col overflow-hidden transition-colors p-0.75 ${isToday ? 'bg-blue-50/40 hover:bg-blue-50/60' : 'bg-white hover:bg-slate-50/50'}`}>
                                             {dayNum !== null && (
                                                 <>
-                                                    <div className={`text-[12px] font-bold pl-1 pt-0.5 ${idx % 7 === 0 ? 'text-red-500' : idx % 7 === 6 ? 'text-blue-500' : isToday ? 'text-[#0353A4]' : 'text-slate-700'}`}>
+                                                    <div className={`text-xs font-bold pl-1 pt-0.5 ${idx % 7 === 0 ? 'text-red-500' : idx % 7 === 6 ? 'text-blue-500' : isToday ? 'text-primary' : 'text-slate-700'}`}>
                                                         {dayNum}
                                                     </div>
-                                                    <div className="flex-1 overflow-hidden mt-0.5 flex flex-col gap-[3px]">
+                                                    <div className="flex-1 overflow-hidden mt-0.5 flex flex-col gap-0.75">
                                                         {dayEvents.slice(0, 3).map(ev => (
-                                                            <div key={ev.id} className={`px-1.5 py-[3px] rounded text-[10px] leading-tight flex justify-between items-center whitespace-nowrap overflow-hidden shadow-sm ${getEventColor(ev.status, true)}`}>
+                                                            <div key={ev.id} className={`px-1.5 py-0.75 rounded text-[10px] leading-tight flex justify-between items-center whitespace-nowrap overflow-hidden shadow-sm ${getEventColor(ev.status, true)}`}>
                                                                 <span className="font-bold truncate mr-1">{ev.name}</span>
                                                                 <span className="shrink-0 text-[9px] font-medium opacity-80">{ev.timeStr}</span>
                                                             </div>
@@ -200,20 +200,20 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
             </div>
 
             {/* 우측: 현황 및 통계 패널 */}
-            <div className="w-[450px] flex flex-col gap-4 shrink-0">
+            <div className="w-112.5 flex flex-col gap-4 shrink-0">
                 {/* 우측 상단: 금일 미션 (출동) 현황 */}
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
                         <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                            <Activity className="w-5 h-5 text-[#0353A4]" /> 금일 출동 현황
+                            <Activity className="w-5 h-5 text-primary" /> 금일 출동 현황
                         </h3>
-                        <span className="bg-[#0353A4]/10 text-[#0353A4] px-2.5 py-1 rounded-full text-xs font-bold">
+                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-xs font-bold">
                             총 {missionsList.length}건
                         </span>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                         {missionsList.map(m => (
-                            <div key={m.id} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:border-[#0353A4]/30 transition-colors">
+                            <div key={m.id} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:border-primary/30 transition-colors">
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="font-bold text-slate-800 text-base">{m.patientName} 환자</div>
                                     <div className={`text-xs px-2.5 py-1 rounded-md border font-bold ${m.status === '출동 중' || m.status === '진료 중' ? 'bg-blue-100 text-blue-700 border-blue-200' :
@@ -248,7 +248,7 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
                         <div className="flex items-center gap-4">
                             <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                                <LayoutDashboard className="w-5 h-5 text-[#0353A4]" /> 통계 정보
+                                <LayoutDashboard className="w-5 h-5 text-primary" /> 통계 정보
                             </h3>
                             <span className="text-xs font-semibold text-slate-500 bg-white border px-2 py-0.5 rounded-full">TOTAL</span>
                         </div>
@@ -260,20 +260,20 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                                 {statistics.totalMissions || 0}<span className="text-sm font-bold text-slate-400 ml-1">건</span>
                             </div>
                         </div>
-                        <div className="bg-[#eef2fa] rounded-lg border border-blue-100 p-3 flex flex-col justify-center">
+                        <div className="bg-secondary/30 rounded-lg border border-blue-100 p-3 flex flex-col justify-center">
                             <span className="text-xs font-bold text-blue-800 mb-1">진행 중 (출동/진료)</span>
-                            <div className="text-2xl font-black text-[#0353A4]">
-                                {statistics.activeMissions || 0}<span className="text-sm font-bold text-[#0353A4]/60 ml-1">건</span>
+                            <div className="text-2xl font-black text-primary">
+                                {statistics.activeMissions || 0}<span className="text-sm font-bold text-primary/60 ml-1">건</span>
                             </div>
                         </div>
                         <div className="bg-green-50 rounded-lg border border-green-100 p-3 flex flex-col justify-center">
-                            <span className="text-[11px] font-bold text-green-700 mb-1">종료 / 복귀</span>
+                            <span className="text-xs font-bold text-green-700 mb-1">종료 / 복귀</span>
                             <div className="text-lg font-bold text-green-800">
                                 {statistics.completedMissions || 0}<span className="text-xs font-bold text-green-600/60 ml-1">건</span>
                             </div>
                         </div>
                         <div className="bg-red-50 rounded-lg border border-red-100 p-3 flex flex-col justify-center">
-                            <span className="text-[11px] font-bold text-red-700 mb-1">장애 및 지연</span>
+                            <span className="text-xs font-bold text-red-700 mb-1">장애 및 지연</span>
                             <div className="text-lg font-bold text-red-800">
                                 {statistics.incidentCount || 0}<span className="text-xs font-bold text-red-600/60 ml-1">건</span>
                             </div>

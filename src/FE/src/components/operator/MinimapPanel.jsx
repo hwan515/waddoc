@@ -75,9 +75,9 @@ const StatCard = ({ icon, label, children }) => {
     const IconComponent = icon;
 
     return (
-        <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md shadow-lg">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-                <IconComponent className="h-3.5 w-3.5 text-[#B9D6F2]" />
+        <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md shadow-lg">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+                <IconComponent className="h-3.5 w-3.5 text-secondary" />
                 {label}
             </div>
             {children}
@@ -87,7 +87,7 @@ const StatCard = ({ icon, label, children }) => {
 
 const CoordinateRow = ({ axis, value }) => (
     <div className="flex items-center justify-between rounded-2xl bg-white/5 px-3 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{axis}</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{axis}</span>
         <span className="text-sm font-semibold text-white">{value}</span>
     </div>
 );
@@ -127,9 +127,9 @@ const MinimapPanel = ({
     const statePresentation = getStatePresentation(vehicleState);
 
     return (
-        <div className="relative h-full overflow-hidden rounded-[32px] bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.28),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.14),transparent_24%),linear-gradient(180deg,#082041_0%,#04142B_58%,#020817_100%)]" />
-                    <div className="absolute inset-y-0 left-0 w-[28%] min-w-[210px] max-w-[250px] bg-linear-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
+            <div className="relative h-full overflow-hidden rounded-4xl bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.28),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.14),transparent_24%),linear-gradient(180deg,#082041_0%,#04142B_58%,#020817_100%)]" />
+                    <div className="absolute inset-y-0 left-0 w-[28%] min-w-52.5 max-w-62.5 bg-linear-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
 
             {imageReady ? (
                 <img
@@ -148,7 +148,7 @@ const MinimapPanel = ({
                 </div>
             )}
 
-                    <div className="absolute inset-0 bg-linear-to-b from-[#061A40]/10 via-transparent to-[#020817]/38" />
+                    <div className="absolute inset-0 bg-linear-to-b from-dark/10 via-transparent to-[#020817]/38" />
 
             <svg
                 viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
@@ -201,9 +201,9 @@ const MinimapPanel = ({
             </svg>
 
             <div className="relative z-10 flex h-full p-4 xl:p-5">
-                <div className="w-[210px] xl:w-[240px] space-y-3">
+                <div className="w-52.5 xl:w-60 space-y-3">
                     {showMockBadge && (
-                        <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold text-cyan-100">
+                        <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-100">
                             Mock
                         </div>
                     )}
@@ -213,17 +213,17 @@ const MinimapPanel = ({
                             <span className={`h-2 w-2 rounded-full ${statePresentation.dotClass}`}></span>
                             {statePresentation.label}
                         </div>
-                        <p className="mt-3 text-[11px] text-slate-400">실시간 미션 단계가 연결되면 이 카드가 그대로 반영됩니다.</p>
+                        <p className="mt-3 text-xs text-slate-400">실시간 미션 단계가 연결되면 이 카드가 그대로 반영됩니다.</p>
                     </StatCard>
 
                     <StatCard icon={Gauge} label="차량 속도">
                         <p className="mt-3 text-2xl font-semibold text-white">{formatSpeed(vehicleSpeed)}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">정지 상태는 자동으로 0 km/h 처리</p>
+                        <p className="mt-1 text-xs text-slate-400">정지 상태는 자동으로 0 km/h 처리</p>
                     </StatCard>
 
                     <StatCard icon={Radio} label="업데이트 주기">
                         <p className="mt-3 text-2xl font-semibold text-white">{formatUpdateInterval(updateIntervalMs)}</p>
-                        <p className="mt-1 text-[11px] text-slate-400">실시간 미니맵 폴링 {Math.round(1000 / Math.max(updateIntervalMs, 1))}Hz</p>
+                        <p className="mt-1 text-xs text-slate-400">실시간 미니맵 폴링 {Math.round(1000 / Math.max(updateIntervalMs, 1))}Hz</p>
                     </StatCard>
 
                     <StatCard icon={Navigation} label="실시간 좌표">
@@ -231,13 +231,13 @@ const MinimapPanel = ({
                             <CoordinateRow axis="X" value={formatWorldNumber(vehiclePose?.x)} />
                             <CoordinateRow axis="Z" value={formatWorldNumber(vehiclePose?.z)} />
                         </div>
-                        <p className="mt-3 text-[11px] text-slate-400">Unity 월드 좌표 기준 위치</p>
+                        <p className="mt-3 text-xs text-slate-400">Unity 월드 좌표 기준 위치</p>
                     </StatCard>
                 </div>
             </div>
 
             {!minimapVehiclePose && (
-                <div className="absolute bottom-4 left-[calc(28%+1rem)] rounded-2xl border border-white/10 bg-[#061A40]/72 px-4 py-3 text-sm text-white backdrop-blur-sm shadow-lg">
+                <div className="absolute bottom-4 left-[calc(28%+1rem)] rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white backdrop-blur-sm shadow-lg">
                     odom 위치 데이터가 연결되면 차량 마커가 표시됩니다.
                 </div>
             )}
