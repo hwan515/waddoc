@@ -7,9 +7,9 @@ infra/
 ├── .env.example              # 환경 변수 템플릿
 ├── Jenkinsfile               # Jenkins CI/CD 파이프라인 정의
 ├── docker-compose.yml        # 개발 메인 스택 (AI, coturn 제외)
-├── docker-compose.prod.yml   # 배포 메인 서버 (9+ 서비스, coturn/zenoh 포함)
+├── docker-compose.prod.yml   # 배포 메인 서버 (coturn + ROS2 bridge/FastAPI 포함)
 ├── nginx/
-│   ├── dev.conf              # 개발 Nginx (HTTP)
+│   ├── dev.conf.template     # 개발 Nginx 템플릿 (원격 robot API 프록시)
 │   └── prod.conf             # 배포 Nginx (SSL + WSS 프록시)
 ├── livekit/
 │   ├── entrypoint.sh         # LiveKit env 치환 래퍼 (LF 유지)
@@ -22,7 +22,7 @@ infra/
 
 - Docker Engine 24+
 - Docker Compose v2
-- (배포) SSL 인증서 (`fullchain.pem`, `privkey.pem`)
+- (배포) Web SSL 인증서 (`fullchain.pem`, `privkey.pem`)
 
 ## 환경 변수 설정
 
@@ -44,22 +44,13 @@ docker compose down                # 종료
 ```
 
 - `.env` 에 `DEV_GPU_SERVER_HOST` 를 반드시 설정해야 한다.
+- `.env` 에 `DEV_ROBOT_API_PROXY_TARGET` 를 설정하면 `/api/minimap`, `/api/odom`, `/api/cmd/*` 요청을 로컬이 아닌 원격 EC2 robot API로 프록시한다. 기본값은 `https://www.waddoc.site`다.
 - 개발 환경의 `spring-api` 는 GPU 서버의 `443` 포트만 사용한다.
 - 호출 경로는 `https://<DEV_GPU_SERVER_HOST>/idv/...` 기준이다.
 - 진료/LiveKit/webhook 검증은 이 전체 compose 구성을 기본 경로로 사용한다.
 - 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
-
-### 개발 환경 (선택: Zenoh 프로필 추가)
-
-```bash
-cd infra
-docker compose --profile zenoh up -d zenoh zenoh-subscriber
-```
-
-- 차량/ROS 연동 검증이 필요할 때만 추가로 올린다.
-- 기본 `docker compose up -d`에는 포함되지 않는다.
-- `zenoh`는 `8081` 포트를 사용한다.
+- 로컬 개발 compose는 더 이상 `ros2_app_ec2`나 `zenoh_bridge_ec2`를 띄우지 않는다. 차량/ROS API는 EC2 쪽을 기준으로 본다.
 
 ### 개발 환경 (고급: DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
 
@@ -87,6 +78,11 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 - `.env` 에 `PROD_GPU_SERVER_HOST` 와 `SERVER_DOMAIN` 을 반드시 설정해야 한다.
+- 운영 compose에는 `zenoh_bridge_ec2`, `ros2_app_ec2`가 기본 포함된다.
+- 운영 브라우저는 `https://<DOMAIN>:8000`을 직접 호출하지 않고, Nginx가 `/api/minimap`, `/api/odom`, `/api/cmd/*`를 내부 프록시한다.
+- 운영 Zenoh transport는 웹 Nginx를 거치지 않고 `tcp://zenoh.waddoc.site:8081`을 직접 사용한다.
+- `zenoh.waddoc.site` DNS A/AAAA 레코드는 운영 EC2 public address를 가리켜야 한다.
+- 운영 보안그룹은 `8081/TCP`를 Zenoh 클라이언트가 붙는 소스 대역으로만 제한해야 한다.
 - `livekit.yaml`, `entrypoint.sh` 같은 bind mount 파일을 수정한 배포라면 아래 재시작까지 수행해야 한다.
 
 ```bash
@@ -109,10 +105,10 @@ GitLab (dev push) → Checkout → 변경 감지 → 테스트 → Docker buildx
 | 스테이지 | 설명 |
 |----------|------|
 | Checkout | GitLab deploy token으로 소스 checkout (shallow clone) |
-| Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `infra/` 경로별 변경 감지 |
+| Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `src/zenoh-server/`, `infra/` 경로별 변경 감지 |
 | Quality Gate | BE 변경 시 단위 테스트 실행 (`-PskipIntegrationTests=true`) |
-| Build & Push | 변경된 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 |
-| Deploy | `docker compose pull` → `up -d`로 변경 서비스만 교체, spring-api는 항상 3개 보정 |
+| Build & Push | 변경된 이미지 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 (`ros2_app_ec2`는 배포 서버 로컬 build) |
+| Deploy | `docker compose pull/build` → `up -d`로 변경 서비스만 교체 (`ros2_app_ec2`는 `--build`), spring-api는 항상 3개 보정 |
 
 #### 빌더 아키텍처
 
@@ -205,7 +201,7 @@ docker compose -f docker-compose.prod.yml up -d --build --scale spring-api=3
   - `POST https://<GPU_HOST>/idv/api/v1/verify`
 - `POST /idv/api/v1/verify`는 `faceImage`, `idCardImage` multipart 업로드를 받아야 하고, `referenceImage`는 optional 이어야 한다.
 
-## SSL 인증서 배치
+## Web SSL 인증서 배치
 
 배포 환경에서는 `infra/certs/` 디렉터리에 인증서를 배치합:
 
@@ -222,6 +218,21 @@ cp /etc/letsencrypt/live/your-domain.com/fullchain.pem infra/certs/
 cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 ```
 
+## Zenoh 도메인 배치
+
+운영 Zenoh 브리지는 웹용 Nginx 443과 별도로 `tcp://zenoh.waddoc.site:8081`을 직접 listen한다.
+
+- `zenoh.waddoc.site` DNS A/AAAA 레코드는 운영 EC2 public address를 가리켜야 한다.
+- 로컬 ROS/Unity 측 `src/ros2_docker/docker-compose.yml`도 같은 도메인 endpoint를 사용한다.
+
+검증 예시:
+
+```bash
+nslookup zenoh.waddoc.site
+nc -vz zenoh.waddoc.site 8081
+docker logs zenoh_bridge | tail -n 50
+```
+
 ## 포트 매핑
 
 ### 개발 환경
@@ -230,7 +241,6 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 |-----------|--------|------|
 | 80 | nginx | HTTP (API + 프론트엔드) |
 | 9092 | kafka | Kafka host access / 로컬 JVM 연동 |
-| 8081 | zenoh | Zenoh REST/WebSocket (`--profile zenoh` 사용 시) |
 | 7880 | livekit | API + signaling WebSocket |
 | 7881 | livekit | ICE/TCP |
 | 7882/udp | livekit | ICE/UDP mux |
@@ -246,6 +256,7 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 | 80 | 80 | nginx | HTTP → HTTPS 리다이렉트 |
 | 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS) |
 | 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
+| 8081 | 8081 | zenoh_bridge_ec2 | Zenoh TCP bridge |
 | 8881 | 7881 | livekit | ICE/TCP |
 | 8882/udp | 7882/udp | livekit | ICE/UDP mux |
 | 8478/udp | 8478/udp | coturn | TURN listener |
@@ -253,6 +264,9 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 
 > LiveKit signaling(7880)은 Nginx가 `/livekit` 경로로 WSS 프록시한다.
 > 클라이언트는 `wss://<DOMAIN>/livekit`으로 접속한다.
+> 로컬 개발에서는 `/api/minimap`, `/api/odom`, `/api/cmd/*`를 로컬 Nginx가 `${DEV_ROBOT_API_PROXY_TARGET}`으로 프록시한다.
+> 브라우저는 로컬이든 운영이든 `:8000`으로 직접 접근하지 않는다.
+> ROS/Zenoh transport는 브라우저 API와 별개이며 `tcp://zenoh.waddoc.site:8081`로 직접 연결된다.
 > 운영에서는 `rtc.use_external_ip: false`와 `LIVEKIT_NODE_IP=<EC2 공인 IP>` 조합으로 공인 IP를 고정한다.
 > TURN 릴레이는 LiveKit 내장 TURN이 아니라 `coturn` 컨테이너가 담당한다.
 > `livekit.yaml`, `entrypoint.sh`는 bind mount 파일이므로 수정 후 `docker compose restart livekit coturn`이 필요하다.
