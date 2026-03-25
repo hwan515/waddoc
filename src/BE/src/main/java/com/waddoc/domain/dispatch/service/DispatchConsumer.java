@@ -54,12 +54,14 @@ public class DispatchConsumer {
             outbox.markCompleted();
             return;
         }
-        if (missionRepository.findByCareCase(outbox.getCareCase()).isPresent()) {
-            outbox.markCompleted();
-            return;
-        }
         if (demoModePolicy.isOperatorDispatchOnly()) {
             outbox.markRetryPending();
+            return;
+        }
+        Optional<com.waddoc.domain.mission.entity.Mission> missionOptional =
+                missionRepository.findByCareCase(outbox.getCareCase());
+        if (missionOptional.isPresent() && missionOptional.get().getPhase() != MissionPhase.CREATED) {
+            outbox.markCompleted();
             return;
         }
 

@@ -5,6 +5,8 @@ import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.event.DispatchRequestMessage;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.patient.entity.Patient;
@@ -111,6 +113,71 @@ class DispatchConsumerTest {
     }
 
     @Test
+    void consume_reusesCreatedMissionAndCompletesOutboxWhenVehicleIsOperational() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
+        DispatchOutbox outbox = buildOutbox();
+        DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
+
+        Vehicle vehicle = Vehicle.builder()
+                .code("GIMCHEON-01")
+                .regionCode("GIMCHEON_JEUNGSAN")
+                .displayName("源泥쒖쬆??1?몄감")
+                .operationalStatus(OperationalStatus.OPERATIONAL)
+                .build();
+        ReflectionTestUtils.setField(vehicle, "publicId", "veh_GIMCHEON_01");
+
+        Mission mission = Mission.builder()
+                .careCase(outbox.getCareCase())
+                .vehicleId("veh_GIMCHEON_01")
+                .destination("源泥쒖떆 利앹궛硫?1湲?69")
+                .build();
+
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
+                .thenReturn(Optional.of(outbox));
+        when(missionRepository.findByCareCase(outbox.getCareCase())).thenReturn(Optional.of(mission));
+        when(vehicleRepository.findByRegionCodeAndIsActiveTrue("GIMCHEON_JEUNGSAN"))
+                .thenReturn(Optional.of(vehicle));
+        when(missionRepository.existsByVehicleIdAndPhaseIn(eq("veh_GIMCHEON_01"), any()))
+                .thenReturn(false);
+
+        dispatchConsumer.consume(message);
+
+        assertThat(outbox.isCompleted()).isTrue();
+        verify(missionCommandService).createMissionForDispatch(
+                eq(outbox.getCareCase()),
+                eq("veh_GIMCHEON_01"),
+                eq(outbox.getDestination()),
+                any()
+        );
+    }
+
+    @Test
+    void consume_completesOutboxWhenMissionAlreadyAdvanced() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
+        DispatchOutbox outbox = buildOutbox();
+        DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
+
+        Mission mission = Mission.builder()
+                .careCase(outbox.getCareCase())
+                .vehicleId("veh_GIMCHEON_01")
+                .destination("源泥쒖떆 利앹궛硫?1湲?69")
+                .build();
+        mission.updatePhase(MissionPhase.DISPATCHED);
+
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
+                .thenReturn(Optional.of(outbox));
+        when(missionRepository.findByCareCase(outbox.getCareCase())).thenReturn(Optional.of(mission));
+
+        dispatchConsumer.consume(message);
+
+        assertThat(outbox.isCompleted()).isTrue();
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any());
+        verify(vehicleRepository, never()).findByRegionCodeAndIsActiveTrue(any());
+    }
+
+    @Test
     void consume_keepsOutboxPendingForOperatorDispatchWhenDemoModeIsEnabled() {
         when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
 
@@ -119,7 +186,6 @@ class DispatchConsumerTest {
 
         when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
                 .thenReturn(Optional.of(outbox));
-        when(missionRepository.findByCareCase(outbox.getCareCase())).thenReturn(Optional.empty());
 
         dispatchConsumer.consume(message);
 

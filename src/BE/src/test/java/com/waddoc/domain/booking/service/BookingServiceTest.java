@@ -31,6 +31,7 @@ import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.config.DemoModePolicy;
+import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.sms.SmsService;
 import org.junit.jupiter.api.Test;
@@ -100,12 +101,16 @@ class BookingServiceTest {
     @Mock
     private DemoModePolicy demoModePolicy;
 
+    @Mock
+    private DispatchAssignmentPolicy dispatchAssignmentPolicy;
+
     @InjectMocks
     private BookingService bookingService;
 
     @Test
     void createBooking_publishesKafkaMessagesAndCreatesDispatchOutbox() {
         when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
 
         User doctorUser = User.builder()
                 .username("doctor")
@@ -187,6 +192,12 @@ class BookingServiceTest {
         assertThat(response.getTtsMessage()).isNotBlank();
         assertThat(response.getTtsMessage()).contains("오전 10시 30분");
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null)
+        );
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), smsCaptor.capture());
         verify(kafkaTemplate).send(
                 eq(KafkaTopics.DOCTOR_NOTIFICATIONS_TOPIC),
@@ -225,6 +236,7 @@ class BookingServiceTest {
     @Test
     void createBooking_sameDayProvisionImmediateMissionAndSession() {
         when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
 
         User doctorUser = User.builder()
                 .username("doctor")
@@ -281,8 +293,7 @@ class BookingServiceTest {
             return booking;
         }).when(bookingRepository).save(any(Booking.class));
         when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(missionRepository.findByCareCase(any(CareCase.class))).thenReturn(Optional.empty());
-        when(missionCommandService.createMissionForDispatch(any(CareCase.class), any(), any(), any(LocalDateTime.class)))
+        when(missionCommandService.createMissionForDispatch(any(CareCase.class), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     CareCase careCase = invocation.getArgument(0);
                     Mission mission = Mission.builder()
@@ -306,6 +317,12 @@ class BookingServiceTest {
         ArgumentCaptor<ConsultationSession> sessionCaptor = ArgumentCaptor.forClass(ConsultationSession.class);
 
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null)
+        );
         verify(missionRepository).save(missionCaptor.capture());
         verify(consultationLiveKitService).createRoom(any());
         verify(consultationSessionRepository).save(sessionCaptor.capture());
@@ -318,6 +335,7 @@ class BookingServiceTest {
     @Test
     void createBooking_sameDaySkipsImmediateProvisionWhenDemoModeIsEnabled() {
         when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(false);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
 
         User doctorUser = User.builder()
                 .username("doctor")
@@ -380,8 +398,12 @@ class BookingServiceTest {
         ArgumentCaptor<DispatchOutbox> outboxCaptor = ArgumentCaptor.forClass(DispatchOutbox.class);
 
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
-        verify(missionCommandService, never())
-                .createMissionForDispatch(any(CareCase.class), any(), any(), any(LocalDateTime.class));
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null)
+        );
         verify(missionRepository, never()).save(any(Mission.class));
         verify(consultationLiveKitService, never()).createRoom(any());
         verify(consultationSessionRepository, never()).save(any(ConsultationSession.class));

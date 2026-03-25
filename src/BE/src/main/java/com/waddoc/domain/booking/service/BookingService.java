@@ -24,6 +24,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.global.config.DemoModePolicy;
+import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -65,6 +66,7 @@ public class BookingService {
     private final SmsService smsService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final DemoModePolicy demoModePolicy;
+    private final DispatchAssignmentPolicy dispatchAssignmentPolicy;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -123,10 +125,11 @@ public class BookingService {
                 .regionCode(patient.getRegionCode())
                 .destination(patient.getAddress())
                 .build());
+        Mission mission = ensureCreatedMission(careCase, patient);
 
         // 당일 예약은 테스트/운영 편의를 위해 미션과 진료방을 즉시 준비한다.
         if (shouldProvisionImmediateConsult(slot)) {
-            provisionImmediateConsultArtifacts(careCase, patient, dispatchOutbox);
+            provisionImmediateConsultArtifacts(careCase, dispatchOutbox, mission);
         }
 
         session.touch();
@@ -364,20 +367,22 @@ public class BookingService {
                 && slot.getSlotDate().isEqual(LocalDate.now());
     }
 
+    private Mission ensureCreatedMission(CareCase careCase, Patient patient) {
+        return missionCommandService.createMissionForDispatch(
+                careCase,
+                dispatchAssignmentPolicy.getDefaultVehicleId(),
+                patient.getAddress(),
+                null
+        );
+    }
+
     private void provisionImmediateConsultArtifacts(
             CareCase careCase,
-            Patient patient,
-            DispatchOutbox dispatchOutbox
+            DispatchOutbox dispatchOutbox,
+            Mission mission
     ) {
         // TODO: Replace this same-day auto-provisioning with an explicit instant-consult booking flow and schedule policy.
         // 배차 소비를 기다리지 않고 즉시 진료 가능한 상태까지 끌어올린다.
-        Mission mission = missionRepository.findByCareCase(careCase)
-                .orElseGet(() -> missionCommandService.createMissionForDispatch(
-                        careCase,
-                        null,
-                        patient.getAddress(),
-                        LocalDateTime.now()
-                ));
         mission.updatePhase(MissionPhase.DISPATCHED);
         mission.updatePhase(MissionPhase.EN_ROUTE);
         mission.updatePhase(MissionPhase.ARRIVED);

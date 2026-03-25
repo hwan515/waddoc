@@ -144,6 +144,30 @@ class MissionCommandServiceTest {
     }
 
     @Test
+    void createMissionForDispatch_reusesExistingMissionAndAssignsSchedule() {
+        CareCase careCase = buildCareCase();
+        Mission existingMission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId("veh_GIMCHEON_01")
+                .destination("Gimcheon")
+                .build();
+
+        when(missionRepository.findByCareCase(careCase)).thenReturn(Optional.of(existingMission));
+
+        Mission mission = missionCommandService.createMissionForDispatch(
+                careCase,
+                "veh_GIMCHEON_01",
+                "Gimcheon",
+                LocalDateTime.of(2026, 3, 25, 20, 30)
+        );
+
+        assertThat(mission).isSameAs(existingMission);
+        assertThat(mission.getVehicleId()).isEqualTo("veh_GIMCHEON_01");
+        assertThat(mission.getDispatchedAt()).isEqualTo(LocalDateTime.of(2026, 3, 25, 20, 30));
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.CREATED);
+    }
+
+    @Test
     void updateMissionPhaseAdvancesToNextPhase() {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
         Mission mission = buildMission();

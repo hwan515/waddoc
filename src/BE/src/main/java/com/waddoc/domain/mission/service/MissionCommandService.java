@@ -66,6 +66,13 @@ public class MissionCommandService {
             LocalDateTime dispatchedAt
     ) {
         return missionRepository.findByCareCase(careCase)
+                .map(existingMission -> {
+                    existingMission.assignVehicle(vehicleId);
+                    if (dispatchedAt != null) {
+                        existingMission.assignSchedule(dispatchedAt, existingMission.getEstimatedArrivalTime());
+                    }
+                    return existingMission;
+                })
                 .orElseGet(() -> missionRepository.save(
                         Mission.builder()
                                 .careCase(careCase)
