@@ -131,6 +131,209 @@ const getMissionRecencyValue = (mission) => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getMissionStatusLabel = (phase) => {
+    switch (phase) {
+        case 'CREATED':
+            return '시연 대기';
+        case 'DISPATCHED':
+        case 'EN_ROUTE':
+            return '출동 중';
+        case 'ARRIVED':
+            return '도착 완료';
+        case 'VERIFYING':
+        case 'CONSULTING':
+            return '진료 중';
+        case 'RETURNING':
+        case 'COMPLETED':
+            return '종료/복귀';
+        case 'INCIDENT':
+        case 'FAILED':
+            return '장애 발생';
+        default:
+            return '대기 중';
+    }
+};
+
+const getMissionPhaseLabel = (phase) => {
+    switch (phase) {
+        case 'CREATED':
+            return '미션 생성';
+        case 'DISPATCHED':
+            return '출동 지시';
+        case 'EN_ROUTE':
+            return '이동 중';
+        case 'ARRIVED':
+            return '현장 도착';
+        case 'VERIFYING':
+            return '본인 확인';
+        case 'CONSULTING':
+            return '진료 중';
+        case 'RETURNING':
+            return '복귀 중';
+        case 'COMPLETED':
+            return '처리 완료';
+        case 'INCIDENT':
+            return '장애 발생';
+        case 'FAILED':
+            return '실패';
+        default:
+            return '대기';
+    }
+};
+
+const getDemoActionAvailability = (phase) => ({
+    canDispatch: phase === 'CREATED',
+    canArrive: ['DISPATCHED', 'EN_ROUTE'].includes(phase),
+    canComplete: ['ARRIVED', 'VERIFYING', 'CONSULTING'].includes(phase),
+});
+
+const getErrorMessage = (error, fallbackMessage) => (
+    error?.response?.data?.message
+    || error?.message
+    || fallbackMessage
+);
+
+const loadDashboardSnapshot = async ({
+    setVehicles,
+    setSelectedVehicleId,
+    setMissionsList,
+    setStatistics,
+    setCalendarEvents
+}) => {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+
+        const fetchSafe = (req) => req.catch(err => {
+            console.error('API Error:', err);
+            return { data: {} };
+        });
+
+        const [missionsRes, bookingsRes] = await Promise.all([
+            fetchSafe(apiClient.get('/missions')),
+            fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } }))
+        ]);
+
+        const rawMissions = missionsRes.data.missions || [];
+        const missionDetailResponses = await Promise.all(
+            rawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
+        );
+        const missionDetailsById = new Map(
+            rawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
+        );
+        const latestMissionByVehicleId = rawMissions.reduce((accumulator, mission) => {
+            const currentMission = accumulator.get(mission.vehicleId);
+
+            if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
+                accumulator.set(mission.vehicleId, mission);
+            }
+
+            return accumulator;
+        }, new Map());
+
+        const mappedVehicles = Array.from(latestMissionByVehicleId.values())
+            .map((mission) => {
+                const statusLabel = phaseToMonitorState(mission.phase);
+                const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
+                const missionDetail = missionDetailsById.get(mission.missionId);
+                const location = extractVehicleLocation(
+                    mission.currentLocation,
+                    missionDetail?.currentLocation,
+                    mission.location,
+                    mission
+                );
+                const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
+
+                return {
+                    id: mission.vehicleId,
+                    status: isPrimaryServiceVehicle ? statusLabel : '추후 서비스 예정',
+                    location: isPrimaryServiceVehicle ? location : null,
+                    battery: isPrimaryServiceVehicle ? 85 : null,
+                    speed: isPrimaryServiceVehicle ? missionSpeed : 0,
+                    lastUpdated: mission.updatedAt || new Date().toISOString(),
+                    mission,
+                    isPrimaryServiceVehicle,
+                    isFutureService: !isPrimaryServiceVehicle
+                };
+            })
+            .sort((a, b) => {
+                if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
+                    return a.isPrimaryServiceVehicle ? -1 : 1;
+                }
+
+                return a.id.localeCompare(b.id);
+            });
+
+        setVehicles(mappedVehicles);
+        if (mappedVehicles.length > 0) {
+            const primaryVehicle = mappedVehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle);
+            setSelectedVehicleId(primaryVehicle?.id ?? mappedVehicles[0].id);
+        }
+
+        const todayMissions = rawMissions.filter((mission) => {
+            const dateStr = mission.dispatchedAt || mission.createdAt || mission.updatedAt;
+            if (!dateStr) return false;
+            return new Date(dateStr).toISOString().split('T')[0] === today;
+        });
+
+        const mappedMissionsList = todayMissions
+            .map((mission) => {
+                const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
+                const demoActionAvailability = getDemoActionAvailability(mission.phase);
+
+                return {
+                    id: mission.missionId,
+                    patientName: isPrimaryServiceVehicle ? (mission.patientName || '환자명 미상') : '추후 서비스 예정',
+                    destination: isPrimaryServiceVehicle ? (mission.destination || '목적지 미상') : '서비스 준비 중',
+                    vehicleId: mission.vehicleId,
+                    status: isPrimaryServiceVehicle ? getMissionStatusLabel(mission.phase) : '추후 서비스 예정',
+                    phase: mission.phase,
+                    phaseLabel: isPrimaryServiceVehicle ? getMissionPhaseLabel(mission.phase) : '서비스 준비 중',
+                    time: isPrimaryServiceVehicle && mission.dispatchedAt
+                        ? new Date(mission.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : '-',
+                    isPrimaryServiceVehicle,
+                    ...demoActionAvailability
+                };
+            })
+            .sort((a, b) => {
+                if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
+                    return a.isPrimaryServiceVehicle ? -1 : 1;
+                }
+
+                return a.vehicleId.localeCompare(b.vehicleId);
+            });
+        setMissionsList(mappedMissionsList);
+
+        setStatistics({
+            totalMissions: rawMissions.length,
+            activeMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+            dispatchingMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
+            consultingMissions: rawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+            completedMissions: rawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
+            incidentCount: rawMissions.filter((mission) => mission.phase === 'INCIDENT').length
+        });
+
+        const mappedEvents = (bookingsRes.data.bookings || []).map((booking) => {
+            const dateObj = new Date(booking.appointmentDate);
+            const dayIdx = dateObj.getDay();
+
+            return {
+                id: booking.bookingId,
+                name: booking.patientName,
+                type: booking.departmentName || '진료',
+                timeStr: booking.startTime,
+                dayIdx,
+                fullDate: booking.appointmentDate,
+                doctor: booking.doctorName || '담당의',
+                status: booking.status || 'CONFIRMED'
+            };
+        });
+        setCalendarEvents(mappedEvents);
+    } catch (error) {
+        console.error('Dashboard data fetch error:', error);
+    }
+};
+
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
@@ -158,144 +361,63 @@ const ControlCenter = () => {
     const [minimapPathPoints, setMinimapPathPoints] = useState([]);
     const [minimapMonitorState, setMinimapMonitorState] = useState(null);
     const [minimapVehicleSpeed, setMinimapVehicleSpeed] = useState(null);
+    const [pendingDemoAction, setPendingDemoAction] = useState(null);
 
     useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                const today = new Date().toISOString().split('T')[0];
-
-                const fetchSafe = (req) => req.catch(err => {
-                    console.error('API Error:', err);
-                    return { data: {} };
-                });
-
-                const [missionsRes, bookingsRes] = await Promise.all([
-                    fetchSafe(apiClient.get('/missions')),
-                    fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } }))
-                ]);
-
-                const rawMissions = missionsRes.data.missions || [];
-                const missionDetailResponses = await Promise.all(
-                    rawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
-                );
-                const missionDetailsById = new Map(
-                    rawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
-                );
-                const latestMissionByVehicleId = rawMissions.reduce((accumulator, mission) => {
-                    const currentMission = accumulator.get(mission.vehicleId);
-
-                    if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
-                        accumulator.set(mission.vehicleId, mission);
-                    }
-
-                    return accumulator;
-                }, new Map());
-
-                const mappedVehicles = Array.from(latestMissionByVehicleId.values())
-                    .map((mission) => {
-                        const statusLabel = phaseToMonitorState(mission.phase);
-                        const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
-                        const missionDetail = missionDetailsById.get(mission.missionId);
-                        const location = extractVehicleLocation(
-                            mission.currentLocation,
-                            missionDetail?.currentLocation,
-                            mission.location,
-                            mission
-                        );
-                        const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
-
-                        return {
-                            id: mission.vehicleId,
-                            status: isPrimaryServiceVehicle ? statusLabel : '추후 서비스 예정',
-                            location: isPrimaryServiceVehicle ? location : null,
-                            battery: isPrimaryServiceVehicle ? 85 : null,
-                            speed: isPrimaryServiceVehicle ? missionSpeed : 0,
-                            lastUpdated: mission.updatedAt || new Date().toISOString(),
-                            mission,
-                            isPrimaryServiceVehicle,
-                            isFutureService: !isPrimaryServiceVehicle
-                        };
-                    })
-                    .sort((a, b) => {
-                        if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
-                            return a.isPrimaryServiceVehicle ? -1 : 1;
-                        }
-
-                        return a.id.localeCompare(b.id);
-                    });
-
-                setVehicles(mappedVehicles);
-                if (mappedVehicles.length > 0) {
-                    const primaryVehicle = mappedVehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle);
-                    setSelectedVehicleId(primaryVehicle?.id ?? mappedVehicles[0].id);
-                }
-
-                const todayMissions = rawMissions.filter((mission) => {
-                    const dateStr = mission.dispatchedAt || mission.createdAt || mission.updatedAt;
-                    if (!dateStr) return false;
-                    return new Date(dateStr).toISOString().split('T')[0] === today;
-                });
-
-                const mappedMissionsList = todayMissions.map((mission) => {
-                    const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
-                    let statusStr = '대기 중';
-                    if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)) statusStr = '출동 중';
-                    if (['VERIFYING', 'CONSULTING'].includes(mission.phase)) statusStr = '진료 중';
-                    if (mission.phase === 'INCIDENT') statusStr = '장애 발생';
-                    if (['COMPLETED', 'RETURNING'].includes(mission.phase)) statusStr = '종료/복귀';
-
-                    return {
-                        id: mission.missionId,
-                        patientName: isPrimaryServiceVehicle ? (mission.patientName || '환자명 미상') : '추후 서비스 예정',
-                        destination: isPrimaryServiceVehicle ? (mission.destination || '목적지 미상') : '서비스 준비 중',
-                        vehicleId: mission.vehicleId,
-                        status: isPrimaryServiceVehicle ? statusStr : '추후 서비스 예정',
-                        time: isPrimaryServiceVehicle && mission.dispatchedAt
-                            ? new Date(mission.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : '-',
-                        isPrimaryServiceVehicle
-                    };
-                }).sort((a, b) => {
-                    if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
-                        return a.isPrimaryServiceVehicle ? -1 : 1;
-                    }
-
-                    return a.vehicleId.localeCompare(b.vehicleId);
-                });
-                setMissionsList(mappedMissionsList);
-
-                setStatistics({
-                    totalMissions: rawMissions.length,
-                    activeMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
-                    dispatchingMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
-                    consultingMissions: rawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
-                    completedMissions: rawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
-                    incidentCount: rawMissions.filter((mission) => mission.phase === 'INCIDENT').length
-                });
-
-                const mappedEvents = (bookingsRes.data.bookings || []).map((booking) => {
-                    const dateObj = new Date(booking.appointmentDate);
-                    const dayIdx = dateObj.getDay();
-
-                    return {
-                        id: booking.bookingId,
-                        name: booking.patientName,
-                        type: booking.departmentName || '진료',
-                        timeStr: booking.startTime,
-                        dayIdx,
-                        fullDate: booking.appointmentDate,
-                        doctor: booking.doctorName || '담당의',
-                        status: booking.status || 'CONFIRMED'
-                    };
-                });
-                setCalendarEvents(mappedEvents);
-            } catch (error) {
-                console.error('Dashboard data fetch error:', error);
-            }
-        };
-
-        fetchDashboardData();
+        loadDashboardSnapshot({
+            setVehicles,
+            setSelectedVehicleId,
+            setMissionsList,
+            setStatistics,
+            setCalendarEvents
+        });
     }, []);
+
+    const handleDemoMissionAction = async (missionId, action) => {
+        const actionPathByType = {
+            dispatch: 'dispatch',
+            arrive: 'arrive',
+            complete: 'complete'
+        };
+        const fallbackMessageByType = {
+            dispatch: '시연 출동 처리에 실패했습니다.',
+            arrive: '도착 처리에 실패했습니다.',
+            complete: '진료 종료 처리에 실패했습니다.'
+        };
+        const nextActionPath = actionPathByType[action];
+
+        if (!nextActionPath || pendingDemoAction) {
+            return;
+        }
+
+        setPendingDemoAction({ missionId, action });
+
+        try {
+            const response = await apiClient.post(`/admin/demo/missions/${missionId}/${nextActionPath}`);
+            const nextPhase = response?.data?.phase;
+
+            if (response?.data?.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID && nextPhase) {
+                setMinimapMonitorState(phaseToMonitorState(nextPhase));
+
+                if (['ARRIVED', 'VERIFYING', 'CONSULTING', 'RETURNING', 'COMPLETED'].includes(nextPhase)) {
+                    setMinimapVehicleSpeed(0);
+                }
+            }
+
+            await loadDashboardSnapshot({
+                setVehicles,
+                setSelectedVehicleId,
+                setMissionsList,
+                setStatistics,
+                setCalendarEvents
+            });
+        } catch (error) {
+            console.error(`Demo mission ${action} error:`, error);
+            window.alert(getErrorMessage(error, fallbackMessageByType[action]));
+        } finally {
+            setPendingDemoAction(null);
+        }
+    };
 
     useEffect(() => {
         let isMounted = true;
@@ -523,6 +645,10 @@ const ControlCenter = () => {
                         calendarEvents={calendarEvents}
                         missionsList={missionsList}
                         statistics={statistics}
+                        pendingDemoAction={pendingDemoAction}
+                        onDemoDispatch={(missionId) => handleDemoMissionAction(missionId, 'dispatch')}
+                        onDemoArrive={(missionId) => handleDemoMissionAction(missionId, 'arrive')}
+                        onDemoComplete={(missionId) => handleDemoMissionAction(missionId, 'complete')}
                     />
                 )}
                 {activeTab === 'patients' && <PatientManagement />}
