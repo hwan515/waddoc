@@ -48,3 +48,4 @@ app:
 dispatch:
   outbox-relay-interval-ms: 1000
   default-vehicle-id: ${DISPATCH_DEFAULT_VEHICLE_ID:veh_GIMCHEON_01}
+  waypoint-mapping-resource: ${DISPATCH_WAYPOINT_MAPPING_RESOURCE:classpath:waypoint_address.json}

@@ -84,6 +84,7 @@ class MissionCommandServiceTest {
         assertThat(savedMission.getVehicleId()).isEqualTo("v-001");
         assertThat(savedMission.getDestination()).isEqualTo("Ulleung");
         assertThat(savedMission.getDispatchedAt()).isEqualTo(LocalDateTime.of(2026, 3, 11, 8, 30));
+        assertThat(savedMission.getTargetWaypointNumber()).isNull();
         assertThat(savedMission.getPhase()).isEqualTo(MissionPhase.CREATED);
 
         assertThat(response.getMissionId()).isEqualTo("ms_F2gHn6");
@@ -158,12 +159,14 @@ class MissionCommandServiceTest {
                 careCase,
                 "veh_GIMCHEON_01",
                 "Gimcheon",
-                LocalDateTime.of(2026, 3, 25, 20, 30)
+                LocalDateTime.of(2026, 3, 25, 20, 30),
+                59
         );
 
         assertThat(mission).isSameAs(existingMission);
         assertThat(mission.getVehicleId()).isEqualTo("veh_GIMCHEON_01");
         assertThat(mission.getDispatchedAt()).isEqualTo(LocalDateTime.of(2026, 3, 25, 20, 30));
+        assertThat(mission.getTargetWaypointNumber()).isEqualTo(59);
         assertThat(mission.getPhase()).isEqualTo(MissionPhase.CREATED);
     }
 

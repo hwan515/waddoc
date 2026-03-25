@@ -84,7 +84,8 @@ public class DispatchConsumer {
                 outbox.getCareCase(),
                 vehicle.getPublicId(),
                 outbox.getDestination(),
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                missionOptional.map(com.waddoc.domain.mission.entity.Mission::getTargetWaypointNumber).orElse(null)
         );
         outbox.markCompleted();
 

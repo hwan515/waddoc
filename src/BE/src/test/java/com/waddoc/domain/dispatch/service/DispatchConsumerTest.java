@@ -73,7 +73,7 @@ class DispatchConsumerTest {
 
         assertThat(outbox.isRetryPending()).isTrue();
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
-        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any());
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -87,7 +87,7 @@ class DispatchConsumerTest {
         Vehicle vehicle = Vehicle.builder()
                 .code("GIMCHEON-01")
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .displayName("김천증산 1호차")
+                .displayName("Gimcheon vehicle 1")
                 .operationalStatus(OperationalStatus.OPERATIONAL)
                 .build();
         ReflectionTestUtils.setField(vehicle, "publicId", "veh_00000001");
@@ -106,8 +106,9 @@ class DispatchConsumerTest {
         verify(missionCommandService).createMissionForDispatch(
                 eq(outbox.getCareCase()),
                 eq("veh_00000001"),
-                eq("김천시 증산면 1길 69"),
-                any()
+                eq(outbox.getDestination()),
+                any(),
+                eq(null)
         );
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
     }
@@ -122,7 +123,7 @@ class DispatchConsumerTest {
         Vehicle vehicle = Vehicle.builder()
                 .code("GIMCHEON-01")
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .displayName("源泥쒖쬆??1?몄감")
+                .displayName("Gimcheon vehicle 1")
                 .operationalStatus(OperationalStatus.OPERATIONAL)
                 .build();
         ReflectionTestUtils.setField(vehicle, "publicId", "veh_GIMCHEON_01");
@@ -130,7 +131,8 @@ class DispatchConsumerTest {
         Mission mission = Mission.builder()
                 .careCase(outbox.getCareCase())
                 .vehicleId("veh_GIMCHEON_01")
-                .destination("源泥쒖떆 利앹궛硫?1湲?69")
+                .destination(outbox.getDestination())
+                .targetWaypointNumber(59)
                 .build();
 
         when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
@@ -148,7 +150,8 @@ class DispatchConsumerTest {
                 eq(outbox.getCareCase()),
                 eq("veh_GIMCHEON_01"),
                 eq(outbox.getDestination()),
-                any()
+                any(),
+                eq(59)
         );
     }
 
@@ -162,7 +165,7 @@ class DispatchConsumerTest {
         Mission mission = Mission.builder()
                 .careCase(outbox.getCareCase())
                 .vehicleId("veh_GIMCHEON_01")
-                .destination("源泥쒖떆 利앹궛硫?1湲?69")
+                .destination(outbox.getDestination())
                 .build();
         mission.updatePhase(MissionPhase.DISPATCHED);
 
@@ -173,7 +176,7 @@ class DispatchConsumerTest {
         dispatchConsumer.consume(message);
 
         assertThat(outbox.isCompleted()).isTrue();
-        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any());
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
         verify(vehicleRepository, never()).findByRegionCodeAndIsActiveTrue(any());
     }
 
@@ -190,7 +193,7 @@ class DispatchConsumerTest {
         dispatchConsumer.consume(message);
 
         assertThat(outbox.isRetryPending()).isTrue();
-        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any());
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
         verify(kafkaTemplate, never()).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
     }
 
@@ -199,7 +202,7 @@ class DispatchConsumerTest {
                 .name("Patient Park")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .address("김천시 증산면 1길 69")
+                .address("Demo Address 1")
                 .phone("01012345678")
                 .build();
         Booking booking = Booking.builder()
@@ -217,7 +220,7 @@ class DispatchConsumerTest {
         return DispatchOutbox.builder()
                 .careCase(careCase)
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .destination("김천시 증산면 1길 69")
+                .destination("Demo Address 1")
                 .build();
     }
 }

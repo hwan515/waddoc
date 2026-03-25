@@ -12,6 +12,7 @@ import com.waddoc.domain.consultation.service.ConsultationLiveKitService;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.domain.dispatch.service.WaypointAddressResolver;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
 import com.waddoc.domain.intake.entity.IntakeSession;
@@ -67,6 +68,7 @@ public class BookingService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final DemoModePolicy demoModePolicy;
     private final DispatchAssignmentPolicy dispatchAssignmentPolicy;
+    private final WaypointAddressResolver waypointAddressResolver;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -368,11 +370,13 @@ public class BookingService {
     }
 
     private Mission ensureCreatedMission(CareCase careCase, Patient patient) {
+        WaypointAddressResolver.ResolvedTarget resolvedTarget = waypointAddressResolver.resolve(patient.getAddress());
         return missionCommandService.createMissionForDispatch(
                 careCase,
                 dispatchAssignmentPolicy.getDefaultVehicleId(),
                 patient.getAddress(),
-                null
+                null,
+                resolvedTarget.waypointNumber()
         );
     }
 
