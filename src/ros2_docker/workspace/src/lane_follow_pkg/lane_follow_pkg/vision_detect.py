@@ -66,6 +66,7 @@ class HybridDijkstraVisionFollower(Node):
         default_yolo_model_path = self.resolve_default_yolo_model_path()
         self.declare_parameter('waypoint_json_path', str(map_path))
         self.declare_parameter('goal_waypoint_id', '')
+        self.declare_parameter('goal_waypoint_value', -1)
         self.declare_parameter('show_debug_windows', False)
         default_route_export_path = self.resolve_route_export_path(
             'vision_detect_route.json'
@@ -91,7 +92,12 @@ class HybridDijkstraVisionFollower(Node):
         )
 
         self.waypoint_json_path = str(self.get_parameter('waypoint_json_path').value)
-        configured_goal = str(self.get_parameter('goal_waypoint_id').value).strip()
+        configured_goal = self.normalize_goal_id(
+            self.get_parameter('goal_waypoint_id').value
+        )
+        configured_goal_value = int(self.get_parameter('goal_waypoint_value').value)
+        if configured_goal is None and configured_goal_value >= 0:
+            configured_goal = self.normalize_goal_id(configured_goal_value)
         self.goal_wp_id = configured_goal or None
         self.pending_goal_id = self.goal_wp_id
         self.pending_goal_state_value = self.goal_id_to_state_value(self.goal_wp_id)
@@ -519,6 +525,28 @@ class HybridDijkstraVisionFollower(Node):
         except (TypeError, ValueError):
             return 0
 
+    def normalize_goal_id(self, goal_value):
+        if goal_value is None:
+            return None
+
+        text = str(goal_value).strip()
+        if not text:
+            return None
+
+        waypoints = getattr(self, 'waypoints', {})
+        if text in waypoints:
+            return text
+
+        if text.lower().startswith('waypoint_'):
+            suffix = text.split('_')[-1].strip()
+            if suffix:
+                return f'Waypoint_{suffix}'
+
+        try:
+            return f'Waypoint_{int(text)}'
+        except (TypeError, ValueError):
+            return text
+
     def show_window(self, name, image):
         self.debug_windows.show_window(name, image)
         self.cv_windows_enabled = self.debug_windows.enabled
@@ -660,6 +688,7 @@ class HybridDijkstraVisionFollower(Node):
         return self.route_planner.build_spline_trajectory(path_ids)
 
     def plan_path_to_goal(self, goal_id, state_value=None):
+        goal_id = self.normalize_goal_id(goal_id)
         if len(self.waypoints) == 0:
             self.get_logger().error('맵 정보가 비어 있어 경로를 생성할 수 없습니다.')
             if self.pending_goal_id == goal_id:
