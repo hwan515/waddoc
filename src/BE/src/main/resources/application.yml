@@ -45,3 +45,11 @@ app:
 
 dispatch:
   outbox-relay-interval-ms: 1000
+
+springdoc:
+  api-docs:
+    path: /swagger/spring/openapi.json
+  swagger-ui:
+    path: /swagger/spring
+    url: /swagger/spring/openapi.json
+    disable-swagger-default-url: true

@@ -38,7 +38,11 @@ current_state = {
     'robot_state': '대기',
 }
 
-app = FastAPI()
+app = FastAPI(
+    docs_url='/swagger/fastapi',
+    openapi_url='/swagger/fastapi/openapi.json',
+    redoc_url=None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
