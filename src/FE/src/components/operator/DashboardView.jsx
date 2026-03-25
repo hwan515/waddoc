@@ -228,7 +228,7 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                             <ChevronRight className="h-6 w-6 text-slate-600" />
                         </button>
                     </div>
-                    <div className="flex bg-[#F8F9FA] border border-slate-200 rounded-md overflow-hidden p-0.5">
+                    <div className="flex bg-slate-50 border border-slate-200 rounded-md overflow-hidden p-0.5">
                         <button
                             className={`px-6 py-2 text-sm font-bold transition-all rounded-sm ${calendarMode === 'weekly' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
                             onClick={() => handleCalendarModeChange('weekly')}
@@ -392,18 +392,29 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                         {missionsList.map(m => (
-                            <div key={m.id} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm hover:border-primary/30 transition-colors">
+                            <div
+                                key={m.id}
+                                className={`border rounded-lg p-4 shadow-sm transition-colors ${m.isPrimaryServiceVehicle
+                                    ? 'bg-white border-slate-200 hover:border-primary/30'
+                                    : 'bg-slate-50/80 border-slate-200 cursor-default opacity-75'
+                                    }`}
+                            >
                                 <div className="flex justify-between items-start mb-3">
-                                    <div className="font-bold text-slate-800 text-base">{m.patientName} 환자</div>
+                                    <div className="font-bold text-slate-800 text-base">
+                                        {m.isPrimaryServiceVehicle ? `${m.patientName} 환자` : m.patientName}
+                                    </div>
                                     <div className={`text-xs px-2.5 py-1 rounded-md border font-bold ${m.status === '출동 중' || m.status === '진료 중' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                        m.status === '대기 중' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                                        m.status === '대기 중' || m.status === '추후 서비스 예정' ? 'bg-slate-100 text-slate-600 border-slate-200' :
                                             m.status === '장애 발생' ? 'bg-red-100 text-red-700 border-red-200' :
                                                 'bg-green-100 text-green-700 border-green-200'
                                         }`}>
                                         {m.status}
                                     </div>
                                 </div>
-                                <div className="space-y-2 text-sm text-slate-600 font-medium bg-slate-50 p-3 rounded-md border border-slate-100">
+                                <div className={`space-y-2 text-sm text-slate-600 font-medium p-3 rounded-md border ${m.isPrimaryServiceVehicle
+                                    ? 'bg-slate-50 border-slate-100'
+                                    : 'bg-white/80 border-slate-200/80'
+                                    }`}>
                                     <div className="flex items-start gap-2.5">
                                         <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                                         <span className="leading-tight">{m.destination}</span>

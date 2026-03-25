@@ -76,6 +76,7 @@ const MapMonitoring = ({
             case '긴급 정지':
             case '긴급정지':
             case '장애': return 'bg-red-100 text-red-700 border-red-200';
+            case '추후 서비스 예정': return 'bg-slate-100 text-slate-500 border-slate-200';
             default: return 'bg-slate-100 text-slate-700 border-slate-200';
         }
     };
@@ -101,14 +102,14 @@ const MapMonitoring = ({
                 {/* 1. 상단: E-Stop 버튼 (최소한의 높이 h-12 고정, 너비 가득 참) */}
                 <button
                     onClick={handleEStop}
-                    className="w-full h-12 shrink-0 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-[0_4px_14px_0_rgba(220,38,38,0.39)] flex items-center justify-center gap-2 transition-transform active:scale-[0.98]"
+                    className="w-full h-12 shrink-0 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transition-transform active:scale-100"
                 >
                     <AlertOctagon className="w-5 h-5 animate-pulse" />
                     EMERGENCY STOP (긴급 정지)
                 </button>
 
                 {/* 2. 중단: 차량 리스트 */}
-                <div className="flex-[3] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div className="flex-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
                         <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
                             <Truck className="w-5 h-5 text-primary" /> 운영 차량 리스트
@@ -119,18 +120,24 @@ const MapMonitoring = ({
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
                         {vehicles.map((vehicle) => {
-                            const displayStatus = vehicle.id === selectedVehicleId ? vehicleState || vehicle.status : vehicle.status;
-                            const displaySpeed = vehicle.id === selectedVehicleId && typeof vehicleSpeed === 'number'
+                            const isPrimaryServiceVehicle = Boolean(vehicle.isPrimaryServiceVehicle);
+                            const isSelectedVehicle = isPrimaryServiceVehicle && vehicle.id === selectedVehicleId;
+                            const displayStatus = isSelectedVehicle ? vehicleState || vehicle.status : vehicle.status;
+                            const displaySpeed = isSelectedVehicle && typeof vehicleSpeed === 'number'
                                 ? vehicleSpeed
                                 : vehicle.speed;
+                            const displayLocation = isPrimaryServiceVehicle ? vehicle.location : null;
+                            const displayBattery = typeof vehicle.battery === 'number' ? `${vehicle.battery}%` : '-';
 
                             return (
                                 <div
                                     key={vehicle.id}
-                                    onClick={() => setSelectedVehicleId(vehicle.id)}
-                                    className={`p-3 rounded-xl border cursor-pointer transition-all ${selectedVehicleId === vehicle.id
-                                        ? 'border-primary bg-primary/5 shadow-sm'
-                                        : 'border-slate-200 hover:border-accent-1/30 hover:bg-slate-50'
+                                    onClick={isPrimaryServiceVehicle ? () => setSelectedVehicleId(vehicle.id) : undefined}
+                                    className={`p-3 rounded-xl border transition-all ${isSelectedVehicle
+                                        ? 'border-primary bg-primary/5 shadow-sm cursor-pointer'
+                                        : isPrimaryServiceVehicle
+                                            ? 'border-slate-200 cursor-pointer hover:border-accent-1/30 hover:bg-slate-50'
+                                            : 'border-slate-200 bg-slate-50/80 cursor-default opacity-75'
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
@@ -143,12 +150,12 @@ const MapMonitoring = ({
                                         <div className="flex items-center gap-2">
                                             <Navigation className="w-3.5 h-3.5 text-slate-400" />
                                             <span className="font-mono">
-                                                {formatCoordinate(vehicle.location?.lat)}, {formatCoordinate(vehicle.location?.lng)}
+                                                {formatCoordinate(displayLocation?.lat)}, {formatCoordinate(displayLocation?.lng)}
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60">
                                             <span className="flex items-center gap-1.5">
-                                                배터리 <span className="font-bold text-slate-800">{vehicle.battery}%</span>
+                                                배터리 <span className="font-bold text-slate-800">{displayBattery}</span>
                                             </span>
                                             <span className="flex items-center gap-1.5">
                                                 속도 <span className="font-bold text-slate-800">{formatSpeed(displaySpeed)}</span>
@@ -161,7 +168,7 @@ const MapMonitoring = ({
                     </div>
                 </div>
 
-                <div className="flex-[2] bg-slate-950 rounded-4xl shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
+                <div className="flex-2 bg-slate-950 rounded-4xl shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
                     <div className="absolute top-3 left-3 z-10 bg-black/55 backdrop-blur-sm px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-white/10">
                         <Video className="w-3.5 h-3.5 text-red-400" />
                         {selectedVehicleId ? `${selectedVehicleId} 카메라` : '차량을 선택하세요'}

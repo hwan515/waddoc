@@ -9,6 +9,7 @@ import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
 import { getRobotMinimapApiUrlCandidates } from '../../utils/runtimeConfig';
 const MINIMAP_POLL_INTERVAL_MS = 100;
+const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
 
 const MONITOR_STATE_LABELS = {
     DISPATCHED: '출발',
@@ -123,12 +124,18 @@ const extractVehicleLocation = (...candidates) => {
     return null;
 };
 
+const getMissionRecencyValue = (mission) => {
+    const timestamp = mission?.updatedAt || mission?.dispatchedAt || mission?.createdAt;
+    const parsed = timestamp ? Date.parse(timestamp) : Number.NaN;
+
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
     const minimapRequestInFlightRef = useRef(false);
     const minimapErrorLoggedAtRef = useRef(0);
-    const selectedVehicleIdRef = useRef(null);
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
@@ -153,10 +160,6 @@ const ControlCenter = () => {
     const [minimapVehicleSpeed, setMinimapVehicleSpeed] = useState(null);
 
     useEffect(() => {
-        selectedVehicleIdRef.current = selectedVehicleId;
-    }, [selectedVehicleId]);
-
-    useEffect(() => {
         const fetchDashboardData = async () => {
             try {
                 const today = new Date().toISOString().split('T')[0];
@@ -178,36 +181,53 @@ const ControlCenter = () => {
                 const missionDetailsById = new Map(
                     rawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
                 );
-                const mappedVehicles = rawMissions.map((mission) => {
-                    const statusLabel = phaseToMonitorState(mission.phase);
-                    const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
-                    const missionDetail = missionDetailsById.get(mission.missionId);
-                    const location = extractVehicleLocation(
-                        mission.currentLocation,
-                        missionDetail?.currentLocation,
-                        mission.location,
-                        mission
-                    );
+                const latestMissionByVehicleId = rawMissions.reduce((accumulator, mission) => {
+                    const currentMission = accumulator.get(mission.vehicleId);
 
-                    return {
-                        id: mission.vehicleId,
-                        status: statusLabel,
-                        location,
-                        battery: 85,
-                        speed: missionSpeed,
-                        lastUpdated: mission.updatedAt || new Date().toISOString(),
-                        mission
-                    };
-                });
+                    if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
+                        accumulator.set(mission.vehicleId, mission);
+                    }
+
+                    return accumulator;
+                }, new Map());
+
+                const mappedVehicles = Array.from(latestMissionByVehicleId.values())
+                    .map((mission) => {
+                        const statusLabel = phaseToMonitorState(mission.phase);
+                        const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
+                        const missionDetail = missionDetailsById.get(mission.missionId);
+                        const location = extractVehicleLocation(
+                            mission.currentLocation,
+                            missionDetail?.currentLocation,
+                            mission.location,
+                            mission
+                        );
+                        const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
+
+                        return {
+                            id: mission.vehicleId,
+                            status: isPrimaryServiceVehicle ? statusLabel : '추후 서비스 예정',
+                            location: isPrimaryServiceVehicle ? location : null,
+                            battery: isPrimaryServiceVehicle ? 85 : null,
+                            speed: isPrimaryServiceVehicle ? missionSpeed : 0,
+                            lastUpdated: mission.updatedAt || new Date().toISOString(),
+                            mission,
+                            isPrimaryServiceVehicle,
+                            isFutureService: !isPrimaryServiceVehicle
+                        };
+                    })
+                    .sort((a, b) => {
+                        if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
+                            return a.isPrimaryServiceVehicle ? -1 : 1;
+                        }
+
+                        return a.id.localeCompare(b.id);
+                    });
 
                 setVehicles(mappedVehicles);
                 if (mappedVehicles.length > 0) {
-                    setSelectedVehicleId((currentVehicleId) => {
-                        if (currentVehicleId && mappedVehicles.some((vehicle) => vehicle.id === currentVehicleId)) {
-                            return currentVehicleId;
-                        }
-                        return mappedVehicles[0].id;
-                    });
+                    const primaryVehicle = mappedVehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle);
+                    setSelectedVehicleId(primaryVehicle?.id ?? mappedVehicles[0].id);
                 }
 
                 const todayMissions = rawMissions.filter((mission) => {
@@ -217,6 +237,7 @@ const ControlCenter = () => {
                 });
 
                 const mappedMissionsList = todayMissions.map((mission) => {
+                    const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
                     let statusStr = '대기 중';
                     if (['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)) statusStr = '출동 중';
                     if (['VERIFYING', 'CONSULTING'].includes(mission.phase)) statusStr = '진료 중';
@@ -225,14 +246,21 @@ const ControlCenter = () => {
 
                     return {
                         id: mission.missionId,
-                        patientName: mission.patientName || '환자명 미상',
-                        destination: mission.destination || '목적지 미상',
+                        patientName: isPrimaryServiceVehicle ? (mission.patientName || '환자명 미상') : '추후 서비스 예정',
+                        destination: isPrimaryServiceVehicle ? (mission.destination || '목적지 미상') : '서비스 준비 중',
                         vehicleId: mission.vehicleId,
-                        status: statusStr,
-                        time: mission.dispatchedAt
+                        status: isPrimaryServiceVehicle ? statusStr : '추후 서비스 예정',
+                        time: isPrimaryServiceVehicle && mission.dispatchedAt
                             ? new Date(mission.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : '-'
+                            : '-',
+                        isPrimaryServiceVehicle
                     };
+                }).sort((a, b) => {
+                    if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
+                        return a.isPrimaryServiceVehicle ? -1 : 1;
+                    }
+
+                    return a.vehicleId.localeCompare(b.vehicleId);
                 });
                 setMissionsList(mappedMissionsList);
 
@@ -345,9 +373,9 @@ const ControlCenter = () => {
                 setMinimapPathPoints(sanitizePathPoints(pathPayload));
                 setMinimapMonitorState(nextState);
                 setMinimapVehicleSpeed(nextSpeed);
-                if (nextLocation && selectedVehicleIdRef.current) {
+                if (nextLocation) {
                     setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
-                        vehicle.id === selectedVehicleIdRef.current
+                        vehicle.id === ACTIVE_OPERATOR_VEHICLE_ID
                             ? { ...vehicle, location: nextLocation }
                             : vehicle
                     )));
@@ -374,7 +402,10 @@ const ControlCenter = () => {
         };
     }, []);
 
-    const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || vehicles[0] || null;
+    const selectedVehicle = vehicles.find((vehicle) => vehicle.id === ACTIVE_OPERATOR_VEHICLE_ID)
+        || vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+        || vehicles[0]
+        || null;
     const vehicleState = minimapMonitorState || selectedVehicle?.status || '대기';
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
     const vehicleLocation = selectedVehicle?.location || null;
@@ -389,7 +420,7 @@ const ControlCenter = () => {
     };
 
     return (
-        <div className="h-screen bg-[#F5F6F8] flex flex-col font-sans overflow-hidden">
+        <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
             <header className="h-16 bg-dark text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
                 <div className="flex items-center gap-8">
                     <button
