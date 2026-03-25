@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'vision_detect = lane_follow_pkg.vision_detect:main',
+            'waypoint_commander = lane_follow_pkg.waypoint_commander:main',
         ],
     },
 )
