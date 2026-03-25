@@ -42,6 +42,8 @@ out/
 
 ### local-data ###
 /local-db/data
+/local-storage/
+/.gradle-local/
 .claude/
 
 # MQTT 클라이언트 임시 파일
