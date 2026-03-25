@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'fs'
@@ -39,31 +39,32 @@ function localSavePlugin() {
   }
 }
 
+const createRobotProxy = (target) => ({
+  target,
+  changeOrigin: true,
+  secure: false,
+})
+
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), tailwindcss(), localSavePlugin()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api/minimap': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/api/odom': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/api/cmd': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/api': {
-        target: 'http://localhost:8080', // 백엔드 서버 주소
-        changeOrigin: true,
-        secure: false,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const robotApiProxyTarget = env.VITE_ROBOT_API_PROXY_TARGET
+    || env.VITE_ROBOT_API_BASE_URL
+    || 'http://3.34.123.145:8000'
+
+  return {
+    plugins: [react(), tailwindcss(), localSavePlugin()],
+    server: {
+      port: 5173,
+      proxy: {
+        '/api/minimap': createRobotProxy(robotApiProxyTarget),
+        '/api/odom': createRobotProxy(robotApiProxyTarget),
+        '/api/cmd': createRobotProxy(robotApiProxyTarget),
+        '/api': {
+          target: 'http://localhost:8080', // 백엔드 서버 주소
+          changeOrigin: true,
+          secure: false,
+        }
       }
     }
   }

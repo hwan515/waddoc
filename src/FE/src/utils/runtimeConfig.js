@@ -15,6 +15,8 @@ const normalizePath = (path) => {
 
 const uniqueNonEmpty = (values) => [...new Set(values.filter(Boolean))];
 
+const shouldUseRelativeRobotApiPath = () => import.meta.env.DEV;
+
 const getSameHostRobotApiBaseUrl = () => {
     if (typeof window === 'undefined') {
         return '';
@@ -49,7 +51,7 @@ export const getRobotApiUrlCandidates = (path) => {
 
     return uniqueNonEmpty([
         configuredBaseUrl ? `${configuredBaseUrl}${normalizedPath}` : '',
-        normalizedPath,
+        shouldUseRelativeRobotApiPath() ? normalizedPath : '',
         sameHostBaseUrl ? `${sameHostBaseUrl}${normalizedPath}` : '',
     ]);
 };
