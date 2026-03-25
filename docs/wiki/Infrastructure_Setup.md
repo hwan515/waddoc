@@ -6,7 +6,7 @@
 infra/
 ├── .env.example              # 환경 변수 템플릿
 ├── Jenkinsfile               # Jenkins CI/CD 파이프라인 정의
-├── docker-compose.yml        # 개발 메인 스택 (8 서비스, AI 제외)
+├── docker-compose.yml        # 개발 메인 스택 (phone 포함, AI 제외)
 ├── docker-compose.prod.yml   # 배포 메인 서버 (9+ 서비스, coturn/frontend-phone/zenoh 포함)
 ├── nginx/
 │   ├── dev.conf              # 개발 Nginx (HTTP)
@@ -33,11 +33,11 @@ cp .env.example .env
 
 ## 실행 명령어
 
-### 개발 환경 (메인 스택)
+### 개발 환경 (권장: 전체 Docker Compose)
 
 ```bash
 cd infra
-docker compose up -d              # 메인 스택 기동 (AI 제외)
+docker compose up -d              # 메인 스택 기동 (nginx/frontend/frontend-phone/spring-api/postgres/redis/zookeeper/kafka/livekit)
 docker compose logs -f spring-api  # 로그 확인
 docker compose up -d --build spring-api  # 특정 서비스 재빌드
 docker compose down                # 종료
@@ -46,8 +46,22 @@ docker compose down                # 종료
 - `.env` 에 `DEV_GPU_SERVER_HOST` 를 반드시 설정해야 한다.
 - 개발 환경의 `spring-api` 는 GPU 서버의 `443` 포트만 사용한다.
 - 호출 경로는 `https://<DEV_GPU_SERVER_HOST>/idv/...` 기준이다.
+- 진료/LiveKit/webhook 검증은 이 전체 compose 구성을 기본 경로로 사용한다.
+- 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
+- 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
 
-### 개발 환경 (DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
+### 개발 환경 (선택: Zenoh 프로필 추가)
+
+```bash
+cd infra
+docker compose --profile zenoh up -d zenoh zenoh-subscriber
+```
+
+- 차량/ROS 연동 검증이 필요할 때만 추가로 올린다.
+- 기본 `docker compose up -d`에는 포함되지 않는다.
+- `zenoh`는 `8081` 포트를 사용한다.
+
+### 개발 환경 (고급: DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
 
 ```bash
 cd infra
@@ -58,8 +72,8 @@ docker compose up -d postgres redis zookeeper kafka
 - `application-local.yml`과 `application.yml` 기본값으로 Postgres/Redis/Kafka는 각각 `localhost:5432`, `localhost:6379`, `localhost:9092`에 연결된다.
 - 이 방식은 Backend만 로컬 JVM으로 띄우는 용도다. `spring-api` 컨테이너와 동시에 실행하지 않는다.
 - AI 연동까지 확인하려면 `AI_IDV_URL` 환경변수로 GPU 서버의 `443` 경로 기반 주소를 맞춰야 한다.
-- LiveKit 연동까지 확인하려면 `docker compose up -d livekit`로 컨테이너를 추가로 올리면 된다. 이 경우 `application-local.yml` 기본값으로 `localhost:7880`에 연결되므로 별도 환경변수 지정은 필요 없다.
 - Kafka listener가 활성화된 상태로 Backend를 띄우므로, `zookeeper`/`kafka` 없이 로컬 JVM을 실행하면 이벤트 소비 기능이 비정상 동작한다.
+- 진료/LiveKit 검증은 이 혼합 실행 대신 위의 전체 compose 구성을 권장한다. `spring-api`가 컨테이너 밖에서 뜨면 LiveKit webhook 경로를 별도로 맞추지 않는 한 기본 설정과 어긋날 수 있다.
 - 로컬 더미데이터가 필요하면 `APP_SEED_ENABLED=true`로 Backend를 실행한다. 기본 로그인 비밀번호는 `APP_SEED_DEFAULT_PASSWORD` 또는 기본값 `Passw0rd!`를 사용한다.
 - 시드 계정: `seed_admin`
 - 시드 의사 계정: `seed_doc_im_kim`, `seed_doc_im_park`, `seed_doc_derm_lee`, `seed_doc_ortho_choi`, `seed_doc_neuro_jung`, `seed_doc_eye_han`
@@ -216,6 +230,7 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 |-----------|--------|------|
 | 80 | nginx | HTTP (API + 프론트엔드) |
 | 9092 | kafka | Kafka host access / 로컬 JVM 연동 |
+| 8081 | zenoh | Zenoh REST/WebSocket (`--profile zenoh` 사용 시) |
 | 7880 | livekit | API + signaling WebSocket |
 | 7881 | livekit | ICE/TCP |
 | 7882/udp | livekit | ICE/UDP mux |
