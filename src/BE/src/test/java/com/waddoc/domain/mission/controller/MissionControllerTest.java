@@ -1,7 +1,11 @@
 package com.waddoc.domain.mission.controller;
 
+import com.waddoc.domain.consultation.dto.ConsultationSessionStatusResponse;
 import com.waddoc.domain.consultation.dto.IssuePatientTokenResponse;
+import com.waddoc.domain.consultation.entity.ConnectionState;
+import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.service.ConsultationPatientTokenService;
+import com.waddoc.domain.consultation.service.ConsultationSessionQueryService;
 import com.waddoc.domain.mission.dto.CreateMissionResponse;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.dto.MissionDetailResponse;
@@ -68,6 +72,9 @@ class MissionControllerTest {
 
     @MockBean
     private ConsultationPatientTokenService consultationPatientTokenService;
+
+    @MockBean
+    private ConsultationSessionQueryService consultationSessionQueryService;
 
     @MockBean
     private MissionVitalMeasurementService missionVitalMeasurementService;
@@ -273,6 +280,42 @@ class MissionControllerTest {
                 .andExpect(jsonPath("$.sessionId").value("ses_P8mQr2"))
                 .andExpect(jsonPath("$.patientToken").value("patient-token"))
                 .andExpect(jsonPath("$.room.roomId").value("room_ses_P8mQr2"));
+    }
+
+    @Test
+    void getConsultationStatusByMission_returnsSessionStatus() throws Exception {
+        when(consultationSessionQueryService.getSessionStatusByMission(eq("ms_F2gHn6"), isNull()))
+                .thenReturn(ConsultationSessionStatusResponse.builder()
+                        .sessionId("ses_P8mQr2")
+                        .caseId("case_T7nLp4")
+                        .status(ConsultationSessionStatus.IN_PROGRESS)
+                        .room(ConsultationSessionStatusResponse.RoomDetail.builder()
+                                .roomId("room_ses_P8mQr2")
+                                .livekitUrl("wss://livekit.test")
+                                .build())
+                        .doctor(ConsultationSessionStatusResponse.DoctorDetail.builder()
+                                .doctorId("doc_F2gHn6")
+                                .name("박지연")
+                                .connectionState(ConnectionState.CONNECTED)
+                                .joinedAt(OffsetDateTime.parse("2026-03-23T14:10:00+09:00"))
+                                .build())
+                        .patient(ConsultationSessionStatusResponse.PatientDetail.builder()
+                                .patientId("pat_T7nLp4")
+                                .name("홍길동")
+                                .connectionState(ConnectionState.CONNECTED)
+                                .joinedAt(OffsetDateTime.parse("2026-03-23T14:10:05+09:00"))
+                                .build())
+                        .reconnectCount(0)
+                        .startedAt(OffsetDateTime.parse("2026-03-23T14:10:00+09:00"))
+                        .build());
+
+        mockMvc.perform(get("/api/v1/missions/{missionId}/consultation-status", "ms_F2gHn6"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionId").value("ses_P8mQr2"))
+                .andExpect(jsonPath("$.caseId").value("case_T7nLp4"))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.doctor.connectionState").value("CONNECTED"))
+                .andExpect(jsonPath("$.patient.connectionState").value("CONNECTED"));
     }
 
     @Test
