@@ -156,7 +156,7 @@ const PatientPortal = () => {
             <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-6 flex flex-col h-full animate-fade-in-up">
                 <div className="bg-white border border-slate-200 shadow-sm rounded-3xl flex-1 flex flex-col overflow-hidden relative">
                     {/* Background acccent line */}
-                    <div className="absolute top-0 left-0 z-10 h-1 w-full bg-gradient-to-r from-primary/20 via-secondary to-secondary/30"></div>
+                    <div className="absolute top-0 left-0 z-10 h-1 w-full bg-linear-to-r from-primary/20 via-secondary to-secondary/30"></div>
 
                     {activeTab === 'calendar' ? (
                         <CalendarView records={calendarEvents} patientName={user.name} />

@@ -125,7 +125,7 @@ const MinimapPanel = ({
     return (
         <div className="relative h-full overflow-hidden rounded-[32px] bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.28),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.14),transparent_24%),linear-gradient(180deg,#082041_0%,#04142B_58%,#020817_100%)]" />
-            <div className="absolute inset-y-0 left-0 w-[28%] min-w-[210px] max-w-[250px] bg-gradient-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
+                    <div className="absolute inset-y-0 left-0 w-[28%] min-w-[210px] max-w-[250px] bg-linear-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
 
             {imageReady ? (
                 <img
@@ -144,7 +144,7 @@ const MinimapPanel = ({
                 </div>
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-b from-[#061A40]/10 via-transparent to-[#020817]/38" />
+                    <div className="absolute inset-0 bg-linear-to-b from-[#061A40]/10 via-transparent to-[#020817]/38" />
 
             <svg
                 viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}

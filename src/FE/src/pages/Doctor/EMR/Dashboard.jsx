@@ -306,7 +306,7 @@ const LegacyEMRDashboard = () => {
                 {/* 좌측: 예약 관리 (대기자 리스트) */}
                 <div className="w-[45%] shrink-0 flex flex-col border border-slate-400 bg-white">
                     {/* 패널 타이틀바 */}
-                    <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center">
+                        <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center">
                         <span className="font-bold text-slate-800 text-sm">📋 예약 및 대기자 관리</span>
                         <div className="flex space-x-2 text-xs">
                             <label className="flex items-center space-x-1 cursor-pointer">
@@ -382,7 +382,7 @@ const LegacyEMRDashboard = () => {
 
                     {/* 우측 상단: 환자 정보 창 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-[#EFEFEF]">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
+                            <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
                             <span className="font-bold text-slate-800 text-sm">👤 환자 상세 정보</span>
                         </div>
                         <div className="p-2 flex-1 flex flex-col pt-0">
@@ -425,7 +425,7 @@ const LegacyEMRDashboard = () => {
 
                     {/* 우측 하단: 진료 내역 (History) */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
+                            <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
                             <span className="font-bold text-slate-800 text-sm">📁 진료 및 처방 이력</span>
                         </div>
 

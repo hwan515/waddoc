@@ -97,7 +97,7 @@ const EntryCard = ({ title, description, icon, actions, highlighted = false }) =
         <article
             className={`rounded-[1.75rem] border p-6 shadow-lg transition-transform hover:-translate-y-1 ${
                 highlighted
-                    ? 'border-primary/40 bg-gradient-to-br from-primary via-accent-1 to-accent-2 text-white shadow-primary/25'
+                    ? 'border-primary/40 bg-linear-to-br from-primary via-accent-1 to-accent-2 text-white shadow-primary/25'
                     : 'border-slate-200 bg-white text-slate-900 shadow-slate-200/70'
             }`}
         >

@@ -113,7 +113,7 @@ const MyPage = () => {
 
                 {/* 1. Profile Overview Card */}
                 <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-primary/5 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-linear-to-bl from-primary/5 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none"></div>
 
                     <div className="flex flex-col md:flex-row items-center md:items-start gap-8 relative z-10">
                         <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center border-4 border-white shadow-md flex-shrink-0 overflow-hidden">

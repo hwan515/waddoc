@@ -327,7 +327,7 @@ const ConsultationRoom = ({
                     
                     {/* 우측 상단: 처방전 약 선택 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white overflow-hidden">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center shrink-0">
+                                            <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center shrink-0">
                             <span className="font-bold text-slate-800 text-sm">💊 약품 처방</span>
                             <div className="flex items-center space-x-1">
                                 <span className="text-[11px] font-bold text-slate-600">검색:</span>
@@ -454,7 +454,7 @@ const ConsultationRoom = ({
 
                     {/* 우측 하단: 진료 내역 입력란 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex items-center justify-between gap-2">
+                                <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex items-center justify-between gap-2">
                             <div>
                                 <span className="font-bold text-slate-800 text-sm">📝 진료 기록 (경과 기록지)</span>
                                 <div className="text-[11px] font-medium text-slate-500">작성 내용은 진료 종료 시 저장됩니다.</div>
