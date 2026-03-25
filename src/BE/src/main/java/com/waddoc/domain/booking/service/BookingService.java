@@ -23,6 +23,7 @@ import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -63,6 +64,7 @@ public class BookingService {
     private final AuditLogService auditLogService;
     private final SmsService smsService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final DemoModePolicy demoModePolicy;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -358,7 +360,8 @@ public class BookingService {
     }
 
     private boolean shouldProvisionImmediateConsult(ScheduleSlot slot) {
-        return slot.getSlotDate().isEqual(LocalDate.now());
+        return demoModePolicy.isSameDayAutoProvisionEnabled()
+                && slot.getSlotDate().isEqual(LocalDate.now());
     }
 
     private void provisionImmediateConsultArtifacts(

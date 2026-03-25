@@ -30,6 +30,7 @@ import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.sms.SmsService;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,11 +97,16 @@ class BookingServiceTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private DemoModePolicy demoModePolicy;
+
     @InjectMocks
     private BookingService bookingService;
 
     @Test
     void createBooking_publishesKafkaMessagesAndCreatesDispatchOutbox() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
@@ -217,6 +224,8 @@ class BookingServiceTest {
 
     @Test
     void createBooking_sameDayProvisionImmediateMissionAndSession() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
@@ -304,6 +313,80 @@ class BookingServiceTest {
         assertThat(outboxCaptor.getValue().isCompleted()).isTrue();
         assertThat(missionCaptor.getValue().getPhase()).isEqualTo(MissionPhase.ARRIVED);
         assertThat(sessionCaptor.getValue().getStatus().name()).isEqualTo("READY");
+    }
+
+    @Test
+    void createBooking_sameDaySkipsImmediateProvisionWhenDemoModeIsEnabled() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(false);
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now())
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(smsService.getContactNumber()).thenReturn("01049163720");
+        doAnswer(invocation -> {
+            Booking booking = invocation.getArgument(0);
+            ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 21, 12, 0));
+            return booking;
+        }).when(bookingRepository).save(any(Booking.class));
+        when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.createBooking(session.getPublicId(), request);
+
+        ArgumentCaptor<DispatchOutbox> outboxCaptor = ArgumentCaptor.forClass(DispatchOutbox.class);
+
+        verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService, never())
+                .createMissionForDispatch(any(CareCase.class), any(), any(), any(LocalDateTime.class));
+        verify(missionRepository, never()).save(any(Mission.class));
+        verify(consultationLiveKitService, never()).createRoom(any());
+        verify(consultationSessionRepository, never()).save(any(ConsultationSession.class));
+
+        assertThat(outboxCaptor.getValue().isCompleted()).isFalse();
     }
 
     @Test

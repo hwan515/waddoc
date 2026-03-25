@@ -11,6 +11,7 @@ import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.vehicle.entity.OperationalStatus;
 import com.waddoc.domain.vehicle.entity.Vehicle;
 import com.waddoc.domain.vehicle.repository.VehicleRepository;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,11 +49,16 @@ class DispatchConsumerTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private DemoModePolicy demoModePolicy;
+
     @InjectMocks
     private DispatchConsumer dispatchConsumer;
 
     @Test
     void consume_marksRetryPendingAndSendsDelaySmsWhenVehicleIsUnavailable() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
         DispatchOutbox outbox = buildOutbox();
         DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
 
@@ -70,6 +76,8 @@ class DispatchConsumerTest {
 
     @Test
     void consume_createsMissionAndCompletesOutboxWhenVehicleIsOperational() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
         DispatchOutbox outbox = buildOutbox();
         outbox.markRetryPending();
         DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
@@ -100,6 +108,24 @@ class DispatchConsumerTest {
                 any()
         );
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
+    }
+
+    @Test
+    void consume_keepsOutboxPendingForOperatorDispatchWhenDemoModeIsEnabled() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
+
+        DispatchOutbox outbox = buildOutbox();
+        DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
+
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
+                .thenReturn(Optional.of(outbox));
+        when(missionRepository.findByCareCase(outbox.getCareCase())).thenReturn(Optional.empty());
+
+        dispatchConsumer.consume(message);
+
+        assertThat(outbox.isRetryPending()).isTrue();
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any());
+        verify(kafkaTemplate, never()).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
     }
 
     private DispatchOutbox buildOutbox() {

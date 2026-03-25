@@ -10,6 +10,7 @@ import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.vehicle.entity.Vehicle;
 import com.waddoc.domain.vehicle.repository.VehicleRepository;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -33,6 +34,7 @@ public class DispatchConsumer {
     private final MissionRepository missionRepository;
     private final MissionCommandService missionCommandService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final DemoModePolicy demoModePolicy;
 
     @KafkaListener(topics = KafkaTopics.DISPATCH_REQUESTS_TOPIC, groupId = "dispatch-group")
     @Transactional
@@ -54,6 +56,10 @@ public class DispatchConsumer {
         }
         if (missionRepository.findByCareCase(outbox.getCareCase()).isPresent()) {
             outbox.markCompleted();
+            return;
+        }
+        if (demoModePolicy.isOperatorDispatchOnly()) {
+            outbox.markRetryPending();
             return;
         }
 

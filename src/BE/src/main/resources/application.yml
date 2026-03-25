@@ -42,6 +42,8 @@ spring:
 app:
   public-id:
     length: 8
+  demo-mode:
+    enabled: ${APP_DEMO_MODE_ENABLED:false}
 
 dispatch:
   outbox-relay-interval-ms: 1000
