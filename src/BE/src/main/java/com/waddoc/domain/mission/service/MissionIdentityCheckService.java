@@ -242,9 +242,8 @@ public class MissionIdentityCheckService {
         boolean birthDateMatched = ocr != null && birthDate6Matches(patient.getBirthDate6(), ocr);
         boolean addressMatched = ocr != null && addressMatches(patient.getAddress(), ocr.getAddress());
         boolean anyOcrFieldMatched = nameMatched || birthDateMatched || addressMatched;
-        boolean verified = result.isMatched()
-                && ocr != null
-                && anyOcrFieldMatched;
+        // TODO: 촬영 품질과 얼굴 검출 안정화 이후에는 AI matched를 다시 필수 조건으로 복구해야 한다.
+        boolean verified = ocr != null && anyOcrFieldMatched;
 
         if (verified) {
             return;
