@@ -133,6 +133,9 @@ class IdvModelRegistry:
                 return self._adaface
 
             model_path = Path(self._settings.idv_adaface_model_path)
+            if model_path.suffix.lower() == ".onnx" and self._settings.idv_adaface_quantization != "fp32":
+                variant = self._settings.idv_adaface_quantization
+                model_path = model_path.with_stem(f"{model_path.stem}_{variant}")
             if not model_path.exists():
                 self._last_error = f"AdaFace model not found: {model_path}"
                 raise ModelUnavailableError(self._last_error)
