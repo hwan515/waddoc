@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
 
 # 3. PyTorch 및 비전 AI 설치 
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-RUN pip3 install ultralytics opencv-python "numpy<2"
+RUN pip3 install ultralytics opencv-python "numpy<2" paho-mqtt
 
 # 4. FFmpeg 시스템 패키지 설치 (OpenCV는 위에서 pip로 설치함)
 RUN apt-get update && apt-get install -y \
@@ -51,6 +51,7 @@ RUN echo '#!/bin/bash\n\
     ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0 &\n\
     ros2 run my_ros2_basics camera_streamer &\n\
     ros2 run my_ros2_basics biosignal_publisher &\n\
+    ros2 run my_ros2_basics mqtt_bridge &\n\
     exec "$@"\n'\
     > /custom_entrypoint.sh && chmod +x /custom_entrypoint.sh
 

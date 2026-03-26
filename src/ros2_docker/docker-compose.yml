@@ -11,6 +11,7 @@ services:
       - ROS_DOMAIN_ID=0
       - ROS_LOCALHOST_ONLY=1
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - MQTT_BROKER_HOST=waddoc.site
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./workspace:/root/workspace:rw
@@ -24,18 +25,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [ gpu, video, compute, utility ]
-
-  zenoh_bridge:
-    image: eclipse/zenoh-bridge-ros2dds:1.7.2
-    container_name: zenoh_bridge
-    environment:
-      - ROS_DISTRO=humble
-      - ROS_DOMAIN_ID=0
-      - ROS_LOCALHOST_ONLY=1
-      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-    network_mode: "host"
-    command: [ "-e", "tcp/zenoh.waddoc.site:8081" ]
-    restart: unless-stopped
 
   mediamtx:
     image: bluenviron/mediamtx:latest
