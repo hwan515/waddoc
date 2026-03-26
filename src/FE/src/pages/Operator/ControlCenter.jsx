@@ -99,6 +99,8 @@ const WAITING_MONITOR_STATES = new Set([
     getMonitorStateFromPhase('COMPLETED'),
 ].filter(Boolean));
 
+const DEFAULT_WAITING_MONITOR_STATE = phaseToMonitorState('WAITING');
+
 const MOVING_SPEED_THRESHOLD_MS = 0.1;
 const MOVING_SPEED_THRESHOLD_KMH = 0.5;
 
@@ -284,6 +286,11 @@ const getDashboardMissionStatusLabel = (phase) => (
 const getDashboardMissionPhaseLabel = (phase) => (
     phase === 'CREATED' ? '대기' : getMissionPhaseLabel(phase)
 );
+
+const DASHBOARD_MISSION_LABEL_RESOLVERS = {
+    status: getDashboardMissionStatusLabel,
+    phase: getDashboardMissionPhaseLabel,
+};
 
 const getErrorMessage = (error, fallbackMessage) => (
     error?.response?.data?.message
@@ -689,10 +696,10 @@ const ControlCenter = () => {
         minimapGoalWaypointNumber
     );
     const effectiveVehicleState = selectedVehicleUsesLiveTelemetry
-        ? (minimapMonitorState || selectedVehicle?.status || normalizeMonitorState('WAITING'))
+        ? (vehicleState || DEFAULT_WAITING_MONITOR_STATE)
         : (selectedVehicle?.status || normalizeMonitorState('WAITING'));
     const effectiveVehicleSpeed = selectedVehicleUsesLiveTelemetry
-        ? (minimapVehicleSpeed ?? selectedVehicle?.speed ?? null)
+        ? vehicleSpeed
         : (selectedVehicle?.speed ?? null);
     const effectiveMinimapPathPoints = minimapPathPoints;
     const minimapRouteAlert = (
