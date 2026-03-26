@@ -6,7 +6,7 @@ http {
     server {
         listen 80;
 
-        # Phone frontend
+        # 휴대폰 프론트엔드
         location = /phone {
             proxy_pass http://frontend-phone:3001;
             proxy_set_header Host $host;
@@ -28,17 +28,17 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Spring Swagger UI / OpenAPI
+        # Spring용 Swagger UI와 OpenAPI
         location = /swagger/spring {
-            return 301 /swagger/spring/;
-        }
-
-        location = /swagger/spring/ {
-            proxy_pass http://spring-api:8080/swagger/swagger-ui/index.html;
+            proxy_pass http://spring-api:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location = /swagger/spring/ {
+            return 301 /swagger/spring;
         }
 
         location = /swagger/spring/openapi.json {
@@ -50,7 +50,6 @@ http {
         }
 
         location /swagger/spring/ {
-            rewrite ^/swagger/spring/(.*)$ /swagger/swagger-ui/$1 break;
             proxy_pass http://spring-api:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -58,7 +57,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # FastAPI Swagger UI / OpenAPI
+        # FastAPI용 Swagger UI와 OpenAPI
         location = /swagger/fastapi {
             proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
             proxy_ssl_server_name on;
@@ -87,7 +86,17 @@ http {
             proxy_redirect off;
         }
 
-        # Legacy Swagger paths → new public routes
+        # Springdoc이 /swagger/spring 을 /swagger/swagger-ui/index.html 로 리다이렉트할 수 있다.
+        # 나머지 /swagger/* 경로도 모두 Spring 앱으로 보내서 React가 가로채지 않게 한다.
+        location /swagger/ {
+            proxy_pass http://spring-api:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # 기존 Swagger 경로를 새 공개 경로로 리다이렉트
         location = /swagger-ui.html {
             return 301 /swagger/spring;
         }
@@ -128,7 +137,7 @@ http {
             return 301 /swagger/fastapi;
         }
 
-        # ROS2 minimap/command API → remote EC2 robot API
+        # ROS2 minimap/command API → 원격 EC2 robot API
         location = /api/minimap {
             proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
             proxy_ssl_server_name on;
@@ -165,7 +174,7 @@ http {
             proxy_redirect off;
         }
 
-        # API → Spring Boot
+        # 일반 API를 Spring Boot로 전달
         location /api/ {
             proxy_pass http://spring-api:8080;
             proxy_set_header Host $host;
@@ -174,7 +183,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # Frontend → React
+        # 프론트엔드 → React
         location / {
             proxy_pass http://frontend:3000;
             proxy_set_header Host $host;
