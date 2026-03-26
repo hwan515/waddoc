@@ -17,6 +17,8 @@ import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.monitoring.LiveKitMonitoringMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.livekit.server.WebhookReceiver;
 import livekit.LivekitModels;
 import livekit.LivekitWebhook;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -45,6 +48,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ConsultationWebhookServiceTest {
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     @Mock
     private ConsultationSessionRepository consultationSessionRepository;
 
@@ -65,6 +70,9 @@ class ConsultationWebhookServiceTest {
 
     @Mock
     private ValueOperations<String, String> valueOperations;
+
+    @Spy
+    private LiveKitMonitoringMetrics liveKitMonitoringMetrics = new LiveKitMonitoringMetrics(meterRegistry);
 
     @InjectMocks
     private ConsultationWebhookService consultationWebhookService;
@@ -115,6 +123,11 @@ class ConsultationWebhookServiceTest {
         consultationWebhookService.handleWebhook(body, "signed-header");
 
         assertThat(session.getDoctorConnectionState()).isEqualTo(ConnectionState.DISCONNECTED);
+        assertThat(meterRegistry.get("waddoc.livekit.webhook.events")
+                .tag("event", "participant_left")
+                .tag("result", "success")
+                .counter()
+                .count()).isEqualTo(1.0);
         verify(disconnectTimerService).schedule("ses_test123", "DOCTOR");
     }
 
@@ -185,6 +198,12 @@ class ConsultationWebhookServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.LIVEKIT_WEBHOOK_INVALID_SIGNATURE);
+
+        assertThat(meterRegistry.get("waddoc.livekit.webhook.events")
+                .tag("event", "invalid_signature")
+                .tag("result", "fail")
+                .counter()
+                .count()).isEqualTo(1.0);
     }
 
     private void stubIdempotencyCheck() {

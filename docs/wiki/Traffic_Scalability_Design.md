@@ -1,7 +1,7 @@
 # 대용량 트래픽 처리 설계 문서
 
 - 작성 기준: 2026-03-23 저장소 스냅샷
-- 범위: `src/BE`, `infra`, `src/AI`, `src/AI-IDV`
+- 범위: `src/BE`, `infra`, `src/AI-IDV`
 - 관점: "현재 코드가 트래픽을 어떻게 흡수하고, 어떤 부하를 어디로 분산시키는가"
 
 ## 1. 결론
@@ -12,7 +12,7 @@
 - `Kafka`는 배차, SMS, 의사 알림, 텔레메트리 같은 burst 성격의 이벤트를 완충하는 비동기 버퍼 역할을 한다.
 - `Redis`는 refresh token, disconnect timer, webhook idempotency, 본인 확인 TTL 상태처럼 "공유가 필요하지만 영속 DB까지는 필요 없는 상태"를 저장한다.
 - `LiveKit`는 화상 진료의 미디어 plane을 분리해서 Spring 애플리케이션이 영상/음성 트래픽을 직접 처리하지 않게 한다.
-- `AI 서버`와 `AI-IDV 서버`는 Whisper, OCR, 얼굴 인식 같은 GPU/CPU 집중 워크로드를 별도 프로세스로 격리한다.
+- `AI-IDV 서버`는 OCR, 얼굴 인식 같은 GPU/CPU 집중 워크로드를 별도 프로세스로 격리한다.
 
 즉, 이 저장소의 대용량 대응 전략은 "단일 서버 성능 극대화"보다는 "동기 요청 경로를 짧게 유지하고, 무거운 작업을 외부 컴포넌트로 분리하며, Redis/Kafka로 다중 인스턴스 친화적으로 만드는 구조"에 가깝다.
 
@@ -198,22 +198,15 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 
 ### 2.10 AI/GPU 워크로드는 별도 서비스로 격리
 
-음성 STT와 신분 확인은 본체 Spring 애플리케이션 안에 직접 들어 있지 않다.
+신분 확인(IDV)은 본체 Spring 애플리케이션 안에 직접 들어 있지 않다.
 
 - 근거 코드
-  - `src/AI/docker-compose.yml`
-  - `src/AI/ai-server/app/main.py`
-  - `src/AI/ai-server/app/api/v1/routes/stt.py`
-  - `src/AI/ai-server/app/services/stt_stream_service.py`
-  - `src/AI/ai-server/app/services/whisper_service.py`
   - `src/AI-IDV/app/main.py`
   - `src/AI-IDV/app/services/idv_model_registry.py`
   - `src/BE/src/main/java/com/waddoc/domain/consultation/service/ConsultationIdentityVerificationClient.java`
 
 구현상 특징은 다음과 같다.
 
-- STT는 FastAPI WebSocket endpoint로 스트리밍 처리한다.
-- Whisper 모델은 lazy load 후 재사용되며, 동기 추론은 `asyncio.to_thread`로 event loop 바깥에서 돌린다.
 - IDV 서버는 시작 시 `warmup()`으로 모델을 미리 올리고, registry 내부 lock으로 중복 로드를 막는다.
 - Spring은 IDV 서버를 직접 포함하지 않고 별도 HTTP 호출로 사용하며 timeout도 둔다.
 - 운영 compose도 `AI_IDV_URL` 환경변수로 외부 GPU 서버를 바라보도록 되어 있어 배치 원칙 자체가 분리형이다.
@@ -230,7 +223,7 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 - 화상 진료 시작/종료 시 webhook 중복 호출과 재접속 타이머 관리
 - refresh token 검증, 본인 확인 성공 상태 같은 짧은 수명 상태 공유
 
-반대로, 현재 구조는 "영상 자체를 API 서버가 직접 중계하는 부하"나 "AI 모델 추론이 애플리케이션 JVM 안에서 같이 도는 부하"를 피하도록 설계되어 있다.
+반대로, 현재 구조는 "영상 자체를 API 서버가 직접 중계하는 부하"나 "AI 모델 추론(IDV 등)이 애플리케이션 JVM 안에서 같이 도는 부하"를 피하도록 설계되어 있다.
 
 ## 4. 현재 구조의 한계와 병목 가능성
 
@@ -272,7 +265,7 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 - 연결이 없는 동안의 알림을 재전송하거나 적재하는 durable inbox 구조는 현재 코드상 보이지 않는다.
 - 즉, 이 경로는 "실시간 push" 최적화이지 "반드시 저장되는 알림함" 구조는 아니다.
 
-## 5. 보완 우선순위 제안 (with AI)
+## 5. 보완 우선순위 제안
 
 현재 구조를 유지하면서 대용량 대응력을 더 높이려면 우선순위는 아래 순서가 적절하다.
 

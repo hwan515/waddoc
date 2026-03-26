@@ -42,7 +42,7 @@ RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
     echo "fi" >> /root/.bashrc
 RUN echo -e "Downloads\nPictures\nTemplates\nDocuments\nMusic\nPublic\nVideos\nsnap\nDesktop" > /root/.hidden
 
-# 6. 자동 실행 스크립트 작성 (TCP Endpoint & Camera Streamer)
+# 6. 자동 실행 스크립트 작성 (TCP Endpoint & Camera Streamer & BioSignal Publisher)
 RUN echo '#!/bin/bash\n\
     source /opt/ros/humble/setup.bash\n\
     if [ -f /root/workspace/install/setup.bash ]; then\n\
@@ -50,6 +50,7 @@ RUN echo '#!/bin/bash\n\
     fi\n\
     ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0 &\n\
     ros2 run my_ros2_basics camera_streamer &\n\
+    ros2 run my_ros2_basics biosignal_publisher &\n\
     exec "$@"\n'\
     > /custom_entrypoint.sh && chmod +x /custom_entrypoint.sh
 

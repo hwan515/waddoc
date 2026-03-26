@@ -1,4 +1,5 @@
 port: 7880
+prometheus_port: 6789
 rtc:
   use_external_ip: false
   udp_port: 8882

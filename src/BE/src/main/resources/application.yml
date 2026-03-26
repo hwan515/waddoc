@@ -1,6 +1,19 @@
 server:
   port: 8080
 
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
@@ -54,6 +67,11 @@ robot:
   command-base-url: ${ROBOT_COMMAND_BASE_URL:http://localhost}
   command-timeout-ms: ${ROBOT_COMMAND_TIMEOUT_MS:5000}
 
+monitoring:
+  access:
+    cookie-name: monitoring_access
+    cookie-path: /grafana/
+    cookie-max-age: 28800
 springdoc:
   api-docs:
     path: /swagger/spring/openapi.json

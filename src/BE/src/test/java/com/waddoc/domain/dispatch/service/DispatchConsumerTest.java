@@ -15,10 +15,13 @@ import com.waddoc.domain.vehicle.entity.Vehicle;
 import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
+import com.waddoc.global.monitoring.KafkaMonitoringMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -35,6 +38,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class DispatchConsumerTest {
+
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @Mock
     private DispatchOutboxRepository dispatchOutboxRepository;
@@ -54,6 +59,9 @@ class DispatchConsumerTest {
     @Mock
     private DemoModePolicy demoModePolicy;
 
+    @Spy
+    private KafkaMonitoringMetrics kafkaMonitoringMetrics = new KafkaMonitoringMetrics(meterRegistry);
+
     @InjectMocks
     private DispatchConsumer dispatchConsumer;
 
@@ -72,6 +80,12 @@ class DispatchConsumerTest {
         dispatchConsumer.consume(message);
 
         assertThat(outbox.isRetryPending()).isTrue();
+        assertThat(meterRegistry.get("waddoc.kafka.consumer.processed")
+                .tag("topic", KafkaTopics.DISPATCH_REQUESTS_TOPIC)
+                .tag("consumer_group", "dispatch-group")
+                .tag("result", "success")
+                .counter()
+                .count()).isEqualTo(1.0);
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
         verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
     }

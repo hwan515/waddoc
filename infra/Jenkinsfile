@@ -43,6 +43,7 @@ pipeline {
         PROJECT_PATH = '/home/ubuntu/S14P21A603'   // EC2 내 프로젝트 경로
         // 운영 환경변수 파일(.env)은 서버 로컬 파일을 사용한다.
         PROD_ENV_FILE = '/home/ubuntu/.waddoc/prod.env'
+        COMPOSE_FILES = '-f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml'
         DOCKER_BUILDKIT = '1'
         BUILDX_BUILDER = 'waddoc-builder'          // buildx 빌더 이름 접두사
     }
@@ -100,6 +101,7 @@ pipeline {
                         env.FP_CHANGED = 'true'
                         env.ZENOH_CHANGED = 'true'
                         env.INFRA_CHANGED = 'true'
+                        env.MONITORING_CHANGED = 'true'
                         env.NGINX_CHANGED = 'true'
                     } else {
                         env.BE_CHANGED    = changedFiles.any { it.startsWith('src/BE/') } ? 'true' : 'false'
@@ -108,12 +110,17 @@ pipeline {
                         env.ZENOH_CHANGED = changedFiles.any {
                             it.startsWith('src/zenoh-server/') || it.startsWith('src/BE/zenoh-server/')
                         } ? 'true' : 'false'
+                        env.MONITORING_CHANGED = changedFiles.any {
+                            it == 'infra/docker-compose.monitoring.prod.yml' || it.startsWith('infra/monitoring/')
+                        } ? 'true' : 'false'
                         env.NGINX_CHANGED = changedFiles.any { it.startsWith('infra/nginx/') } ? 'true' : 'false'
                         // Jenkinsfile 변경만으로 운영 스택 전체 재기동이 일어나지 않도록 제외한다.
                         env.INFRA_CHANGED = changedFiles.any {
                             it.startsWith('infra/') &&
                             it != 'infra/Jenkinsfile' &&
-                            !it.startsWith('infra/nginx/')
+                            !it.startsWith('infra/nginx/') &&
+                            it != 'infra/docker-compose.monitoring.prod.yml' &&
+                            !it.startsWith('infra/monitoring/')
                         } ? 'true' : 'false'
                     }
 
@@ -121,6 +128,7 @@ pipeline {
                     echo "FE_CHANGED: ${env.FE_CHANGED}"
                     echo "FP_CHANGED: ${env.FP_CHANGED}"
                     echo "ZENOH_CHANGED: ${env.ZENOH_CHANGED}"
+                    echo "MONITORING_CHANGED: ${env.MONITORING_CHANGED}"
                     echo "NGINX_CHANGED: ${env.NGINX_CHANGED}"
                     echo "INFRA_CHANGED: ${env.INFRA_CHANGED}"
                 }
@@ -219,12 +227,21 @@ pipeline {
                 expression {
                     env.BE_CHANGED == 'true' || env.FE_CHANGED == 'true' ||
                     env.FP_CHANGED == 'true' || env.ZENOH_CHANGED == 'true' ||
-                    env.NGINX_CHANGED == 'true' || env.INFRA_CHANGED == 'true'
+                    env.MONITORING_CHANGED == 'true' || env.NGINX_CHANGED == 'true' || env.INFRA_CHANGED == 'true'
                 }
             }
             steps {
                 script {
-                    def pullableInfraServices = 'nginx frontend frontend-phone spring-api postgres redis zookeeper kafka livekit coturn zenoh_bridge_ec2'
+                    def monitoringServices = 'prometheus grafana cadvisor postgres-exporter redis-exporter kafka-exporter'
+                    def pullableServices = sh(
+                            script: """
+                                cd ${PROJECT_PATH}/infra
+                                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} config --services \
+                                  | grep -vx 'ros2_app_ec2' \
+                                  | tr '\\n' ' '
+                            """,
+                            returnStdout: true
+                    ).trim()
 
                     // 변경되지 않은 서비스는 현재 떠 있는 컨테이너의 이미지 태그를 그대로 사용
                     def resolveRunningTag = { service, fallback ->
@@ -232,7 +249,7 @@ pipeline {
                             script: """
                                 cd ${PROJECT_PATH}/infra
                                 # scale된 서비스는 여러 컨테이너가 나올 수 있으므로 첫 컨테이너 기준으로 태그를 읽는다.
-                                CID=\$(docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml ps -q ${service} | head -n 1 || true)
+                                CID=\$(docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} ps -q ${service} | head -n 1 || true)
                                 if [ -n "\$CID" ]; then
                                   docker inspect --format='{{.Config.Image}}' "\$CID" 2>/dev/null || true
                                 fi
@@ -267,8 +284,8 @@ pipeline {
                                 docker buildx use ${BUILDX_BUILDER} 2>/dev/null || \
                                 docker buildx create --name ${BUILDX_BUILDER} --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/infra && \
-                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${pullableInfraServices} && \
-                                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --build --scale spring-api=${SPRING_API_REPLICAS}
+                                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} pull ${pullableServices} && \
+                                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --build --scale spring-api=${SPRING_API_REPLICAS}
                             '''
                         } else {
                             def pullServices = []
@@ -304,15 +321,24 @@ pipeline {
                                 if (pullServices) {
                                     sh """
                                         cd ${PROJECT_PATH}/infra && \
-                                        docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml pull ${pullSvc}
+                                        docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} pull ${pullSvc}
                                     """
                                 }
                                 sh """
                                     cd ${PROJECT_PATH}/infra && \
-                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --no-deps ${buildArg} ${scaleArg} ${svc}
+                                    docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --no-deps ${buildArg} ${scaleArg} ${svc}
                                 """
                             } else {
                                 echo 'No services to deploy.'
+                            }
+
+                            if (env.MONITORING_CHANGED == 'true') {
+                                echo '=== Deploying monitoring services ==='
+                                sh """
+                                    cd ${PROJECT_PATH}/infra && \
+                                    docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} pull ${monitoringServices} && \
+                                    docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --no-deps ${monitoringServices}
+                                """
                             }
 
                             def shouldRestartNginx =
@@ -326,7 +352,7 @@ pipeline {
                                 echo '=== Restarting nginx (nginx/app change) ==='
                                 sh '''
                                     cd ${PROJECT_PATH}/infra && \
-                                    docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml restart nginx
+                                    docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} restart nginx
                                 '''
                             }
                         }
@@ -335,14 +361,14 @@ pipeline {
                         echo "=== Ensuring spring-api replicas: ${SPRING_API_REPLICAS} ==="
                         sh '''
                             cd ${PROJECT_PATH}/infra && \
-                            docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml up -d --no-deps --scale spring-api=${SPRING_API_REPLICAS} spring-api
+                            docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --no-deps --scale spring-api=${SPRING_API_REPLICAS} spring-api
                         '''
                     }
 
                     echo '=== Checking Container Status ==='
                     sh '''
                         cd ${PROJECT_PATH}/infra && \
-                        docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml ps
+                        docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} ps
                     '''
                 }
             }
@@ -358,6 +384,7 @@ pipeline {
                 if (env.FE_CHANGED == 'true') msg += ' [Frontend]'
                 if (env.FP_CHANGED == 'true') msg += ' [Phone]'
                 if (env.ZENOH_CHANGED == 'true') msg += ' [Zenoh]'
+                if (env.MONITORING_CHANGED == 'true') msg += ' [Monitoring]'
                 if (env.NGINX_CHANGED == 'true') msg += ' [Nginx]'
                 if (env.INFRA_CHANGED == 'true') msg += ' [Infra]'
                 echo msg
@@ -369,7 +396,7 @@ pipeline {
             sh '''
                 # 실패 시 최근 compose 로그를 바로 확인할 수 있게 출력한다.
                 cd ${PROJECT_PATH}/infra && \
-                docker compose --env-file ${PROD_ENV_FILE} -f docker-compose.prod.yml logs --tail=200 || true
+                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} logs --tail=200 || true
             '''
         }
         always {
