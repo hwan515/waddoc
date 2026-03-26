@@ -102,9 +102,7 @@ const PatientPortal = () => {
                 <div className="flex items-center gap-8">
                     {/* Logo */}
                     <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/patient/portal')}>
-                        <div className="bg-primary/10 p-1.5 rounded-lg">
-                            <Activity className="w-6 h-6 text-primary" strokeWidth={2.5} />
-                        </div>
+                        <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-10 w-10" />
                         <span className="font-bold text-xl text-slate-800 tracking-tight">
                             Waddoc<span className="text-primary"> 왔닥</span>
                         </span>

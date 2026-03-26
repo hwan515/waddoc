@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Activity, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
 import Input from '../../components/common/Input';
@@ -76,9 +76,7 @@ const Login = () => {
 
                 {/* 로고 */}
                 <Link to="/" className="flex items-center gap-3 w-fit">
-                    <div className="bg-primary/10 p-2 rounded-xl">
-                        <Activity className="w-8 h-8 text-primary" strokeWidth={2.5} />
-                    </div>
+                    <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-12 w-12" />
                     <span className="font-bold text-2xl text-dark tracking-tight">
                         Waddoc<span className="text-primary"> 왔닥</span>
                     </span>
@@ -177,8 +175,8 @@ const Login = () => {
                             {/* Header mockup */}
                             <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                                        <Activity className="w-5 h-5 text-white" />
+                                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center p-1.5">
+                                        <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-full w-full" />
                                     </div>
                                     <div>
                                         <div className="w-24 h-4 bg-white/30 rounded mb-1"></div>

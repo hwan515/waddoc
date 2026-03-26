@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } from 'lucide-react';
+import { LogOut, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
@@ -600,6 +600,10 @@ const ControlCenter = () => {
 
                 const posePayload = data?.vehiclePose ?? data?.current_pose ?? data?.currentPose;
                 const pathPayload = data?.pathPoints ?? data?.trajectory;
+                const fullPathPayload = data?.fullPathPoints
+                    ?? data?.fullTrajectory
+                    ?? data?.globalPath
+                    ?? pathPayload;
                 const reportedState = normalizeMonitorState(
                     data?.state
                     ?? data?.vehicleState
@@ -744,9 +748,7 @@ const ControlCenter = () => {
                         onClick={handleGoHome}
                         className="flex items-center gap-3 text-left transition-opacity hover:opacity-90"
                     >
-                        <div className="bg-white/10 p-2 rounded-lg">
-                            <Activity className="w-5 h-5 text-secondary" />
-                        </div>
+                        <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-10 w-10 rounded-lg" />
                         <span className="font-bold text-xl tracking-tight">
                             Waddoc<span className="text-secondary"> 왔닥</span>
                             <span className="ml-3 pl-3 border-l border-white/20 text-sm font-medium text-slate-300">통합 관제 센터</span>
@@ -836,10 +838,10 @@ const ControlCenter = () => {
                         selectedVehicleId={selectedVehicleId}
                         setSelectedVehicleId={setSelectedVehicleId}
                         minimapVehiclePose={minimapVehiclePose}
-                        minimapPathPoints={minimapPathPoints}
+                        minimapPathPoints={effectiveMinimapPathPoints}
                         minimapFullPathPoints={minimapFullPathPoints}
-                        vehicleState={vehicleState}
-                        vehicleSpeed={vehicleSpeed}
+                        vehicleState={effectiveVehicleState}
+                        vehicleSpeed={effectiveVehicleSpeed}
                         vehicleLocation={vehicleLocation}
                         minimapRouteAlert={effectiveMinimapRouteAlert}
                         updateIntervalMs={MINIMAP_POLL_INTERVAL_MS}

@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import {
-    Activity,
     ArrowRight,
     Bot,
     ShieldCheck,
@@ -136,9 +135,7 @@ const MainEntrance = () => {
             <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
                 <header className="mb-6 flex items-center justify-between gap-4">
                     <Link to="/" className="inline-flex items-center gap-3">
-                        <div className="rounded-2xl bg-primary/10 p-3">
-                            <Activity className="h-7 w-7 text-primary" strokeWidth={2.5} />
-                        </div>
+                        <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-13 w-13" />
                         <div>
                             <div className="text-xl font-bold tracking-tight text-dark">
                                 Waddoc<span className="text-primary"> 왔닥</span>
