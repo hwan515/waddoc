@@ -1,6 +1,16 @@
 server:
   port: 8080
 
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
@@ -45,6 +55,12 @@ app:
 
 dispatch:
   outbox-relay-interval-ms: 1000
+
+monitoring:
+  access:
+    cookie-name: monitoring_access
+    cookie-path: /grafana/
+    cookie-max-age: 28800
 
 springdoc:
   api-docs:
