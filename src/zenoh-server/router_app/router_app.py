@@ -7,7 +7,6 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from nav_msgs.msg import Odometry
-from pydantic import BaseModel
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from std_msgs.msg import Bool, Int32, String
@@ -30,6 +29,7 @@ current_state = {
         'source_node': None,
         'status': None,
         'trajectory': [],
+        'path_waypoints': [],
         'current_pose': None,
         'speed_ms': 0.0,
         'speed_kmh': 0.0,
@@ -53,14 +53,6 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
-
-
-class WaypointCommandRequest(BaseModel):
-    target: int
-
-
-class EstopCommandRequest(BaseModel):
-    state: bool
 
 
 def normalize_angle(angle: float) -> float:
@@ -138,6 +130,18 @@ def sanitize_path_points(points):
     return sanitized
 
 
+def build_location_payload(pose):
+    sanitized_pose = sanitize_pose(pose)
+    if sanitized_pose is None:
+        return None
+
+    # FE가 현재 latitude/longitude 키를 보고 있으므로, GPS가 없을 때는 minimap 좌표를 그대로 전달한다.
+    return {
+        'latitude': round_or_none(sanitized_pose.get('x'), digits=4),
+        'longitude': round_or_none(sanitized_pose.get('z'), digits=4),
+    }
+
+
 def resolve_snapshot_speed_ms(payload, current_pose):
     candidates = [
         payload.get('speedMs'),
@@ -212,29 +216,6 @@ def parse_env_int(name, default):
         return int(default)
 
 
-@app.get('/api/health')
-def get_health():
-    node = ros_node
-    ros_ready = node is not None
-
-    with state_lock:
-        has_odom = bool(current_state['has_odom'])
-        robot_state = str(current_state.get('robot_state') or '대기')
-
-    health = {
-        'status': 'ok',
-        'rosBridgeReady': ros_ready,
-        'hasOdom': has_odom,
-        'robotState': robot_state,
-    }
-
-    if ros_ready:
-        health['waypointSubscriberCount'] = int(node.waypoint_pub.get_subscription_count())
-        health['estopSubscriberCount'] = int(node.estop_pub.get_subscription_count())
-
-    return health
-
-
 @app.get('/api/odom')
 def get_odom():
     with state_lock:
@@ -245,11 +226,20 @@ def get_odom():
 def get_minimap_state():
     with state_lock:
         route_snapshot = current_state['route_snapshot']
-        path_points = sanitize_path_points(route_snapshot.get('trajectory', []))
+        trajectory_points = sanitize_path_points(route_snapshot.get('trajectory', []))
+        path_waypoints = sanitize_path_points(route_snapshot.get('path_waypoints', []))
+
+        if len(trajectory_points) > 1:
+            path_points = trajectory_points
+        elif len(path_waypoints) > 1:
+            path_points = path_waypoints
+        else:
+            path_points = trajectory_points or path_waypoints
 
         route_pose = sanitize_pose(route_snapshot.get('current_pose'))
         odom_pose = sanitize_pose(current_state['minimap_pose']) if current_state['has_odom'] else None
         vehicle_pose = route_pose or odom_pose
+        vehicle_location = build_location_payload(vehicle_pose)
 
         speed_ms = to_float(route_snapshot.get('speed_ms'))
         if speed_ms is None:
@@ -278,6 +268,11 @@ def get_minimap_state():
             'currentPose': vehicle_pose,
             'pathPoints': path_points,
             'trajectory': path_points,
+            'currentLocation': vehicle_location,
+            'vehicleLocation': vehicle_location,
+            'location': vehicle_location,
+            'latitude': None if vehicle_location is None else vehicle_location['latitude'],
+            'longitude': None if vehicle_location is None else vehicle_location['longitude'],
             'routeVersion': int(route_snapshot.get('route_version', 0) or 0),
             'plannerType': route_snapshot.get('planner_type'),
             'goalWaypointId': route_snapshot.get('goal_waypoint_id'),
@@ -306,32 +301,12 @@ def trigger_estop(state: int):
     }
 
 
-@app.post('/api/cmd/estop')
-def trigger_estop_json(payload: EstopCommandRequest):
-    node = get_ros_node_or_raise()
-    result = node.send_emergency_stop(payload.state)
-    return {
-        'message': f'E-Stop set to {bool(payload.state)}',
-        **result,
-    }
-
-
 @app.post('/api/cmd/waypoint/{target}')
 def trigger_waypoint(target: int):
     node = get_ros_node_or_raise()
     result = node.send_waypoint(target)
     return {
         'message': f'Waypoint {target} sent',
-        **result,
-    }
-
-
-@app.post('/api/cmd/waypoint')
-def trigger_waypoint_json(payload: WaypointCommandRequest):
-    node = get_ros_node_or_raise()
-    result = node.send_waypoint(payload.target)
-    return {
-        'message': f'Waypoint {payload.target} sent',
         **result,
     }
 
@@ -394,6 +369,7 @@ class Ec2ControlNode(Node):
 
         current_pose = sanitize_pose(payload.get('current_pose'))
         trajectory = payload.get('trajectory', [])
+        path_waypoints = payload.get('path_waypoints', [])
         speed_ms = resolve_snapshot_speed_ms(payload, payload.get('current_pose'))
         speed_kmh = resolve_snapshot_speed_kmh(payload, payload.get('current_pose'), speed_ms)
 
@@ -406,6 +382,7 @@ class Ec2ControlNode(Node):
                 'source_node': payload.get('source_node'),
                 'status': payload.get('status'),
                 'trajectory': trajectory if isinstance(trajectory, list) else [],
+                'path_waypoints': path_waypoints if isinstance(path_waypoints, list) else [],
                 'current_pose': current_pose,
                 'speed_ms': float(speed_ms),
                 'speed_kmh': float(speed_kmh),

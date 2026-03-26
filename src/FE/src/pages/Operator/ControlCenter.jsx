@@ -124,6 +124,16 @@ const extractVehicleLocation = (...candidates) => {
     return null;
 };
 
+const normalizeBatterySoc = (value) => {
+    const parsed = toFiniteNumber(value);
+
+    if (parsed === null) {
+        return null;
+    }
+
+    return Math.max(0, Math.min(100, parsed));
+};
+
 const getMissionRecencyValue = (mission) => {
     const timestamp = mission?.updatedAt || mission?.dispatchedAt || mission?.createdAt;
     const parsed = timestamp ? Date.parse(timestamp) : Number.NaN;
@@ -208,7 +218,7 @@ const ControlCenter = () => {
                             id: mission.vehicleId,
                             status: isPrimaryServiceVehicle ? statusLabel : '추후 서비스 예정',
                             location: isPrimaryServiceVehicle ? location : null,
-                            battery: isPrimaryServiceVehicle ? 85 : null,
+                            battery: null,
                             speed: isPrimaryServiceVehicle ? missionSpeed : 0,
                             lastUpdated: mission.updatedAt || new Date().toISOString(),
                             mission,
@@ -366,20 +376,30 @@ const ControlCenter = () => {
                     {
                         latitude: data?.latitude,
                         longitude: data?.longitude
+                    },
+                    {
+                        latitude: posePayload?.x,
+                        longitude: posePayload?.z
                     }
+                );
+                const nextBattery = normalizeBatterySoc(
+                    data?.battery_soc
+                    ?? data?.batterySoc
                 );
 
                 setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
                 setMinimapPathPoints(sanitizePathPoints(pathPayload));
                 setMinimapMonitorState(nextState);
                 setMinimapVehicleSpeed(nextSpeed);
-                if (nextLocation) {
-                    setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
-                        vehicle.id === ACTIVE_OPERATOR_VEHICLE_ID
-                            ? { ...vehicle, location: nextLocation }
-                            : vehicle
-                    )));
-                }
+                setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
+                    vehicle.id === ACTIVE_OPERATOR_VEHICLE_ID
+                        ? {
+                            ...vehicle,
+                            location: nextLocation || vehicle.location,
+                            battery: nextBattery ?? vehicle.battery,
+                        }
+                        : vehicle
+                )));
             } catch (error) {
                 if (isMounted) {
                     const now = Date.now();
