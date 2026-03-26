@@ -1,6 +1,6 @@
 import { Navigation, Truck, Video, AlertOctagon, AlertTriangle } from 'lucide-react';
 import MinimapPanel from './MinimapPanel';
-import { getRobotCommandUrlCandidates } from '../../utils/runtimeConfig';
+import apiClient from '../../utils/api';
 
 const formatSpeed = (value) => {
     if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
@@ -63,32 +63,8 @@ const MapMonitoring = ({
         if (!window.confirm('정말로 E-Stop을 발동하시겠습니까?')) return;
 
         try {
-            let success = false;
-            let lastError = null;
-
-            for (const targetUrl of getRobotCommandUrlCandidates('/api/cmd/estop/1')) {
-                try {
-                    const response = await fetch(targetUrl, {
-                        method: 'POST',
-                        headers: { accept: 'application/json' }
-                    });
-
-                    if (response.ok) {
-                        success = true;
-                        break;
-                    }
-
-                    lastError = new Error(`E-Stop API error: ${response.status}`);
-                } catch (error) {
-                    lastError = error;
-                }
-            }
-
-            if (success) {
-                window.alert('E-Stop 명령을 전송했습니다.');
-            } else {
-                throw lastError || new Error('E-Stop API unavailable');
-            }
+            await apiClient.post('/robots/cmd/estop/1');
+            window.alert('E-Stop 명령을 전송했습니다.');
         } catch (error) {
             console.error('E-Stop error:', error);
             window.alert('E-Stop 명령 전송에 실패했습니다.');
