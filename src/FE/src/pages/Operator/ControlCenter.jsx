@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LogOut, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
@@ -8,8 +8,8 @@ import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
 import SystemMonitoring from '../../components/operator/SystemMonitoring';
-import { getRobotMinimapApiUrlCandidates, isDemoModeEnabled, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
-const MINIMAP_POLL_INTERVAL_MS = 100;
+import { isDemoModeEnabled, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
+import { useRobotSSE } from '../../hooks/useRobotSSE';
 const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
 const DEMO_MODE_ENABLED = isDemoModeEnabled();
 const MONITORING_TAB_ENABLED = isMonitoringTabEnabled();
@@ -473,8 +473,7 @@ const loadDashboardSnapshot = async ({
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
-    const minimapRequestInFlightRef = useRef(false);
-    const minimapErrorLoggedAtRef = useRef(0);
+    const { minimapData, stateData } = useRobotSSE();
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
@@ -558,138 +557,87 @@ const ControlCenter = () => {
     };
 
     useEffect(() => {
-        let isMounted = true;
+        if (!minimapData) return;
 
-        const fetchMinimapState = async () => {
-            if (!isMounted || minimapRequestInFlightRef.current) {
-                return;
+        const data = minimapData;
+        const posePayload = data?.vehiclePose ?? data?.current_pose ?? data?.currentPose;
+        const pathPayload = data?.pathPoints ?? data?.trajectory;
+        const reportedState = normalizeMonitorState(
+            data?.state
+            ?? data?.vehicleState
+            ?? data?.missionState
+            ?? data?.status
+        );
+        const nextSpeedKmh = toFiniteNumber(
+            data?.speedKmh
+            ?? data?.vehicleSpeedKmh
+        );
+        const nextSpeedMs = toFiniteNumber(
+            data?.speedMs
+            ?? data?.vehicleSpeedMs
+            ?? data?.speed
+        );
+        const nextState = inferMonitorStateFromTelemetry(
+            reportedState,
+            nextSpeedMs,
+            nextSpeedKmh
+        );
+        const nextSpeed = nextSpeedKmh !== null
+            ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
+            : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
+        const nextLocation = extractVehicleLocation(
+            data?.currentLocation,
+            data?.vehicleLocation,
+            data?.location,
+            data,
+            {
+                latitude: data?.latitude,
+                longitude: data?.longitude
+            },
+            {
+                latitude: posePayload?.x,
+                longitude: posePayload?.z
             }
+        );
+        const nextBattery = normalizeBatterySoc(
+            data?.battery_soc
+            ?? data?.batterySoc
+        );
+        const nextGoalWaypointId = typeof (data?.goalWaypointId ?? data?.goal_waypoint_id) === 'string'
+            ? (data.goalWaypointId ?? data.goal_waypoint_id)
+            : null;
+        const nextGoalWaypointNumber = parseWaypointNumberFromGoalId(nextGoalWaypointId);
+        const fullPathPayload = data?.fullPathPoints
+            ?? data?.fullTrajectory
+            ?? data?.globalPath
+            ?? pathPayload;
 
-            minimapRequestInFlightRef.current = true;
-
-            try {
-                let data = null;
-                let lastError = null;
-
-                for (const apiUrl of getRobotMinimapApiUrlCandidates()) {
-                    try {
-                        const response = await fetch(apiUrl, {
-                            method: 'GET',
-                            headers: {
-                                Accept: 'application/json'
-                            },
-                            cache: 'no-store'
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(`Minimap API error: ${response.status}`);
-                        }
-
-                        data = await response.json();
-                        break;
-                    } catch (error) {
-                        lastError = error;
-                    }
+        setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
+        setMinimapPathPoints(sanitizePathPoints(pathPayload));
+        setMinimapFullPathPoints(sanitizePathPoints(fullPathPayload));
+        setMinimapMonitorState(nextState);
+        setMinimapVehicleSpeed(nextSpeed);
+        setMinimapGoalWaypointId(nextGoalWaypointId);
+        setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
+            vehicle.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID
+                && shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
+                ? {
+                    ...vehicle,
+                    status: nextState || vehicle.status,
+                    speed: nextSpeed ?? vehicle.speed,
+                    location: nextLocation || vehicle.location,
+                    battery: nextBattery ?? vehicle.battery,
+                    lastUpdated: new Date().toISOString(),
                 }
+                : vehicle
+        )));
+    }, [minimapData]);
 
-                if (data === null) {
-                    throw lastError || new Error('Minimap API unavailable');
-                }
-
-                if (!isMounted) return;
-
-                const posePayload = data?.vehiclePose ?? data?.current_pose ?? data?.currentPose;
-                const pathPayload = data?.pathPoints ?? data?.trajectory;
-                const fullPathPayload = data?.fullPathPoints
-                    ?? data?.fullTrajectory
-                    ?? data?.globalPath
-                    ?? pathPayload;
-                const reportedState = normalizeMonitorState(
-                    data?.state
-                    ?? data?.vehicleState
-                    ?? data?.missionState
-                    ?? data?.status
-                );
-                const nextSpeedKmh = toFiniteNumber(
-                    data?.speedKmh
-                    ?? data?.vehicleSpeedKmh
-                );
-                const nextSpeedMs = toFiniteNumber(
-                    data?.speedMs
-                    ?? data?.vehicleSpeedMs
-                    ?? data?.speed
-                );
-                const nextState = inferMonitorStateFromTelemetry(
-                    reportedState,
-                    nextSpeedMs,
-                    nextSpeedKmh
-                );
-                const nextSpeed = nextSpeedKmh !== null
-                    ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
-                    : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
-                const nextLocation = extractVehicleLocation(
-                    data?.currentLocation,
-                    data?.vehicleLocation,
-                    data?.location,
-                    data,
-                    {
-                        latitude: data?.latitude,
-                        longitude: data?.longitude
-                    },
-                    {
-                        latitude: posePayload?.x,
-                        longitude: posePayload?.z
-                    }
-                );
-                const nextBattery = normalizeBatterySoc(
-                    data?.battery_soc
-                    ?? data?.batterySoc
-                );
-                const nextGoalWaypointId = typeof data?.goalWaypointId === 'string'
-                    ? data.goalWaypointId
-                    : null;
-                const nextGoalWaypointNumber = parseWaypointNumberFromGoalId(nextGoalWaypointId);
-
-                setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
-                setMinimapPathPoints(sanitizePathPoints(pathPayload));
-                setMinimapFullPathPoints(sanitizePathPoints(fullPathPayload));
-                setMinimapMonitorState(nextState);
-                setMinimapVehicleSpeed(nextSpeed);
-                setMinimapGoalWaypointId(nextGoalWaypointId);
-                setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
-                    vehicle.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID
-                        && shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
-                        ? {
-                            ...vehicle,
-                            status: nextState || vehicle.status,
-                            speed: nextSpeed ?? vehicle.speed,
-                            location: nextLocation || vehicle.location,
-                            battery: nextBattery ?? vehicle.battery,
-                            lastUpdated: new Date().toISOString(),
-                        }
-                        : vehicle
-                )));
-            } catch (error) {
-                if (isMounted) {
-                    const now = Date.now();
-                    if (now - minimapErrorLoggedAtRef.current >= 2000) {
-                        console.error('Minimap polling error:', error);
-                        minimapErrorLoggedAtRef.current = now;
-                    }
-                }
-            } finally {
-                minimapRequestInFlightRef.current = false;
-            }
-        };
-
-        fetchMinimapState();
-        const intervalId = window.setInterval(fetchMinimapState, MINIMAP_POLL_INTERVAL_MS);
-
-        return () => {
-            isMounted = false;
-            window.clearInterval(intervalId);
-        };
-    }, []);
+    useEffect(() => {
+        if (!stateData?.state) return;
+        const normalized = normalizeMonitorState(stateData.state);
+        if (normalized) setMinimapMonitorState(normalized);
+    }, [stateData]);
 
     const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
         || vehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle)
@@ -844,7 +792,7 @@ const ControlCenter = () => {
                         vehicleSpeed={effectiveVehicleSpeed}
                         vehicleLocation={vehicleLocation}
                         minimapRouteAlert={effectiveMinimapRouteAlert}
-                        updateIntervalMs={MINIMAP_POLL_INTERVAL_MS}
+                        updateIntervalMs={undefined}
                         useMockMinimapData={false}
                     />
                 )}
