@@ -1,0 +1,52 @@
+# ROS
+**/build/
+**/install/
+**/log/
+.idea/
+.vscode/
+.claude
+*.pem
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node
+**/node_modules
+**/dist
+
+# Infra secrets and certs
+infra/.env
+infra/certs/
+local-storage/
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Ll]ogs/
+[Bb]uild/
+[Bb]uilds/
+UserSettings/
+
+# Unity generated files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,53 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/waddoc
+    username: waddoc
+    password: waddoc_dev
+
+  jpa:
+    # flyway를 사용할 것이므로 ddl-auto는 none으로 설정
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+jwt:
+  secret: waddoc-dev-secret-key-must-be-at-least-32-chars-long
+  access-token-expiry: 900
+  refresh-token-expiry: 604800
+  mission-terminal-token-expiry: ${MISSION_TERMINAL_TOKEN_EXPIRY:1800}
+
+robot-terminal:
+  registry: ${ROBOT_TERMINAL_REGISTRY:robot-terminal-01|change-me|veh_GIMCHEON_01|GIMCHEON}
+
+ai:
+  file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
+  idv-url: ${AI_IDV_URL:http://70.12.130.107:8010/idv/api/v1/verify}
+  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:20000}
+
+file:
+  storage-root: ${FILE_STORAGE_ROOT:./local-storage/uploads}
+
+sms:
+  provider: mock
+  sender-number: "01000000000"
+
+livekit:
+  host: ${LIVEKIT_HOST:http://localhost:7880}
+  api-key: devkey
+  api-secret: devsecret
+  url: ${LIVEKIT_URL:ws://localhost:7880}
+
+telemetry:
+  api-key: ${TELEMETRY_API_KEY:telemetry-dev-key}
+
+app:
+  seed:
+    enabled: ${APP_SEED_ENABLED:true}
+    default-password: "${APP_SEED_DEFAULT_PASSWORD:Passw0rd!}"

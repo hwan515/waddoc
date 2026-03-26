@@ -1,0 +1,47 @@
+services:
+  ros2_humble:
+    build: .
+    container_name: ros2_dev_env
+    network_mode: "host"
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=1
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./workspace:/root/workspace:rw
+    command: tail -f /dev/null
+    depends_on:
+      - mediamtx
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu, video, compute, utility ]
+
+  zenoh_bridge:
+    image: eclipse/zenoh-bridge-ros2dds:1.7.2
+    container_name: zenoh_bridge
+    environment:
+      - ROS_DISTRO=humble
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=1
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    network_mode: "host"
+    command: [ "-e", "tcp/zenoh.waddoc.site:8081" ]
+    restart: unless-stopped
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx_server
+    network_mode: "host"
+    environment:
+      - MTX_WEBRTCICEUDP=yes
+      - MTX_WEBRTCICEHOSTSNAT1TO1=100.89.189.27
+    restart: unless-stopped

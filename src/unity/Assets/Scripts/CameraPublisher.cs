@@ -1,0 +1,162 @@
+using UnityEngine;
+using Unity.Robotics.ROSTCPConnector;
+using RosMessageTypes.Sensor;
+using RosMessageTypes.Std;
+using RosMessageTypes.BuiltinInterfaces;
+
+public class CameraPublisher : MonoBehaviour
+{
+    [Header("ROS")]
+    public string topicName = "/camera/image_raw";
+    public string frameId = "front_camera";
+
+    [Header("Camera")]
+    public Camera targetCamera;
+    public RenderTexture renderTexture;
+
+    [Header("Publish Settings")]
+    public int publishHz = 10;
+    public bool debugLog = true;
+
+    private ROSConnection ros;
+    private Texture2D texture2D;
+    private float publishInterval;
+    private float lastPublishTime = -999f;
+
+    void Start()
+    {
+        ros = ROSConnection.GetOrCreateInstance();
+        ros.RegisterPublisher<ImageMsg>(topicName);
+
+        if (targetCamera == null)
+        {
+            Debug.LogError("[CameraPublisher] targetCamera is not assigned.");
+            enabled = false;
+            return;
+        }
+
+        if (renderTexture == null)
+        {
+            Debug.LogError("[CameraPublisher] renderTexture is not assigned.");
+            enabled = false;
+            return;
+        }
+
+        // 안전하게 카메라 출력 텍스처를 다시 지정
+        targetCamera.targetTexture = renderTexture;
+
+        publishInterval = 1.0f / Mathf.Max(1, publishHz);
+
+        texture2D = new Texture2D(
+            renderTexture.width,
+            renderTexture.height,
+            TextureFormat.RGB24,
+            false
+        );
+
+        Debug.Log($"[CameraPublisher] Started. Publishing to {topicName}");
+    }
+
+    void LateUpdate()
+    {
+        if (Time.time - lastPublishTime < publishInterval)
+            return;
+
+        PublishImage();
+        lastPublishTime = Time.time;
+    }
+
+    void PublishImage()
+    {
+        if (targetCamera == null || renderTexture == null || texture2D == null)
+        {
+            Debug.LogWarning("[CameraPublisher] Missing targetCamera/renderTexture/texture2D");
+            return;
+        }
+
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture.active = renderTexture;
+
+        // RenderTexture의 현재 내용을 읽음
+        texture2D.ReadPixels(
+            new Rect(0, 0, renderTexture.width, renderTexture.height),
+            0,
+            0,
+            false
+        );
+        texture2D.Apply(false);
+
+        // 상하반전 보정
+        Color32[] pixels = texture2D.GetPixels32();
+        Color32[] flipped = FlipVertical(pixels, texture2D.width, texture2D.height);
+        byte[] imageBytes = ConvertColor32ToRgbBytes(flipped);
+
+        double now = Time.timeAsDouble;
+        int sec = (int)now;
+        uint nanosec = (uint)((now - sec) * 1e9);
+
+        HeaderMsg header = new HeaderMsg();
+        header.frame_id = frameId;
+        header.stamp = new TimeMsg(sec, nanosec);
+
+        ImageMsg imageMsg = new ImageMsg(
+            header,
+            (uint)renderTexture.height,
+            (uint)renderTexture.width,
+            "rgb8",
+            0,
+            (uint)(renderTexture.width * 3),
+            imageBytes
+        );
+
+        ros.Publish(topicName, imageMsg);
+
+        if (debugLog)
+        {
+            Debug.Log(
+                $"[CameraPublisher] Published {renderTexture.width}x{renderTexture.height}, " +
+                $"bytes={imageBytes.Length}, topic={topicName}"
+            );
+        }
+
+        RenderTexture.active = previous;
+    }
+
+    Color32[] FlipVertical(Color32[] src, int width, int height)
+    {
+        Color32[] dst = new Color32[src.Length];
+
+        for (int y = 0; y < height; y++)
+        {
+            int flippedY = height - 1 - y;
+            for (int x = 0; x < width; x++)
+            {
+                dst[flippedY * width + x] = src[y * width + x];
+            }
+        }
+
+        return dst;
+    }
+
+    byte[] ConvertColor32ToRgbBytes(Color32[] pixels)
+    {
+        byte[] bytes = new byte[pixels.Length * 3];
+
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            bytes[i * 3 + 0] = pixels[i].r;
+            bytes[i * 3 + 1] = pixels[i].g;
+            bytes[i * 3 + 2] = pixels[i].b;
+        }
+
+        return bytes;
+    }
+
+    void OnDestroy()
+    {
+        if (texture2D != null)
+        {
+            Destroy(texture2D);
+        }
+    }
+}

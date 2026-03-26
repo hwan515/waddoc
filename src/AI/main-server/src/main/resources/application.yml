@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: main-server
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+app:
+  frontend:
+    base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  ai-server:
+    base-url: ${AI_SERVER_BASE_URL:http://localhost:8000}
+  stt:
+    ws-base-url: ${STT_WS_BASE_URL:ws://localhost:8000}

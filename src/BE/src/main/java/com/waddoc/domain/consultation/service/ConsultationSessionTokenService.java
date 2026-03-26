@@ -1,0 +1,117 @@
+package com.waddoc.domain.consultation.service;
+
+import com.waddoc.domain.audit.service.AuditLogService;
+import com.waddoc.domain.consultation.dto.PostConsultationTokenRequest;
+import com.waddoc.domain.consultation.entity.ConnectionState;
+import com.waddoc.domain.consultation.dto.ReissueConsultationTokenResponse;
+import com.waddoc.domain.consultation.entity.ConsultationSession;
+import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
+import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.doctor.entity.DoctorProfile;
+import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.global.error.BusinessException;
+import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.authorization.AccessControlService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+
+/**
+ * 세션 재참여가 필요할 때 의사 또는 환자의 LiveKit 토큰을 다시 발급한다.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ConsultationSessionTokenService {
+
+    private final ConsultationSessionRepository consultationSessionRepository;
+    private final AccessControlService accessControlService;
+    private final ConsultationLiveKitService consultationLiveKitService;
+    private final AuditLogService auditLogService;
+
+    @Transactional(readOnly = true)
+    public ReissueConsultationTokenResponse reissueToken(
+            String sessionId,
+            PostConsultationTokenRequest request,
+            AuthenticatedUser authenticatedUser
+    ) {
+        ConsultationSession session = consultationSessionRepository.findWithParticipantsByPublicId(sessionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        // 재발급은 실제 진료가 진행 중인 세션에서만 허용한다.
+        if (session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.SESSION_NOT_IN_PROGRESS);
+        }
+
+        String token = switch (request.getParticipantType()) {
+            case DOCTOR -> reissueDoctorToken(session, authenticatedUser);
+            case PATIENT -> reissuePatientToken(session, request.getPatientId(), authenticatedUser);
+        };
+
+        return ReissueConsultationTokenResponse.of(
+                token,
+                consultationLiveKitService.getParticipantTokenExpiresInSeconds()
+        );
+    }
+
+    private String reissueDoctorToken(ConsultationSession session, AuthenticatedUser authenticatedUser) {
+        DoctorProfile doctorProfile = accessControlService.getDoctorProfileOrThrow(authenticatedUser);
+        // 토큰 재발급은 세션 담당 의사 본인만 가능하다.
+        if (!doctorProfile.getPublicId().equals(session.getCareCase().getDoctor().getPublicId())) {
+            throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
+        }
+
+        String token = consultationLiveKitService.issueDoctorToken(session, doctorProfile);
+        auditLogService.log(
+                "CONSULTATION_DOCTOR_TOKEN_REISSUED",
+                "CONSULTATION_SESSION",
+                session.getPublicId(),
+                "corr_ses_" + session.getPublicId(),
+                authenticatedUser.userId(),
+                authenticatedUser.role().name(),
+                Map.of("doctorId", doctorProfile.getPublicId())
+        );
+        return token;
+    }
+
+    private String reissuePatientToken(ConsultationSession session, String patientId, AuthenticatedUser authenticatedUser) {
+        accessControlService.assertAdmin(authenticatedUser);
+        if (patientId == null || patientId.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+
+        Patient patient = session.getCareCase().getPatient();
+        // 차량 단말은 관리자 권한으로 요청하지만, 세션에 연결된 동일 환자인지는 다시 확인한다.
+        if (!patient.getPublicId().equals(patientId)) {
+            throw new BusinessException(ErrorCode.PATIENT_MISMATCH);
+        }
+
+        // 재발급은 최초 입장용이 아니라, 이미 입장 이력이 있는 동일 환자의 재입장에만 허용한다.
+        if (session.getPatientJoinedAt() == null) {
+            throw new BusinessException(ErrorCode.PATIENT_NOT_JOINED_SESSION);
+        }
+
+        // 이미 CONNECTED 상태라면 재입장이 아니라 연결 중인 세션으로 보고 재발급하지 않는다.
+        ConnectionState patientConnectionState = session.getPatientConnectionState();
+        if (patientConnectionState != ConnectionState.RECONNECTING
+                && patientConnectionState != ConnectionState.DISCONNECTED) {
+            throw new BusinessException(ErrorCode.PATIENT_NOT_RECONNECTABLE);
+        }
+
+        String token = consultationLiveKitService.issuePatientToken(session, patient);
+        auditLogService.log(
+                "CONSULTATION_PATIENT_TOKEN_REISSUED",
+                "CONSULTATION_SESSION",
+                session.getPublicId(),
+                "corr_ses_" + session.getPublicId(),
+                authenticatedUser.userId(),
+                authenticatedUser.role().name(),
+                Map.of("patientId", patient.getPublicId())
+        );
+        return token;
+    }
+}

@@ -1,0 +1,59 @@
+/* 피처폰 전체 컨테이너 */
+.feature-phone {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: #1a1a2e;
+  padding: 20px;
+}
+
+/* 피처폰 본체 */
+.phone-body {
+  width: 360px;
+  background: linear-gradient(145deg, #2c2c2c 0%, #1a1a1a 100%);
+  border-radius: 28px;
+  padding: 24px 16px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 2px solid #383838;
+}
+
+/* 스피커 그릴 */
+.phone-speaker {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 0;
+}
+
+.speaker-slit {
+  width: 20px;
+  height: 2px;
+  background: #555;
+  border-radius: 1px;
+}
+
+/* 화면 */
+.phone-screen {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid #444;
+  height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: #d4e4d0;
+}
+
+/* 하단 마이크 구멍 */
+.phone-mic-hole {
+  width: 6px;
+  height: 6px;
+  background: #444;
+  border-radius: 50%;
+  margin: 4px auto 0;
+}

@@ -1,0 +1,2 @@
+"""Static prompt/data resources."""
+

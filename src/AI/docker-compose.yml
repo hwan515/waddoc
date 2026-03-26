@@ -1,0 +1,65 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - main-server
+
+  main-server:
+    build:
+      context: ./main-server
+    working_dir: /app
+    command: gradle bootRun --no-daemon
+    environment:
+      FRONTEND_BASE_URL: http://localhost:5173
+      AI_SERVER_BASE_URL: http://ai-server:8000
+      STT_WS_BASE_URL: ws://localhost:8000
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./main-server:/app
+      - gradle_cache:/home/gradle/.gradle
+    depends_on:
+      - ai-server
+
+  ai-server:
+    build:
+      context: ./ai-server
+    working_dir: /app
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      UPSTAGE_API_KEY: ${UPSTAGE_API_KEY}
+      UPSTAGE_BASE_URL: ${UPSTAGE_BASE_URL:-https://api.upstage.ai/v1}
+      UPSTAGE_MODEL: ${UPSTAGE_MODEL:-solar-pro2}
+      CORS_ORIGINS_RAW: http://localhost:5173
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cuda}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-float16}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ko}
+      WHISPER_INITIAL_PROMPT: "${WHISPER_INITIAL_PROMPT:-증상, 기침, 목 통증, 인후통, 코막힘, 콧물, 두통, 복통, 피부 발진, 어지러움, 이비인후과, 내과, 피부과, 정형외과, 신경과, 예약}"
+      WHISPER_PARTIAL_INTERVAL_MS: ${WHISPER_PARTIAL_INTERVAL_MS:-1200}
+      WHISPER_VAD_MIN_SILENCE_MS: ${WHISPER_VAD_MIN_SILENCE_MS:-500}
+      WHISPER_PARTIAL_BEAM_SIZE: ${WHISPER_PARTIAL_BEAM_SIZE:-1}
+      WHISPER_PARTIAL_BEST_OF: ${WHISPER_PARTIAL_BEST_OF:-1}
+      WHISPER_FINAL_BEAM_SIZE: ${WHISPER_FINAL_BEAM_SIZE:-5}
+      WHISPER_FINAL_BEST_OF: ${WHISPER_FINAL_BEST_OF:-5}
+    gpus: all
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-server:/app
+
+volumes:
+  frontend_node_modules:
+  gradle_cache:
