@@ -52,6 +52,7 @@ const getMissionStatusBadgeClass = (status) => {
         case '종료/복귀':
             return 'bg-green-100 text-green-700 border-green-200';
         case '시연 대기':
+        case '대기':
         case '대기 중':
         case '추후 서비스 예정':
         default:

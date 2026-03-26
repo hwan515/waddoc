@@ -15,8 +15,7 @@ const formatCoordinate = (value) => {
 };
 
 const formatSpeed = (value) => {
-    if (typeof value !== 'number' || Number.isNaN(value)) return '0 km/h';
-    if (value <= 0) return '0 km/h';
+    if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
     return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
 };
 
@@ -28,43 +27,68 @@ const formatUpdateInterval = (value) => {
     return `${value} ms`;
 };
 
+const normalizeState = (state) => {
+    if (typeof state !== 'string') return '대기';
+
+    const trimmed = state.trim();
+    if (!trimmed) return '대기';
+
+    if (trimmed === 'CREATED') return '대기';
+    if (['WAITING', 'STANDBY', 'IDLE'].includes(trimmed.toUpperCase())) return '대기';
+
+    return trimmed;
+};
+
 const getStatePresentation = (state) => {
-    switch (state) {
-        case '출발':
+    const normalizedState = normalizeState(state);
+
+    switch (normalizedState) {
+        case '대기':
+        case '대기 중':
             return {
-                label: '출발',
+                label: '대기',
+                chipClass: 'border-emerald-300/30 bg-emerald-400/12 text-emerald-100',
+                dotClass: 'bg-emerald-300'
+            };
+        case '출발':
+        case '출동':
+            return {
+                label: '출동',
                 chipClass: 'border-emerald-300/30 bg-emerald-400/12 text-emerald-100',
                 dotClass: 'bg-emerald-300'
             };
         case '주행 중':
+        case '이동 중':
             return {
                 label: '주행 중',
                 chipClass: 'border-sky-300/30 bg-sky-400/12 text-sky-100',
                 dotClass: 'bg-sky-300'
             };
         case '도착':
+        case '도착 완료':
             return {
                 label: '도착',
                 chipClass: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
                 dotClass: 'bg-amber-300'
             };
-        case '진료중':
         case '진료 중':
+        case '본인 확인':
             return {
-                label: '진료중',
+                label: normalizedState,
                 chipClass: 'border-violet-300/30 bg-violet-400/12 text-violet-100',
                 dotClass: 'bg-violet-300'
             };
         case '긴급 정지':
         case '긴급정지':
+        case '이슈 발생':
             return {
-                label: '긴급 정지',
+                label: normalizedState,
                 chipClass: 'border-rose-300/30 bg-rose-400/12 text-rose-100',
                 dotClass: 'bg-rose-300'
             };
         default:
             return {
-                label: typeof state === 'string' && state.trim() ? state.trim() : '대기',
+                label: normalizedState,
                 chipClass: 'border-slate-300/20 bg-white/10 text-slate-100',
                 dotClass: 'bg-slate-300'
             };
@@ -75,7 +99,7 @@ const StatCard = ({ icon, label, children }) => {
     const IconComponent = icon;
 
     return (
-        <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md shadow-lg">
+        <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md">
             <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-slate-200">
                 <IconComponent className="h-4 w-4 text-secondary" />
                 {label}
@@ -136,7 +160,7 @@ const MinimapPanel = ({
                 <img
                     src={imageSrc}
                     alt="Unity minimap"
-                    className="absolute inset-0 h-full w-full rounded-4xl object-contain object-right select-none"
+                    className="absolute inset-0 h-full w-full select-none rounded-4xl object-contain object-right"
                     draggable="false"
                     onError={() => setImageReady(false)}
                 />
@@ -202,7 +226,7 @@ const MinimapPanel = ({
             </svg>
 
             <div className="relative z-10 flex h-full p-4 xl:p-5">
-                <div className="w-52.5 xl:w-60 space-y-3">
+                <div className="w-52.5 space-y-3 xl:w-60">
                     {showMockBadge && (
                         <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-100">
                             Mock
@@ -238,7 +262,7 @@ const MinimapPanel = ({
             </div>
 
             {!minimapVehiclePose && (
-                <div className="absolute bottom-4 left-[calc(28%+1rem)] rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white backdrop-blur-sm shadow-lg">
+                <div className="absolute bottom-4 left-[calc(28%+1rem)] rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white shadow-lg backdrop-blur-sm">
                     odom 위치 데이터가 연결되면 차량 마커가 표시됩니다.
                 </div>
             )}

@@ -238,7 +238,8 @@ def get_minimap_state():
 
         route_pose = sanitize_pose(route_snapshot.get('current_pose'))
         odom_pose = sanitize_pose(current_state['minimap_pose']) if current_state['has_odom'] else None
-        vehicle_pose = route_pose or odom_pose
+        # Prefer live odom over planner snapshot pose so the minimap marker follows the vehicle.
+        vehicle_pose = odom_pose or route_pose
         vehicle_location = build_location_payload(vehicle_pose)
 
         speed_ms = to_float(route_snapshot.get('speed_ms'))
@@ -391,7 +392,7 @@ class Ec2ControlNode(Node):
                 'clear_reason': payload.get('clear_reason'),
             }
 
-            if current_pose is not None:
+            if current_pose is not None and not current_state['has_odom']:
                 current_state['minimap_pose'] = current_pose
                 current_state['has_odom'] = True
 

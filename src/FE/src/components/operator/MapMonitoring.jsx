@@ -1,4 +1,4 @@
-import { Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
+import { Navigation, Truck, Video, AlertOctagon, AlertTriangle } from 'lucide-react';
 import MinimapPanel from './MinimapPanel';
 import { getRobotCommandUrlCandidates } from '../../utils/runtimeConfig';
 
@@ -12,8 +12,39 @@ const formatCoordinate = (value) => {
     return value.toFixed(4);
 };
 
+const getStatusBadge = (status) => {
+    switch (status) {
+        case '대기':
+        case '대기 중':
+            return 'bg-green-100 text-green-700 border-green-200';
+        case '출발':
+        case '출동':
+        case '주행 중':
+        case '이동 중':
+            return 'bg-blue-100 text-blue-700 border-blue-200';
+        case '도착':
+        case '도착 완료':
+            return 'bg-amber-100 text-amber-700 border-amber-200';
+        case '진료 중':
+        case '본인 확인':
+            return 'bg-purple-100 text-purple-700 border-purple-200';
+        case '복귀 중':
+        case '종료/복귀':
+            return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        case '긴급 정지':
+        case '긴급정지':
+        case '이슈 발생':
+            return 'bg-red-100 text-red-700 border-red-200';
+        case '추후 서비스 예정':
+            return 'bg-slate-100 text-slate-500 border-slate-200';
+        default:
+            return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+};
+
 const MapMonitoring = ({
     vehicles,
+    selectedVehicle,
     selectedVehicleId,
     setSelectedVehicleId,
     minimapVehiclePose,
@@ -21,12 +52,12 @@ const MapMonitoring = ({
     vehicleState = '대기',
     vehicleSpeed = 0,
     vehicleLocation = null,
+    minimapRouteAlert = null,
     updateIntervalMs = 100,
     useMockMinimapData = false,
 }) => {
-    // E-Stop REST API POST 요청 핸들러
     const handleEStop = async () => {
-        if (!window.confirm("정말로 E-Stop (긴급 정지)을 작동하시겠습니까?")) return;
+        if (!window.confirm('정말로 E-Stop을 발동하시겠습니까?')) return;
 
         try {
             let success = false;
@@ -36,7 +67,7 @@ const MapMonitoring = ({
                 try {
                     const response = await fetch(targetUrl, {
                         method: 'POST',
-                        headers: { 'accept': 'application/json' }
+                        headers: { accept: 'application/json' }
                     });
 
                     if (response.ok) {
@@ -51,39 +82,33 @@ const MapMonitoring = ({
             }
 
             if (success) {
-                alert("E-Stop 명령이 성공적으로 전송되었습니다.");
+                window.alert('E-Stop 명령을 전송했습니다.');
             } else {
                 throw lastError || new Error('E-Stop API unavailable');
             }
         } catch (error) {
-            console.error("E-Stop Error:", error);
-            alert("E-Stop 명령 전송에 실패했습니다.");
+            console.error('E-Stop error:', error);
+            window.alert('E-Stop 명령 전송에 실패했습니다.');
         }
     };
 
-    // 상태에 따른 배지 색상 결정 헬퍼 함수
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case '출발':
-            case '주행 중':
-            case '운행 중': return 'bg-blue-100 text-blue-700 border-blue-200';
-            case '대기':
-            case '대기 중': return 'bg-green-100 text-green-700 border-green-200';
-            case '도착': return 'bg-amber-100 text-amber-700 border-amber-200';
-            case '진료중':
-            case '진료 중': return 'bg-purple-100 text-purple-700 border-purple-200';
-            case '점검 중': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-            case '긴급 정지':
-            case '긴급정지':
-            case '장애': return 'bg-red-100 text-red-700 border-red-200';
-            case '추후 서비스 예정': return 'bg-slate-100 text-slate-500 border-slate-200';
-            default: return 'bg-slate-100 text-slate-700 border-slate-200';
-        }
-    };
+    const selectedVehicleLabel = selectedVehicle
+        ? (selectedVehicle.vehicleId || selectedVehicle.id)
+        : '차량을 선택하세요';
 
     return (
-        <div className="h-full flex p-4 gap-4">
+        <div className="flex h-full gap-4 p-4">
             <div className="relative min-w-0 flex-1 overflow-hidden rounded-4xl">
+                {minimapRouteAlert && (
+                    <div className="absolute left-4 top-4 z-10 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-900 shadow-lg shadow-amber-900/10 backdrop-blur-sm">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                        <div className="min-w-0">
+                            <div className="text-xs font-bold">{minimapRouteAlert.title}</div>
+                            <div className="text-[11px] text-amber-800/80">{minimapRouteAlert.detail}</div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="h-full overflow-hidden rounded-4xl">
                     <MinimapPanel
                         vehiclePose={minimapVehiclePose}
@@ -97,31 +122,29 @@ const MapMonitoring = ({
                 </div>
             </div>
 
-            {/* 우측: 사이드 패널 (E-Stop + 차량 리스트 + 카메라) */}
-            <div className="w-100 flex flex-col gap-4 shrink-0">
-                {/* 1. 상단: E-Stop 버튼 (최소한의 높이 h-12 고정, 너비 가득 참) */}
+            <div className="flex w-100 shrink-0 flex-col gap-4">
                 <button
                     onClick={handleEStop}
-                    className="w-full h-12 shrink-0 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transition-transform active:scale-100"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-600/30 transition-transform hover:bg-red-700 active:scale-100"
                 >
-                    <AlertOctagon className="w-5 h-5 animate-pulse" />
-                    EMERGENCY STOP (긴급 정지)
+                    <AlertOctagon className="h-5 w-5 animate-pulse" />
+                    EMERGENCY STOP
                 </button>
 
-                {/* 2. 중단: 차량 리스트 */}
-                <div className="flex-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
-                        <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                            <Truck className="w-5 h-5 text-primary" /> 운영 차량 리스트
+                <div className="flex flex-3 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5">
+                        <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
+                            <Truck className="h-5 w-5 text-primary" /> 운영 차량 리스트
                         </h3>
-                        <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-xs font-bold">
+                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
                             {vehicles.length}대
                         </span>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+
+                    <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto p-3">
                         {vehicles.map((vehicle) => {
                             const isPrimaryServiceVehicle = Boolean(vehicle.isPrimaryServiceVehicle);
-                            const isSelectedVehicle = isPrimaryServiceVehicle && vehicle.id === selectedVehicleId;
+                            const isSelectedVehicle = vehicle.id === selectedVehicleId;
                             const displayStatus = isSelectedVehicle ? vehicleState || vehicle.status : vehicle.status;
                             const displaySpeed = isSelectedVehicle && typeof vehicleSpeed === 'number'
                                 ? vehicleSpeed
@@ -133,27 +156,36 @@ const MapMonitoring = ({
                                 <div
                                     key={vehicle.id}
                                     onClick={isPrimaryServiceVehicle ? () => setSelectedVehicleId(vehicle.id) : undefined}
-                                    className={`p-3 rounded-xl border transition-all ${isSelectedVehicle
-                                        ? 'border-primary bg-primary/5 shadow-sm cursor-pointer'
+                                    className={`rounded-xl border p-3 transition-all ${isSelectedVehicle
+                                        ? 'cursor-pointer border-primary bg-primary/5 shadow-sm'
                                         : isPrimaryServiceVehicle
-                                            ? 'border-slate-200 cursor-pointer hover:border-accent-1/30 hover:bg-slate-50'
-                                            : 'border-slate-200 bg-slate-50/80 cursor-default opacity-75'
+                                            ? 'cursor-pointer border-slate-200 hover:border-accent-1/30 hover:bg-slate-50'
+                                            : 'cursor-default border-slate-200 bg-slate-50/80 opacity-75'
                                         }`}
                                 >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="font-bold text-slate-800 text-sm">{vehicle.id}</div>
-                                        <div className={`text-xs px-2 py-0.5 rounded-md border font-bold ${getStatusBadge(displayStatus)}`}>
+                                    <div className="mb-2 flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-slate-800">{vehicle.vehicleId || vehicle.id}</div>
+                                            {vehicle.displayPatientName && (
+                                                <div className="truncate text-[11px] text-slate-500">{vehicle.displayPatientName}</div>
+                                            )}
+                                            {vehicle.displayDestination && (
+                                                <div className="truncate text-[11px] text-slate-400">{vehicle.displayDestination}</div>
+                                            )}
+                                        </div>
+                                        <div className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold ${getStatusBadge(displayStatus)}`}>
                                             {displayStatus}
                                         </div>
                                     </div>
-                                    <div className="space-y-1.5 text-xs text-slate-600 font-medium">
+
+                                    <div className="space-y-1.5 text-xs font-medium text-slate-600">
                                         <div className="flex items-center gap-2">
-                                            <Navigation className="w-3.5 h-3.5 text-slate-400" />
+                                            <Navigation className="h-3.5 w-3.5 text-slate-400" />
                                             <span className="font-mono">
                                                 {formatCoordinate(displayLocation?.lat)}, {formatCoordinate(displayLocation?.lng)}
                                             </span>
                                         </div>
-                                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/60">
+                                        <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2">
                                             <span className="flex items-center gap-1.5">
                                                 배터리 <span className="font-bold text-slate-800">{displayBattery}</span>
                                             </span>
@@ -168,11 +200,11 @@ const MapMonitoring = ({
                     </div>
                 </div>
 
-                <div className="flex-2 bg-slate-950 rounded-4xl shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
-                    <div className="absolute top-3 left-3 z-10 bg-black/55 backdrop-blur-sm px-3 py-1.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-white/10">
-                        <Video className="w-3.5 h-3.5 text-red-400" />
-                        {selectedVehicleId ? `${selectedVehicleId} 카메라` : '차량을 선택하세요'}
-                        <span className="ml-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                <div className="relative flex flex-2 flex-col overflow-hidden rounded-4xl border border-slate-800 bg-slate-950 shadow-sm">
+                    <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
+                        <Video className="h-3.5 w-3.5 text-red-400" />
+                        {selectedVehicleLabel}
+                        <span className="ml-1 h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"></span>
                     </div>
 
                     <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-4xl">

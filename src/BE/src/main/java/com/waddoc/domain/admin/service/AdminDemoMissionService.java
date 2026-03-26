@@ -55,7 +55,7 @@ public class AdminDemoMissionService {
 
         if (mission.getTargetWaypointNumber() != null) {
             robotWaypointCommandClient.dispatchToWaypoint(mission.getTargetWaypointNumber());
-            advanceMissionTo(mission, MissionPhase.DISPATCHED);
+            advanceMissionTo(mission, MissionPhase.EN_ROUTE);
             waypointCommandSent = true;
         } else {
             advanceMissionTo(mission, MissionPhase.COMPLETED);

@@ -74,7 +74,7 @@ class AdminDemoMissionServiceTest {
         AdminDemoMissionActionResponse response =
                 adminDemoMissionService.dispatchMission(admin, mission.getPublicId());
 
-        assertThat(response.getPhase()).isEqualTo(MissionPhase.DISPATCHED);
+        assertThat(response.getPhase()).isEqualTo(MissionPhase.EN_ROUTE);
         assertThat(response.isWaypointCommandSent()).isTrue();
         assertThat(response.isDummyCompleted()).isFalse();
         assertThat(outbox.isCompleted()).isTrue();
