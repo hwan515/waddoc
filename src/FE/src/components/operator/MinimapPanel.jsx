@@ -119,6 +119,7 @@ const CoordinateRow = ({ axis, value }) => (
 const MinimapPanel = ({
     vehiclePose,
     pathPoints = [],
+    fullPathPoints = [],
     worldWidth = 4000,
     worldHeight = 4000,
     imageSrc = '/minimap.png',
@@ -147,8 +148,17 @@ const MinimapPanel = ({
         VIEWBOX_HEIGHT,
         UNITY_MINIMAP_OPTIONS
     );
+    const minimapFullPathPoints = pathPointsToMinimap(
+        fullPathPoints,
+        worldWidth,
+        worldHeight,
+        VIEWBOX_WIDTH,
+        VIEWBOX_HEIGHT,
+        UNITY_MINIMAP_OPTIONS
+    );
 
     const polylinePoints = minimapPathPoints.map((point) => `${point.x},${point.y}`).join(' ');
+    const fullPolylinePoints = minimapFullPathPoints.map((point) => `${point.x},${point.y}`).join(' ');
     const statePresentation = getStatePresentation(vehicleState);
 
     return (
@@ -180,6 +190,17 @@ const MinimapPanel = ({
                 className="absolute inset-0 h-full w-full rounded-4xl"
                 preserveAspectRatio="xMaxYMid meet"
             >
+                {minimapFullPathPoints.length > 1 && (
+                    <polyline
+                        points={fullPolylinePoints}
+                        fill="none"
+                        stroke="rgba(148, 163, 184, 0.72)"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    />
+                )}
+
                 {minimapPathPoints.length > 1 && (
                     <>
                         <polyline

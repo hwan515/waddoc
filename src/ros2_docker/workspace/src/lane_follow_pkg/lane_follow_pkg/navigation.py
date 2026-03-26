@@ -199,6 +199,8 @@ class TopologicalRoutePlanner:
         if not path:
             return None, 'path_not_found'
 
+        display_path = list(path)
+
         if len(path) >= 2 and path[0] == start_id:
             path = path[1:]
 
@@ -209,9 +211,15 @@ class TopologicalRoutePlanner:
         if not trajectory:
             return None, 'trajectory_not_found'
 
+        display_trajectory = self.build_spline_trajectory(display_path)
+        if not display_trajectory:
+            display_trajectory = list(trajectory)
+
         return PlannedRoute(
             start_id=start_id,
             goal_id=goal_id,
             path_ids=path,
             trajectory=trajectory,
+            display_path_ids=display_path,
+            display_trajectory=display_trajectory,
         ), None
