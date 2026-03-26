@@ -47,13 +47,9 @@ livekit:
 telemetry:
   api-key: ${TELEMETRY_API_KEY:telemetry-dev-key}
 
-<<<<<<< HEAD
-=======
 monitoring:
   access:
     cookie-secret: waddoc-dev-monitoring-cookie-secret-must-be-at-least-32
-
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 app:
   seed:
     enabled: ${APP_SEED_ENABLED:true}

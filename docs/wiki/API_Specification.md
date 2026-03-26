@@ -1763,8 +1763,6 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ## 11. 관리자 API (`/api/v1/admin`)
 
-<<<<<<< HEAD
-=======
 > 운영 monitoring 접근 제어용 내부 API를 포함한다.
 > `/actuator/health`, `/actuator/prometheus`는 Spring 앱 내부 경로로만 사용하며 public nginx 경로를 제공하지 않는다.
 
@@ -1812,8 +1810,6 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 403 | `AUTH_FORBIDDEN` | monitoring 쿠키는 있으나 ADMIN 권한이 아님 |
 
 ---
-
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 ### 11.1 예약 전체 목록 조회
 
 | 항목 | 값 |

@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-<<<<<<< HEAD
-import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck } from 'lucide-react';
-=======
 import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } from 'lucide-react';
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
@@ -11,17 +7,11 @@ import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
-<<<<<<< HEAD
-import { getRobotMinimapApiUrlCandidates } from '../../utils/runtimeConfig';
-const MINIMAP_POLL_INTERVAL_MS = 100;
-const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
-=======
 import SystemMonitoring from '../../components/operator/SystemMonitoring';
 import { getRobotMinimapApiUrlCandidates, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
 const MINIMAP_POLL_INTERVAL_MS = 100;
 const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
 const MONITORING_TAB_ENABLED = isMonitoringTabEnabled();
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 
 const MONITOR_STATE_LABELS = {
     DISPATCHED: '출발',
@@ -442,17 +432,12 @@ const ControlCenter = () => {
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
     const vehicleLocation = selectedVehicle?.location || null;
 
-<<<<<<< HEAD
-    const handleLogout = () => {
-=======
     const handleLogout = async () => {
         try {
             await apiClient.delete('/admin/monitoring/session');
         } catch (error) {
             console.error('Monitoring session cleanup failed:', error);
         }
-
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
         logout();
         navigate('/operator/login');
     };
@@ -520,8 +505,6 @@ const ControlCenter = () => {
                             <UserCheck className="w-4 h-4" />
                             가입 승인
                         </button>
-<<<<<<< HEAD
-=======
                         {MONITORING_TAB_ENABLED && (
                             <button
                                 onClick={() => setActiveTab('monitoring')}
@@ -534,7 +517,6 @@ const ControlCenter = () => {
                                 시스템 모니터링
                             </button>
                         )}
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
                     </div>
                 </div>
 
@@ -584,10 +566,7 @@ const ControlCenter = () => {
                 )}
                 {activeTab === 'patients' && <PatientManagement />}
                 {activeTab === 'approvals' && <GuardianApprovals />}
-<<<<<<< HEAD
-=======
                 {MONITORING_TAB_ENABLED && activeTab === 'monitoring' && <SystemMonitoring />}
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
             </main>
         </div>
     );

@@ -1,8 +1,6 @@
 server:
   port: 8080
 
-<<<<<<< HEAD
-=======
 management:
   prometheus:
     metrics:
@@ -16,8 +14,6 @@ management:
     web:
       exposure:
         include: health,prometheus
-
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
@@ -63,15 +59,11 @@ app:
 dispatch:
   outbox-relay-interval-ms: 1000
 
-<<<<<<< HEAD
-=======
 monitoring:
   access:
     cookie-name: monitoring_access
     cookie-path: /grafana/
     cookie-max-age: 28800
-
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 springdoc:
   api-docs:
     path: /swagger/spring/openapi.json
