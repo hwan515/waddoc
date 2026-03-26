@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck } from 'lucide-react';
+import { LogOut, Activity, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
@@ -7,9 +7,11 @@ import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
-import { getRobotMinimapApiUrlCandidates } from '../../utils/runtimeConfig';
+import SystemMonitoring from '../../components/operator/SystemMonitoring';
+import { getRobotMinimapApiUrlCandidates, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
 const MINIMAP_POLL_INTERVAL_MS = 100;
 const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
+const MONITORING_TAB_ENABLED = isMonitoringTabEnabled();
 
 const MONITOR_STATE_LABELS = {
     DISPATCHED: '출발',
@@ -430,7 +432,13 @@ const ControlCenter = () => {
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
     const vehicleLocation = selectedVehicle?.location || null;
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        try {
+            await apiClient.delete('/admin/monitoring/session');
+        } catch (error) {
+            console.error('Monitoring session cleanup failed:', error);
+        }
+
         logout();
         navigate('/operator/login');
     };
@@ -498,6 +506,18 @@ const ControlCenter = () => {
                             <UserCheck className="w-4 h-4" />
                             가입 승인
                         </button>
+                        {MONITORING_TAB_ENABLED && (
+                            <button
+                                onClick={() => setActiveTab('monitoring')}
+                                className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'monitoring'
+                                    ? 'bg-white text-primary shadow-sm'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                                    }`}
+                            >
+                                <BarChart3 className="w-4 h-4" />
+                                시스템 모니터링
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -547,6 +567,7 @@ const ControlCenter = () => {
                 )}
                 {activeTab === 'patients' && <PatientManagement />}
                 {activeTab === 'approvals' && <GuardianApprovals />}
+                {MONITORING_TAB_ENABLED && activeTab === 'monitoring' && <SystemMonitoring />}
             </main>
         </div>
     );
