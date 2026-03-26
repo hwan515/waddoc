@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     idv_timeout_ms: int = Field(default=5000, ge=100)
     idv_max_image_mb: int = Field(default=8, ge=1)
     idv_fail_fast_on_startup: bool = False
+    idv_adaface_quantization: str = "fp32"
     idv_model_version: str = "scrfd-adaface-ppocrv5-korean-v1"
 
     @property
