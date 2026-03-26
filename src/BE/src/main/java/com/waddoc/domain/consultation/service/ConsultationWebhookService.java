@@ -8,6 +8,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.monitoring.LiveKitMonitoringMetrics;
 import io.livekit.server.WebhookReceiver;
 import livekit.LivekitWebhook;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class ConsultationWebhookService {
     private final WebhookReceiver webhookReceiver;
     private final DisconnectTimerService disconnectTimerService;
     private final StringRedisTemplate redisTemplate;
+    private final LiveKitMonitoringMetrics liveKitMonitoringMetrics;
 
     @Transactional
     public void handleWebhook(String body, String authorizationHeader) {
@@ -46,32 +48,36 @@ public class ConsultationWebhookService {
         try {
             event = webhookReceiver.receive(body, authorizationHeader);
         } catch (RuntimeException e) {
+            liveKitMonitoringMetrics.recordWebhookFailure("invalid_signature");
             throw new BusinessException(ErrorCode.LIVEKIT_WEBHOOK_INVALID_SIGNATURE);
         }
 
         String eventName = event.getEvent();
         if (eventName == null || eventName.isBlank()) {
-            log.info("Ignoring LiveKit webhook with empty event name");
+            liveKitMonitoringMetrics.recordWebhookEvent("empty", () ->
+                    log.info("Ignoring LiveKit webhook with empty event name"));
             return;
         }
 
-        // 웹훅 멱등성: 이미 처리된 이벤트는 무시
-        String eventId = event.getId();
-        if (eventId != null && !eventId.isBlank()) {
-            String idempotencyKey = WEBHOOK_IDEMPOTENCY_PREFIX + eventId;
-            Boolean wasAbsent = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "1", WEBHOOK_IDEMPOTENCY_TTL);
-            if (!Boolean.TRUE.equals(wasAbsent)) {
-                log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
-                return;
+        liveKitMonitoringMetrics.recordWebhookEvent(eventName, () -> {
+            // 웹훅 멱등성: 이미 처리된 이벤트는 무시
+            String eventId = event.getId();
+            if (eventId != null && !eventId.isBlank()) {
+                String idempotencyKey = WEBHOOK_IDEMPOTENCY_PREFIX + eventId;
+                Boolean wasAbsent = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "1", WEBHOOK_IDEMPOTENCY_TTL);
+                if (!Boolean.TRUE.equals(wasAbsent)) {
+                    log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
+                    return;
+                }
             }
-        }
 
-        switch (eventName) {
-            case "participant_joined" -> handleParticipantJoined(event);
-            case "participant_left" -> handleParticipantLeft(event);
-            case "room_finished" -> handleRoomFinished(event);
-            default -> log.info("Ignoring unsupported LiveKit webhook event: {}", eventName);
-        }
+            switch (eventName) {
+                case "participant_joined" -> handleParticipantJoined(event);
+                case "participant_left" -> handleParticipantLeft(event);
+                case "room_finished" -> handleRoomFinished(event);
+                default -> log.info("Ignoring unsupported LiveKit webhook event: {}", eventName);
+            }
+        });
     }
 
     private void handleParticipantJoined(LivekitWebhook.WebhookEvent event) {
