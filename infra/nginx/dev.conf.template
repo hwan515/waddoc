@@ -30,15 +30,15 @@ http {
 
         # Spring Swagger UI / OpenAPI
         location = /swagger/spring {
-            return 301 /swagger/spring/;
-        }
-
-        location = /swagger/spring/ {
-            proxy_pass http://spring-api:8080/swagger/swagger-ui/index.html;
+            proxy_pass http://spring-api:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location = /swagger/spring/ {
+            return 301 /swagger/spring;
         }
 
         location = /swagger/spring/openapi.json {
@@ -50,7 +50,6 @@ http {
         }
 
         location /swagger/spring/ {
-            rewrite ^/swagger/spring/(.*)$ /swagger/swagger-ui/$1 break;
             proxy_pass http://spring-api:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
