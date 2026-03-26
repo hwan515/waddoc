@@ -126,6 +126,8 @@ Request: `multipart/form-data`
 - OCR 파서: `app/services/idv_ocr_parser.py`
 - 품질 검사: `app/services/idv_quality_service.py`
 - AdaFace export 스크립트: `scripts/export_adaface_to_onnx.py`
+- AdaFace 양자화 스크립트: `scripts/quantize_adaface_onnx.py`
+- 양자화 비교 스크립트: `scripts/compare_quantized_models.py`
 
 ## 가상환경 정책
 
@@ -241,6 +243,73 @@ python scripts/export_adaface_to_onnx.py \
 ls -l ./models/adaface/adaface_ir101_webface12m.onnx
 ```
 
+## AdaFace ONNX 양자화 절차
+
+FP32 ONNX 모델을 FP16 또는 INT8로 양자화하여 추론 성능을 개선할 수 있다.
+
+### FP16 양자화
+
+모델 크기가 약 50% 감소하며, GPU 추론 속도가 10~20% 향상된다.
+임베딩 정밀도 손실은 거의 없다 (cosine similarity > 0.99).
+
+```bash
+cd ~/AI-IDV
+source venv-export/bin/activate
+python scripts/quantize_adaface_onnx.py \
+  --input ./models/adaface/adaface_ir101_webface12m.onnx \
+  --output ./models/adaface/adaface_ir101_webface12m_fp16.onnx \
+  --mode fp16 --verify
+```
+
+### INT8 동적 양자화
+
+모델 크기가 약 75% 감소하며, CPU 추론 속도가 2~3배 향상된다.
+임베딩 정밀도가 약간 떨어질 수 있어 threshold 재검증이 필요하다.
+
+```bash
+cd ~/AI-IDV
+source venv-export/bin/activate
+python scripts/quantize_adaface_onnx.py \
+  --input ./models/adaface/adaface_ir101_webface12m.onnx \
+  --output ./models/adaface/adaface_ir101_webface12m_int8.onnx \
+  --mode int8 --verify
+```
+
+### 양자화 모델 품질 검증
+
+FP32 대비 임베딩 cosine similarity와 추론 latency를 비교한다.
+
+```bash
+cd ~/AI-IDV
+source venv-export/bin/activate
+python scripts/compare_quantized_models.py \
+  --model-dir ./models/adaface \
+  --basename adaface_ir101_webface12m
+```
+
+기대 결과:
+
+- FP16 vs FP32 cosine similarity > 0.99
+- INT8 vs FP32 cosine similarity > 0.95
+
+cosine similarity가 기대치 이하이면 해당 variant는 사용하지 않는다.
+
+### 양자화 모델 적용
+
+`.env`에서 `IDV_ADAFACE_QUANTIZATION`을 변경하고 서버를 재시작한다.
+
+```bash
+# .env 수정
+IDV_ADAFACE_QUANTIZATION=fp16
+
+# 서버 재시작
+# health 확인
+curl -s http://127.0.0.1:8010/idv/api/v1/health
+```
+
+`modelVersion` 값과 `adaface=true`를 확인한다.
+기존 `IDV_FACE_REFERENCE_THRESHOLD`(0.35)과 `IDV_FACE_IDCARD_THRESHOLD`(0.30)가 양자화 후에도 적절한지 실제 verify 요청으로 재검증한다.
+
 ## `.env` 기준값
 
 ```bash
@@ -259,6 +328,7 @@ IDV_MAX_CONCURRENCY=1
 IDV_TIMEOUT_MS=5000
 IDV_MAX_IMAGE_MB=8
 IDV_FAIL_FAST_ON_STARTUP=false
+IDV_ADAFACE_QUANTIZATION=fp32
 IDV_MODEL_VERSION=scrfd-adaface-ppocrv5-korean-v1
 ```
 

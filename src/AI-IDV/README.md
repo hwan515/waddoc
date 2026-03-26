@@ -50,6 +50,8 @@
 - OCR 파서: `app/services/idv_ocr_parser.py`
 - 품질 검사: `app/services/idv_quality_service.py`
 - 유사도 계산: `app/services/idv_similarity.py`
+- 양자화 스크립트: `scripts/quantize_adaface_onnx.py`
+- 양자화 비교: `scripts/compare_quantized_models.py`
 - 운영 절차: `GPU_SERVER_RUNBOOK.md`
 
 ## API 계약
@@ -224,10 +226,25 @@ IDV_MAX_CONCURRENCY=1
 IDV_TIMEOUT_MS=5000
 IDV_MAX_IMAGE_MB=8
 IDV_FAIL_FAST_ON_STARTUP=false
+IDV_ADAFACE_QUANTIZATION=fp32
 IDV_MODEL_VERSION=scrfd-adaface-ppocrv5-korean-v1
 ```
 
 세부 값은 `.env.example`와 `app/core/config.py`를 기준으로 본다.
+
+## 모델 양자화
+
+AdaFace ONNX 모델은 FP16/INT8 양자화를 지원한다.
+
+지원 variant:
+
+- `fp32`: 기본값. 원본 ONNX 모델
+- `fp16`: FP16 양자화. GPU 추론 시 권장. 모델 크기 약 50% 감소
+- `int8`: INT8 동적 양자화. CPU 추론 시 권장. 모델 크기 약 75% 감소
+
+설정: `IDV_ADAFACE_QUANTIZATION` 환경변수로 선택한다.
+
+양자화 생성, 검증, 적용 절차는 `GPU_SERVER_RUNBOOK.md`를 참고한다.
 
 ## 의존성 정책
 
