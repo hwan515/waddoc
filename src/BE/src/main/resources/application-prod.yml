@@ -47,3 +47,7 @@ server:
     session:
       cookie:
         secure: true
+
+monitoring:
+  access:
+    cookie-secret: ${MONITORING_COOKIE_SECRET}

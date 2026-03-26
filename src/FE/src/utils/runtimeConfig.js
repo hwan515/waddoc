@@ -7,6 +7,7 @@ const readRuntimeConfig = () => {
 };
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/$/, '');
+const truthyValues = new Set(['1', 'true', 'yes', 'on']);
 
 const normalizePath = (path) => {
     const stringPath = String(path || '');
@@ -60,6 +61,13 @@ export const getRobotMinimapApiUrlCandidates = () => {
         configuredMinimapUrl,
         ...getRobotApiUrlCandidates('/api/minimap'),
     ]);
+};
+
+export const isMonitoringTabEnabled = () => {
+    const runtimeConfig = readRuntimeConfig();
+    const configuredValue = runtimeConfig.VITE_ENABLE_MONITORING_TAB ?? import.meta.env.VITE_ENABLE_MONITORING_TAB ?? 'false';
+
+    return truthyValues.has(String(configuredValue).trim().toLowerCase());
 };
 
 export const getRobotCommandUrlCandidates = (path) => getRobotApiUrlCandidates(path);
