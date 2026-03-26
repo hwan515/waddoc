@@ -125,7 +125,7 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 0.000001)",
+          "expr": "100 * ((sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) or vector(0)) / clamp_min((sum(rate(http_server_requests_seconds_count[5m])) or vector(0)), 0.000001))",
           "legendFormat": "5xx %",
           "refId": "A"
         }
@@ -179,7 +179,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -313,8 +313,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service!=\"\"}[5m]))",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum by (container) (label_replace(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",cpu=\"total\",container_label_com_docker_compose_service!=\"\"}[5m]), \"container\", \"$1\", \"container_label_com_docker_compose_service\", \"(.*)\")) or sum by (container) (label_replace(rate(container_cpu_usage_seconds_total{job=\"cadvisor\",cpu=\"total\",container_label_com_docker_compose_service=\"\",name!=\"\"}[5m]), \"container\", \"$1\", \"name\", \"(.*)\"))",
+          "legendFormat": "{{container}}",
           "refId": "A"
         }
       ],
@@ -353,8 +353,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service!=\"\"})",
-          "legendFormat": "{{container_label_com_docker_compose_service}}",
+          "expr": "sum by (container) (label_replace(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service!=\"\"}, \"container\", \"$1\", \"container_label_com_docker_compose_service\", \"(.*)\")) or sum by (container) (label_replace(container_memory_working_set_bytes{job=\"cadvisor\",container_label_com_docker_compose_service=\"\",name!=\"\"}, \"container\", \"$1\", \"name\", \"(.*)\"))",
+          "legendFormat": "{{container}}",
           "refId": "A"
         }
       ],
@@ -474,6 +474,526 @@
       ],
       "title": "Redis 상태",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 18
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "kafka_brokers or vector(0)",
+          "legendFormat": "brokers",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Broker 수",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 18
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(up{job=\"livekit\"}) or vector(0)",
+          "legendFormat": "livekit",
+          "refId": "A"
+        }
+      ],
+      "title": "LiveKit 상태",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 18
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(livekit_room_total) or vector(0)",
+          "legendFormat": "rooms",
+          "refId": "A"
+        }
+      ],
+      "title": "LiveKit 방 수",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 18
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(livekit_participant_total) or vector(0)",
+          "legendFormat": "participants",
+          "refId": "A"
+        }
+      ],
+      "title": "LiveKit 참여자 수",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (consumergroup, topic) (kafka_consumergroup_lag_sum{topic!~\"__.*\"})",
+          "legendFormat": "{{consumergroup}} / {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(kafka_topic_partition_current_offset{topic!~\"__.*\"}[5m]))",
+          "legendFormat": "produced / {{topic}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (topic) (rate(kafka_consumergroup_current_offset_sum{topic!~\"__.*\"}[5m]))",
+          "legendFormat": "consumed / {{topic}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Kafka Topic 처리량",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (topic, consumer_group, result) (rate(waddoc_kafka_consumer_processed_total[5m]))",
+          "legendFormat": "{{consumer_group}} / {{topic}} / {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consumer 처리 결과",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (participant_type, result) (rate(waddoc_livekit_token_issued_total[5m]))",
+          "legendFormat": "{{participant_type}} / {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LiveKit Token 발급률",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (event, result) (rate(waddoc_livekit_webhook_events_total[5m]))",
+          "legendFormat": "{{event}} / {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LiveKit Webhook 이벤트율",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, result) (rate(waddoc_livekit_api_duration_seconds_sum[5m])) / clamp_min(sum by (operation, result) (rate(waddoc_livekit_api_duration_seconds_count[5m])), 0.000001)",
+          "legendFormat": "{{operation}} / {{result}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LiveKit API 평균 응답시간",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(waddoc_livekit_room_operations_total{operation=\"create\",result=\"success\"}[5m])) or vector(0)",
+          "legendFormat": "room create / success",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(waddoc_livekit_room_operations_total{operation=\"delete\",result=\"success\"}[5m])) or vector(0)",
+          "legendFormat": "room delete / success",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(waddoc_livekit_token_issued_total{result=\"success\"}[5m])) or vector(0)",
+          "legendFormat": "token issue / success",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(waddoc_livekit_webhook_events_total{result=\"success\"}[5m])) or vector(0)",
+          "legendFormat": "webhook / success",
+          "refId": "D"
+        }
+      ],
+      "title": "LiveKit 상담 플로우 처리율",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -481,7 +1001,9 @@
   "style": "dark",
   "tags": [
     "waddoc",
-    "operator"
+    "operator",
+    "kafka",
+    "livekit"
   ],
   "templating": {
     "list": []
@@ -494,6 +1016,6 @@
   "timezone": "browser",
   "title": "Operator Overview",
   "uid": "operator-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

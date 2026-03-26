@@ -8,19 +8,16 @@ infra/
 ├── Jenkinsfile               # Jenkins CI/CD 파이프라인 정의
 ├── docker-compose.yml        # 개발 메인 스택 (AI, coturn 제외)
 ├── docker-compose.prod.yml   # 배포 메인 서버 (coturn + ROS2 bridge/FastAPI 포함)
-<<<<<<< HEAD
-=======
 ├── docker-compose.monitoring.prod.yml # 배포 monitoring 스택 (Prometheus/Grafana/exporter)
 ├── monitoring/
 │   ├── prometheus/
 │   └── grafana/
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 ├── nginx/
 │   ├── dev.conf.template     # 개발 Nginx 템플릿 (원격 robot API 프록시)
 │   └── prod.conf             # 배포 Nginx (SSL + WSS 프록시)
 ├── livekit/
 │   ├── entrypoint.sh         # LiveKit env 치환 래퍼 (LF 유지)
-│   └── livekit.yaml          # LiveKit RTC + 외부 TURN(coturn) 설정
+│   └── livekit.yaml          # LiveKit RTC + Prometheus metrics + 외부 TURN(coturn) 설정
 ├── certs/                    # SSL 인증서 (gitignored)
 └── README.md
 ```
@@ -57,10 +54,7 @@ docker compose down                # 종료
 - 진료/LiveKit/webhook 검증은 이 전체 compose 구성을 기본 경로로 사용한다.
 - 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
-<<<<<<< HEAD
-=======
 - 로컬 compose는 monitoring stack을 포함하지 않으며 `VITE_ENABLE_MONITORING_TAB=false` 기본값으로 관제의 `시스템 모니터링` 탭도 숨긴다.
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 - 로컬 개발 compose는 더 이상 `ros2_app_ec2`나 `zenoh_bridge_ec2`를 띄우지 않는다. 차량/ROS API는 EC2 쪽을 기준으로 본다.
 
 ### 개발 환경 (고급: DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
@@ -85,13 +79,6 @@ docker compose up -d postgres redis zookeeper kafka
 
 ```bash
 cd infra
-<<<<<<< HEAD
-docker compose -f docker-compose.prod.yml up -d
-```
-
-- `.env` 에 `PROD_GPU_SERVER_HOST` 와 `SERVER_DOMAIN` 을 반드시 설정해야 한다.
-- 운영 compose에는 `zenoh_bridge_ec2`, `ros2_app_ec2`가 기본 포함된다.
-=======
 docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml up -d
 ```
 
@@ -101,7 +88,8 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml 
 - frontend runtime-config의 `VITE_ENABLE_MONITORING_TAB` 기본값은 `true`이며, 별도 override가 없으면 운영 관제에서 `시스템 모니터링` 탭이 노출된다.
 - 운영 monitoring UI는 `https://<DOMAIN>/grafana/` 경로를 사용한다.
 - Prometheus는 외부 공개 경로를 두지 않고 Docker 내부 네트워크에서만 접근한다.
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
+- Kafka exporter는 Docker 내부 네트워크에서만 노출되며, Prometheus가 `kafka-exporter:9308`을 scrape한다.
+- LiveKit은 `prometheus_port: 6789`를 통해 내부 metrics endpoint를 노출하며, Prometheus가 `livekit:6789`를 scrape한다.
 - 운영 브라우저는 `https://<DOMAIN>:8000`을 직접 호출하지 않고, Nginx가 `/api/minimap`, `/api/odom`, `/api/cmd/*`를 내부 프록시한다.
 - 운영 Zenoh transport는 웹 Nginx를 거치지 않고 `tcp://zenoh.waddoc.site:8081`을 직접 사용한다.
 - `zenoh.waddoc.site` DNS A/AAAA 레코드는 운영 EC2 public address를 가리켜야 한다.
@@ -113,24 +101,34 @@ docker compose -f docker-compose.prod.yml restart livekit coturn
 ```
 - 배포 환경의 `spring-api` 도 GPU 서버 `443`만 사용한다.
 
-<<<<<<< HEAD
-=======
 #### Monitoring V1 검증 순서
 
 1. `docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml ps`로 `prometheus`, `grafana`, `cadvisor`, `postgres-exporter`, `redis-exporter`가 모두 기동됐는지 확인한다.
-2. `spring-api` 각 인스턴스에서 `8080/actuator/prometheus`가 내부 네트워크 기준으로 열려 있는지 확인한다.
-3. `https://<DOMAIN>/grafana/`를 직접 열었을 때 monitoring 쿠키가 없으면 `403`이 반환되는지 확인한다.
-4. 관리자 관제 화면의 `시스템 모니터링` 탭에서 `Grafana 열기` 버튼을 눌러 `operator-overview` 대시보드가 열리는지 확인한다.
+2. `docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml ps`에 `kafka-exporter`도 포함되는지 확인한다.
+3. `spring-api` 각 인스턴스에서 `8080/actuator/prometheus`가 내부 네트워크 기준으로 열려 있는지 확인한다.
+4. Prometheus target 화면에서 `spring-api`, `kafka-exporter`, `livekit`, `postgres-exporter`, `redis-exporter`, `cadvisor`가 모두 `UP`인지 확인한다.
+5. `https://<DOMAIN>/grafana/`를 직접 열었을 때 monitoring 쿠키가 없으면 `403`이 반환되는지 확인한다.
+6. 관리자 관제 화면의 `시스템 모니터링` 탭에서 `Grafana 열기` 버튼을 눌러 `operator-overview` 대시보드가 열리는지 확인한다.
+7. 운영 EC2에서 아래 명령으로 `cadvisor` raw metrics에 `container_label_com_docker_compose_service` 또는 `name` 라벨이 실제로 붙는지 확인한다.
+
+```bash
+docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml exec cadvisor sh -c "wget -qO- http://localhost:8080/metrics | grep '^container_memory_working_set_bytes{.*container_label_com_docker_compose_service=' | head -n 5"
+docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml exec cadvisor sh -c "wget -qO- http://localhost:8080/metrics | grep '^container_memory_working_set_bytes{.*name=' | head -n 5"
+```
+8. `operator-overview`에서 `컨테이너 CPU 사용률`과 `컨테이너 메모리 사용량` 패널의 범례가 `docker-<id>`가 아니라 `spring-api`, `redis`, `postgres`, `kafka` 또는 실제 컨테이너명으로 보이는지 확인한다.
+9. `operator-overview`에서 Kafka broker/topic lag, Kafka consumer 처리 결과, LiveKit 상태/방 수/참여자 수, token/webhook 플로우 패널이 수치 또는 `0`으로 표시되는지 확인한다.
 
 #### Monitoring V1 제외 범위
 
-- Kafka lag 대시보드
-- LiveKit 전용 metrics 수집
 - Alertmanager
-- Slack/Discord 알림
+- Mattermost/Slack/Discord 알림
 - 로컬 개발 compose용 monitoring stack
 
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
+#### 참고
+
+- `docker compose` 실행 시 `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD` 경고가 보일 수 있다.
+- 이 경고는 Grafana admin 계정 env 누락 경고이며, `cadvisor`의 container label 누락 원인과는 별개다.
+
 ### CI/CD 파이프라인 (Jenkins)
 
 운영 배포는 `infra/Jenkinsfile`에 정의된 Jenkins 파이프라인이 자동으로 수행한다.
@@ -149,11 +147,7 @@ GitLab (dev push) → Checkout → 변경 감지 → 테스트 → Docker buildx
 | Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `src/zenoh-server/`, `infra/` 경로별 변경 감지 |
 | Quality Gate | BE 변경 시 단위 테스트 실행 (`-PskipIntegrationTests=true`) |
 | Build & Push | 변경된 이미지 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 (`ros2_app_ec2`는 배포 서버 로컬 build) |
-<<<<<<< HEAD
-| Deploy | `docker compose pull/build` → `up -d`로 변경 서비스만 교체 (`ros2_app_ec2`는 `--build`), spring-api는 항상 3개 보정 |
-=======
 | Deploy | 메인 compose + monitoring compose를 함께 참조하여 배포. `infra/monitoring/**` 변경 시 monitoring 서비스만 교체하고, spring-api는 항상 3개로 보정 |
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 
 #### 빌더 아키텍처
 
@@ -299,11 +293,7 @@ docker logs zenoh_bridge | tail -n 50
 | 외부 포트 | 내부 포트 | 서비스 | 용도 |
 |-----------|-----------|--------|------|
 | 80 | 80 | nginx | HTTP → HTTPS 리다이렉트 |
-<<<<<<< HEAD
-| 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS) |
-=======
 | 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS, `/grafana/`) |
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 | 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
 | 8081 | 8081 | zenoh_bridge_ec2 | Zenoh TCP bridge |
 | 8881 | 7881 | livekit | ICE/TCP |
@@ -315,10 +305,7 @@ docker logs zenoh_bridge | tail -n 50
 > 클라이언트는 `wss://<DOMAIN>/livekit`으로 접속한다.
 > 로컬 개발에서는 `/api/minimap`, `/api/odom`, `/api/cmd/*`를 로컬 Nginx가 `${DEV_ROBOT_API_PROXY_TARGET}`으로 프록시한다.
 > 브라우저는 로컬이든 운영이든 `:8000`으로 직접 접근하지 않는다.
-<<<<<<< HEAD
-=======
 > `/grafana/`는 Waddoc ADMIN 기반 monitoring 쿠키가 있어야만 접근된다.
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 > ROS/Zenoh transport는 브라우저 API와 별개이며 `tcp://zenoh.waddoc.site:8081`로 직접 연결된다.
 > 운영에서는 `rtc.use_external_ip: false`와 `LIVEKIT_NODE_IP=<EC2 공인 IP>` 조합으로 공인 IP를 고정한다.
 > TURN 릴레이는 LiveKit 내장 TURN이 아니라 `coturn` 컨테이너가 담당한다.
