@@ -1,11 +1,13 @@
+import os
 import json
 import math
 import threading
 import rclpy
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from nav_msgs.msg import Odometry
+from pydantic import BaseModel
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from std_msgs.msg import Bool, Int32, String
@@ -31,6 +33,7 @@ current_state = {
         'current_pose': None,
         'speed_ms': 0.0,
         'speed_kmh': 0.0,
+        'battery_soc': 100.0,
         'cleared': False,
         'clear_reason': None,
     },
@@ -38,7 +41,11 @@ current_state = {
     'robot_state': '대기',
 }
 
-app = FastAPI()
+app = FastAPI(
+    docs_url='/swagger/fastapi',
+    openapi_url='/swagger/fastapi/openapi.json',
+    redoc_url=None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'],
@@ -46,6 +53,14 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
+
+
+class WaypointCommandRequest(BaseModel):
+    target: int
+
+
+class EstopCommandRequest(BaseModel):
+    state: bool
 
 
 def normalize_angle(angle: float) -> float:
@@ -75,6 +90,13 @@ def round_or_none(value, digits=3):
 
 def speed_ms_to_kmh(speed_ms: float) -> float:
     return float(speed_ms) * 3.6
+
+
+def sanitize_battery_soc(value, default=100.0):
+    parsed = to_float(value)
+    if parsed is None:
+        parsed = float(default)
+    return max(0.0, min(100.0, float(parsed)))
 
 
 def sanitize_pose(pose):
@@ -172,6 +194,47 @@ def resolve_minimap_status(route_snapshot, path_points):
     return '대기'
 
 
+def get_ros_node_or_raise():
+    node = ros_node
+    if node is None:
+        raise HTTPException(status_code=503, detail='ROS bridge is not ready yet.')
+    return node
+
+
+def parse_env_int(name, default):
+    raw_value = os.getenv(name, '').strip()
+    if not raw_value:
+        return int(default)
+
+    try:
+        return int(raw_value)
+    except ValueError:
+        return int(default)
+
+
+@app.get('/api/health')
+def get_health():
+    node = ros_node
+    ros_ready = node is not None
+
+    with state_lock:
+        has_odom = bool(current_state['has_odom'])
+        robot_state = str(current_state.get('robot_state') or '대기')
+
+    health = {
+        'status': 'ok',
+        'rosBridgeReady': ros_ready,
+        'hasOdom': has_odom,
+        'robotState': robot_state,
+    }
+
+    if ros_ready:
+        health['waypointSubscriberCount'] = int(node.waypoint_pub.get_subscription_count())
+        health['estopSubscriberCount'] = int(node.estop_pub.get_subscription_count())
+
+    return health
+
+
 @app.get('/api/odom')
 def get_odom():
     with state_lock:
@@ -200,6 +263,8 @@ def get_minimap_state():
         if speed_kmh is None:
             speed_kmh = speed_ms_to_kmh(speed_ms)
 
+        battery_soc = sanitize_battery_soc(route_snapshot.get('battery_soc', 100.0))
+
         explicit_state = current_state.get('robot_state')
         if isinstance(explicit_state, str) and explicit_state.strip():
             status = explicit_state.strip()
@@ -225,22 +290,50 @@ def get_minimap_state():
             'speedKmh': float(speed_kmh),
             'vehicleSpeedMs': float(speed_ms),
             'vehicleSpeedKmh': float(speed_kmh),
+            'battery_soc': float(battery_soc),
+            'batterySoc': float(battery_soc),
             'hasOdom': has_pose,
         }
 
 
 @app.post('/api/cmd/estop/{state}')
 def trigger_estop(state: int):
-    if ros_node:
-        ros_node.send_emergency_stop(bool(state))
-    return {'message': f'E-Stop set to {bool(state)}'}
+    node = get_ros_node_or_raise()
+    result = node.send_emergency_stop(bool(state))
+    return {
+        'message': f'E-Stop set to {bool(state)}',
+        **result,
+    }
+
+
+@app.post('/api/cmd/estop')
+def trigger_estop_json(payload: EstopCommandRequest):
+    node = get_ros_node_or_raise()
+    result = node.send_emergency_stop(payload.state)
+    return {
+        'message': f'E-Stop set to {bool(payload.state)}',
+        **result,
+    }
 
 
 @app.post('/api/cmd/waypoint/{target}')
 def trigger_waypoint(target: int):
-    if ros_node:
-        ros_node.send_waypoint(target)
-    return {'message': f'Waypoint {target} sent'}
+    node = get_ros_node_or_raise()
+    result = node.send_waypoint(target)
+    return {
+        'message': f'Waypoint {target} sent',
+        **result,
+    }
+
+
+@app.post('/api/cmd/waypoint')
+def trigger_waypoint_json(payload: WaypointCommandRequest):
+    node = get_ros_node_or_raise()
+    result = node.send_waypoint(payload.target)
+    return {
+        'message': f'Waypoint {payload.target} sent',
+        **result,
+    }
 
 
 class Ec2ControlNode(Node):
@@ -316,6 +409,7 @@ class Ec2ControlNode(Node):
                 'current_pose': current_pose,
                 'speed_ms': float(speed_ms),
                 'speed_kmh': float(speed_kmh),
+                'battery_soc': sanitize_battery_soc(payload.get('battery_soc', 100.0)),
                 'cleared': bool(payload.get('cleared', False)),
                 'clear_reason': payload.get('clear_reason'),
             }
@@ -334,12 +428,20 @@ class Ec2ControlNode(Node):
         msg.data = stop_signal
         self.estop_pub.publish(msg)
         print(f'비상 정지 전송: {stop_signal}', flush=True)
+        return {
+            'state': bool(stop_signal),
+            'subscriberCount': int(self.estop_pub.get_subscription_count()),
+        }
 
     def send_waypoint(self, target_number):
         msg = Int32()
         msg.data = int(target_number)
         self.waypoint_pub.publish(msg)
         print(f'목표 구역 전송: {target_number}', flush=True)
+        return {
+            'target': int(target_number),
+            'subscriberCount': int(self.waypoint_pub.get_subscription_count()),
+        }
 
 
 ros_node = None
@@ -358,5 +460,8 @@ if __name__ == '__main__':
     ros_thread = threading.Thread(target=run_ros_node, daemon=True)
     ros_thread.start()
 
-    print('FastAPI 웹 서버 시작 (포트 8000)...', flush=True)
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    api_host = os.getenv('ROBOT_API_HOST', '0.0.0.0').strip() or '0.0.0.0'
+    api_port = parse_env_int('ROBOT_API_PORT', 8000)
+
+    print(f'FastAPI 웹 서버 시작 ({api_host}:{api_port})...', flush=True)
+    uvicorn.run(app, host=api_host, port=api_port)

@@ -53,3 +53,11 @@ dispatch:
 robot:
   command-base-url: ${ROBOT_COMMAND_BASE_URL:http://localhost}
   command-timeout-ms: ${ROBOT_COMMAND_TIMEOUT_MS:5000}
+
+springdoc:
+  api-docs:
+    path: /swagger/spring/openapi.json
+  swagger-ui:
+    path: /swagger/spring
+    url: /swagger/spring/openapi.json
+    disable-swagger-default-url: true

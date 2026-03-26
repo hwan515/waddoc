@@ -147,7 +147,7 @@ class JwtSecurityIntegrationTest {
     @Test
     void swaggerApiDocsIsAccessibleWithoutAuthentication() {
         ResponseEntity<String> response = restTemplate.exchange(
-                "http://localhost:" + port + "/v3/api-docs",
+                "http://localhost:" + port + "/swagger/spring/openapi.json",
                 HttpMethod.GET,
                 HttpEntity.EMPTY,
                 String.class
