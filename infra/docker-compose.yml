@@ -28,10 +28,7 @@ services:
     environment:
       - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
-<<<<<<< HEAD
-=======
       - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-false}
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
     networks:
       - waddoc-net
 

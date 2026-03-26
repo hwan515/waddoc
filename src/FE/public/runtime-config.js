@@ -1,9 +1,5 @@
 window.__APP_CONFIG__ = Object.assign(window.__APP_CONFIG__ || {}, {
   VITE_ROBOT_API_BASE_URL: window.__APP_CONFIG__?.VITE_ROBOT_API_BASE_URL || '',
-<<<<<<< HEAD
-  VITE_MINIMAP_API_URL: window.__APP_CONFIG__?.VITE_MINIMAP_API_URL || ''
-=======
   VITE_MINIMAP_API_URL: window.__APP_CONFIG__?.VITE_MINIMAP_API_URL || '',
   VITE_ENABLE_MONITORING_TAB: window.__APP_CONFIG__?.VITE_ENABLE_MONITORING_TAB || 'false'
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 });

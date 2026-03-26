@@ -1,26 +1,16 @@
 package com.waddoc.global.security.jwt;
 
 import com.waddoc.domain.mission.entity.Mission;
-<<<<<<< HEAD
 import com.waddoc.domain.mission.entity.MissionPhase;
-=======
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.user.entity.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-<<<<<<< HEAD
-=======
 import org.springframework.beans.factory.annotation.Value;
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-<<<<<<< HEAD
-import org.springframework.beans.factory.annotation.Value;
-=======
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -115,10 +105,7 @@ class JwtSecurityIntegrationTest {
     @Test
     void telemetryApiKeyCanPostMissionTelemetry() {
         Mission mission = missionRepository.findAllForAdminDashboard().stream()
-<<<<<<< HEAD
                 .filter(candidate -> candidate.getPhase() == MissionPhase.DISPATCHED)
-=======
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
                 .findFirst()
                 .orElseThrow();
 
@@ -186,8 +173,6 @@ class JwtSecurityIntegrationTest {
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("patients");
     }
-<<<<<<< HEAD
-=======
 
     @Test
     void adminAccessTokenCanIssueMonitoringSessionCookie() {
@@ -262,5 +247,4 @@ class JwtSecurityIntegrationTest {
         assertThat(setCookie).isNotBlank();
         return setCookie.split(";", 2)[0];
     }
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 }

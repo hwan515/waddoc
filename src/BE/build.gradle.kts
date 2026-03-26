@@ -30,15 +30,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
-<<<<<<< HEAD
-    implementation("org.springframework.kafka:spring-kafka")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-=======
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.kafka:spring-kafka")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
     implementation("io.micrometer:micrometer-registry-prometheus")
->>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 
     // Database / Migration
     implementation("org.flywaydb:flyway-core")
