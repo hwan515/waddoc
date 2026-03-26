@@ -7,6 +7,10 @@ const readRuntimeConfig = () => {
 };
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/$/, '');
+<<<<<<< HEAD
+=======
+const truthyValues = new Set(['1', 'true', 'yes', 'on']);
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 
 const normalizePath = (path) => {
     const stringPath = String(path || '');
@@ -62,4 +66,14 @@ export const getRobotMinimapApiUrlCandidates = () => {
     ]);
 };
 
+<<<<<<< HEAD
+=======
+export const isMonitoringTabEnabled = () => {
+    const runtimeConfig = readRuntimeConfig();
+    const configuredValue = runtimeConfig.VITE_ENABLE_MONITORING_TAB ?? import.meta.env.VITE_ENABLE_MONITORING_TAB ?? 'false';
+
+    return truthyValues.has(String(configuredValue).trim().toLowerCase());
+};
+
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 export const getRobotCommandUrlCandidates = (path) => getRobotApiUrlCandidates(path);

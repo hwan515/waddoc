@@ -1,16 +1,26 @@
 package com.waddoc.global.security.jwt;
 
 import com.waddoc.domain.mission.entity.Mission;
+<<<<<<< HEAD
 import com.waddoc.domain.mission.entity.MissionPhase;
+=======
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.user.entity.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+<<<<<<< HEAD
+=======
+import org.springframework.beans.factory.annotation.Value;
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+<<<<<<< HEAD
 import org.springframework.beans.factory.annotation.Value;
+=======
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -105,7 +115,10 @@ class JwtSecurityIntegrationTest {
     @Test
     void telemetryApiKeyCanPostMissionTelemetry() {
         Mission mission = missionRepository.findAllForAdminDashboard().stream()
+<<<<<<< HEAD
                 .filter(candidate -> candidate.getPhase() == MissionPhase.DISPATCHED)
+=======
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
                 .findFirst()
                 .orElseThrow();
 
@@ -173,4 +186,81 @@ class JwtSecurityIntegrationTest {
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("patients");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    void adminAccessTokenCanIssueMonitoringSessionCookie() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/session",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                Void.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.SET_COOKIE)).contains("monitoring_access=");
+    }
+
+    @Test
+    void monitoringAuthorizeAcceptsIssuedCookie() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
+        HttpHeaders bootstrapHeaders = new HttpHeaders();
+        bootstrapHeaders.setBearerAuth(accessToken);
+
+        ResponseEntity<Void> bootstrapResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/session",
+                HttpMethod.POST,
+                new HttpEntity<>(bootstrapHeaders),
+                Void.class
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.COOKIE, extractCookieValue(bootstrapResponse.getHeaders().getFirst(HttpHeaders.SET_COOKIE)));
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/authorize",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Void.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
+    }
+
+    @Test
+    void monitoringAuthorizeRejectsMissingCookie() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/authorize",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("AUTH_UNAUTHORIZED");
+    }
+
+    @Test
+    void prometheusEndpointIsAccessibleWithoutAuthentication() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/actuator/prometheus",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).contains("jvm_memory_used_bytes");
+    }
+
+    private String extractCookieValue(String setCookie) {
+        assertThat(setCookie).isNotBlank();
+        return setCookie.split(";", 2)[0];
+    }
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
 }

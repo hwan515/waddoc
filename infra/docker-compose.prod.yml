@@ -32,6 +32,10 @@ services:
     environment:
       - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
+<<<<<<< HEAD
+=======
+      - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-true}
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -72,6 +76,10 @@ services:
       - LIVEKIT_HOST=http://livekit:7880
       - LIVEKIT_URL=wss://${SERVER_DOMAIN}/livekit
       - JWT_SECRET=${JWT_SECRET}
+<<<<<<< HEAD
+=======
+      - MONITORING_COOKIE_SECRET=${MONITORING_COOKIE_SECRET:?MONITORING_COOKIE_SECRET is required}
+>>>>>>> 910266df2b274cc347bea2b6dc1b06525dfa9b0a
       - MISSION_TERMINAL_TOKEN_EXPIRY=${MISSION_TERMINAL_TOKEN_EXPIRY:-1800}
       - SOLAPI_API_KEY=${SOLAPI_API_KEY}
       - SOLAPI_API_SECRET=${SOLAPI_API_SECRET}
