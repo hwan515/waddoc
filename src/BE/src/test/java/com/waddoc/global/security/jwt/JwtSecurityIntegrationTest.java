@@ -130,8 +130,8 @@ class JwtSecurityIntegrationTest {
                 """.formatted(
                 mission.getVehicleId(),
                 mission.getPhase().name(),
-                mission.getLatitude().toPlainString(),
-                mission.getLongitude().toPlainString()
+                "36.1395",
+                "128.1136"
         );
 
         ResponseEntity<Void> response = restTemplate.exchange(

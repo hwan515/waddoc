@@ -13,6 +13,7 @@ import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.domain.consultation.service.ConsultationLiveKitService;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.domain.dispatch.service.WaypointAddressResolver;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
@@ -30,6 +31,8 @@ import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
+import com.waddoc.global.config.DemoModePolicy;
+import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.sms.SmsService;
 import org.junit.jupiter.api.Test;
@@ -53,6 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,11 +99,25 @@ class BookingServiceTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private DemoModePolicy demoModePolicy;
+
+    @Mock
+    private DispatchAssignmentPolicy dispatchAssignmentPolicy;
+
+    @Mock
+    private WaypointAddressResolver waypointAddressResolver;
+
     @InjectMocks
     private BookingService bookingService;
 
     @Test
     void createBooking_publishesKafkaMessagesAndCreatesDispatchOutbox() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
+
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
@@ -180,6 +198,13 @@ class BookingServiceTest {
         assertThat(response.getTtsMessage()).isNotBlank();
         assertThat(response.getTtsMessage()).contains("오전 10시 30분");
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null),
+                eq(null)
+        );
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), smsCaptor.capture());
         verify(kafkaTemplate).send(
                 eq(KafkaTopics.DOCTOR_NOTIFICATIONS_TOPIC),
@@ -217,6 +242,11 @@ class BookingServiceTest {
 
     @Test
     void createBooking_sameDayProvisionImmediateMissionAndSession() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
+
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
@@ -272,8 +302,7 @@ class BookingServiceTest {
             return booking;
         }).when(bookingRepository).save(any(Booking.class));
         when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(missionRepository.findByCareCase(any(CareCase.class))).thenReturn(Optional.empty());
-        when(missionCommandService.createMissionForDispatch(any(CareCase.class), any(), any(), any(LocalDateTime.class)))
+        when(missionCommandService.createMissionForDispatch(any(CareCase.class), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
                     CareCase careCase = invocation.getArgument(0);
                     Mission mission = Mission.builder()
@@ -281,6 +310,7 @@ class BookingServiceTest {
                             .vehicleId(invocation.getArgument(1))
                             .destination(invocation.getArgument(2))
                             .dispatchedAt(invocation.getArgument(3))
+                            .targetWaypointNumber(invocation.getArgument(4))
                             .build();
                     ReflectionTestUtils.setField(mission, "id", 1L);
                     return mission;
@@ -297,6 +327,13 @@ class BookingServiceTest {
         ArgumentCaptor<ConsultationSession> sessionCaptor = ArgumentCaptor.forClass(ConsultationSession.class);
 
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null),
+                eq(null)
+        );
         verify(missionRepository).save(missionCaptor.capture());
         verify(consultationLiveKitService).createRoom(any());
         verify(consultationSessionRepository).save(sessionCaptor.capture());
@@ -304,6 +341,162 @@ class BookingServiceTest {
         assertThat(outboxCaptor.getValue().isCompleted()).isTrue();
         assertThat(missionCaptor.getValue().getPhase()).isEqualTo(MissionPhase.ARRIVED);
         assertThat(sessionCaptor.getValue().getStatus().name()).isEqualTo("READY");
+    }
+
+    @Test
+    void createBooking_sameDaySkipsImmediateProvisionWhenDemoModeIsEnabled() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(false);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now())
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(smsService.getContactNumber()).thenReturn("01049163720");
+        doAnswer(invocation -> {
+            Booking booking = invocation.getArgument(0);
+            ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 21, 12, 0));
+            return booking;
+        }).when(bookingRepository).save(any(Booking.class));
+        when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.createBooking(session.getPublicId(), request);
+
+        ArgumentCaptor<DispatchOutbox> outboxCaptor = ArgumentCaptor.forClass(DispatchOutbox.class);
+
+        verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null),
+                eq(null)
+        );
+        verify(missionRepository, never()).save(any(Mission.class));
+        verify(consultationLiveKitService, never()).createRoom(any());
+        verify(consultationSessionRepository, never()).save(any(ConsultationSession.class));
+
+        assertThat(outboxCaptor.getValue().isCompleted()).isFalse();
+    }
+
+    @Test
+    void createBooking_assignsMappedWaypointWhenAddressIsSupported() {
+        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(false);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("경상북도 김천시 증산면 장전4길 14"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(59));
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("GIMCHEON")
+                .address("경상북도 김천시 증산면 장전4길 14")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(smsService.getContactNumber()).thenReturn("01049163720");
+        doAnswer(invocation -> {
+            Booking booking = invocation.getArgument(0);
+            ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 25, 12, 0));
+            return booking;
+        }).when(bookingRepository).save(any(Booking.class));
+        when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.createBooking(session.getPublicId(), request);
+
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("경상북도 김천시 증산면 장전4길 14"),
+                eq(null),
+                eq(59)
+        );
     }
 
     @Test

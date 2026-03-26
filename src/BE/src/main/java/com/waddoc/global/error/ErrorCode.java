@@ -52,6 +52,8 @@ public enum ErrorCode {
     MISSION_NOT_READY(HttpStatus.FORBIDDEN, "MISSION_NOT_READY", "미션이 환자 참가 가능한 준비 상태가 아닙니다."),
     MISSION_ALREADY_EXISTS(HttpStatus.CONFLICT, "MISSION_ALREADY_EXISTS", "이미 생성된 미션이 존재합니다."),
     MISSION_PHASE_TRANSITION_INVALID(HttpStatus.BAD_REQUEST, "MISSION_PHASE_TRANSITION_INVALID", "허용되지 않는 미션 단계 전환입니다."),
+    DEMO_MODE_DISABLED(HttpStatus.FORBIDDEN, "DEMO_MODE_DISABLED", "이 기능은 데모 모드에서만 사용할 수 있습니다."),
+    ROBOT_COMMAND_REQUEST_FAILED(HttpStatus.BAD_GATEWAY, "ROBOT_COMMAND_REQUEST_FAILED", "로봇 명령 API 호출에 실패했습니다."),
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "진료 세션을 찾을 수 없습니다."),
     SESSION_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "SESSION_NOT_IN_PROGRESS", "세션이 진행 중 상태가 아닙니다."),
     PATIENT_NOT_JOINED_SESSION(HttpStatus.CONFLICT, "PATIENT_NOT_JOINED_SESSION", "해당 환자는 아직 이 세션에 입장한 이력이 없습니다."),

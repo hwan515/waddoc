@@ -159,6 +159,7 @@ erDiagram
         bigint case_id FK
         varchar vehicle_id "차량 public_id (논리 참조)"
         text destination "목적지 주소"
+        int target_waypoint_number "ROS/FastAPI 출동 대상 waypoint 번호 (nullable)"
         timestamp dispatched_at
         timestamp estimated_arrival_time
         enum phase "CREATED | DISPATCHED | EN_ROUTE | ARRIVED | VERIFYING | CONSULTING | RETURNING | COMPLETED | FAILED | INCIDENT(임시)"
@@ -287,7 +288,7 @@ erDiagram
 | `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED` |
 | `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
 | `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
-| `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조한다 |
+| `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리한다. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조하고, `target_waypoint_number`는 ROS/FastAPI로 전달할 waypoint 번호를 저장한다 |
 | `VITAL_MEASUREMENT` | 진료 케이스별 최신 생체데이터 1건. 로봇 측정 단계마다 같은 `case_id` row를 partial upsert 하며, 체온/혈압/심박수/SpO2와 측정 시점 ECG sample, `measured_at`, `created_at`, `updated_at`을 함께 관리 |
 
 ### 2.6 화상진료 세션 도메인
@@ -336,13 +337,15 @@ USER    ←1:N→ USER                      (의사/보호자 계정 승인)
 
 PATIENT → INTAKE_SESSION (과 선택·슬롯 스냅샷 포함)    (기본 전화 예약 흐름)
 
-PATIENT → BOOKING → CARE_CASE → DISPATCH_OUTBOX → MISSION   (예약 확정 → 자동 배차)
+PATIENT → BOOKING → CARE_CASE → DISPATCH_OUTBOX → MISSION   (예약 확정 → created mission + 출동 트리거)
                                → VITAL_MEASUREMENT          (로봇 측정 최신값 저장)
                                → CONSULTATION_SESSION → CONSULTATION_SUMMARY
 
 VEHICLE → MISSION                                           (권역 차량 배정)
 USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정 흐름)
 ```
+
+> 데모 모드에서는 예약 생성 시 `MISSION(CREATED)`까지 먼저 생성하고, 관리자의 데모 출동 API가 `DISPATCH_OUTBOX`와 `target_waypoint_number`를 사용해 실제 출동 또는 더미 완료를 제어한다.
 
 > `PATIENT_CONSENT`를 포함한 동의 도메인 ERD는 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
 

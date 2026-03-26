@@ -54,7 +54,8 @@ public class MissionCommandService {
                 careCase,
                 request.getVehicleId(),
                 request.getDestination(),
-                request.getScheduledTime().atZoneSameInstant(KST).toLocalDateTime()
+                request.getScheduledTime().atZoneSameInstant(KST).toLocalDateTime(),
+                null
         );
         return CreateMissionResponse.from(savedMission);
     }
@@ -63,15 +64,25 @@ public class MissionCommandService {
             CareCase careCase,
             String vehicleId,
             String destination,
-            LocalDateTime dispatchedAt
+            LocalDateTime dispatchedAt,
+            Integer targetWaypointNumber
     ) {
         return missionRepository.findByCareCase(careCase)
+                .map(existingMission -> {
+                    existingMission.assignVehicle(vehicleId);
+                    existingMission.assignDispatchTarget(destination, targetWaypointNumber);
+                    if (dispatchedAt != null) {
+                        existingMission.assignSchedule(dispatchedAt, existingMission.getEstimatedArrivalTime());
+                    }
+                    return existingMission;
+                })
                 .orElseGet(() -> missionRepository.save(
                         Mission.builder()
                                 .careCase(careCase)
                                 .vehicleId(vehicleId)
                                 .destination(destination)
                                 .dispatchedAt(dispatchedAt)
+                                .targetWaypointNumber(targetWaypointNumber)
                                 .build()
                 ));
     }

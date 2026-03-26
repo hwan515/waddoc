@@ -5,12 +5,15 @@ import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.event.DispatchRequestMessage;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.vehicle.entity.OperationalStatus;
 import com.waddoc.domain.vehicle.entity.Vehicle;
 import com.waddoc.domain.vehicle.repository.VehicleRepository;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.monitoring.KafkaMonitoringMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -53,6 +56,9 @@ class DispatchConsumerTest {
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
 
+    @Mock
+    private DemoModePolicy demoModePolicy;
+
     @Spy
     private KafkaMonitoringMetrics kafkaMonitoringMetrics = new KafkaMonitoringMetrics(meterRegistry);
 
@@ -61,6 +67,8 @@ class DispatchConsumerTest {
 
     @Test
     void consume_marksRetryPendingAndSendsDelaySmsWhenVehicleIsUnavailable() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
         DispatchOutbox outbox = buildOutbox();
         DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
 
@@ -79,11 +87,13 @@ class DispatchConsumerTest {
                 .counter()
                 .count()).isEqualTo(1.0);
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
-        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any());
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
     }
 
     @Test
     void consume_createsMissionAndCompletesOutboxWhenVehicleIsOperational() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
         DispatchOutbox outbox = buildOutbox();
         outbox.markRetryPending();
         DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
@@ -91,7 +101,7 @@ class DispatchConsumerTest {
         Vehicle vehicle = Vehicle.builder()
                 .code("GIMCHEON-01")
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .displayName("김천증산 1호차")
+                .displayName("Gimcheon vehicle 1")
                 .operationalStatus(OperationalStatus.OPERATIONAL)
                 .build();
         ReflectionTestUtils.setField(vehicle, "publicId", "veh_00000001");
@@ -110,10 +120,95 @@ class DispatchConsumerTest {
         verify(missionCommandService).createMissionForDispatch(
                 eq(outbox.getCareCase()),
                 eq("veh_00000001"),
-                eq("김천시 증산면 1길 69"),
-                any()
+                eq(outbox.getDestination()),
+                any(),
+                eq(null)
         );
         verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
+    }
+
+    @Test
+    void consume_reusesCreatedMissionAndCompletesOutboxWhenVehicleIsOperational() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
+        DispatchOutbox outbox = buildOutbox();
+        DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
+
+        Vehicle vehicle = Vehicle.builder()
+                .code("GIMCHEON-01")
+                .regionCode("GIMCHEON_JEUNGSAN")
+                .displayName("Gimcheon vehicle 1")
+                .operationalStatus(OperationalStatus.OPERATIONAL)
+                .build();
+        ReflectionTestUtils.setField(vehicle, "publicId", "veh_GIMCHEON_01");
+
+        Mission mission = Mission.builder()
+                .careCase(outbox.getCareCase())
+                .vehicleId("veh_GIMCHEON_01")
+                .destination(outbox.getDestination())
+                .targetWaypointNumber(59)
+                .build();
+
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
+                .thenReturn(Optional.of(outbox));
+        when(missionRepository.findByCareCase(outbox.getCareCase())).thenReturn(Optional.of(mission));
+        when(vehicleRepository.findByRegionCodeAndIsActiveTrue("GIMCHEON_JEUNGSAN"))
+                .thenReturn(Optional.of(vehicle));
+        when(missionRepository.existsByVehicleIdAndPhaseIn(eq("veh_GIMCHEON_01"), any()))
+                .thenReturn(false);
+
+        dispatchConsumer.consume(message);
+
+        assertThat(outbox.isCompleted()).isTrue();
+        verify(missionCommandService).createMissionForDispatch(
+                eq(outbox.getCareCase()),
+                eq("veh_GIMCHEON_01"),
+                eq(outbox.getDestination()),
+                any(),
+                eq(59)
+        );
+    }
+
+    @Test
+    void consume_completesOutboxWhenMissionAlreadyAdvanced() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(false);
+
+        DispatchOutbox outbox = buildOutbox();
+        DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
+
+        Mission mission = Mission.builder()
+                .careCase(outbox.getCareCase())
+                .vehicleId("veh_GIMCHEON_01")
+                .destination(outbox.getDestination())
+                .build();
+        mission.updatePhase(MissionPhase.DISPATCHED);
+
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
+                .thenReturn(Optional.of(outbox));
+        when(missionRepository.findByCareCase(outbox.getCareCase())).thenReturn(Optional.of(mission));
+
+        dispatchConsumer.consume(message);
+
+        assertThat(outbox.isCompleted()).isTrue();
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
+        verify(vehicleRepository, never()).findByRegionCodeAndIsActiveTrue(any());
+    }
+
+    @Test
+    void consume_keepsOutboxPendingForOperatorDispatchWhenDemoModeIsEnabled() {
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
+
+        DispatchOutbox outbox = buildOutbox();
+        DispatchRequestMessage message = DispatchRequestMessage.from(outbox);
+
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId("case_test123"))
+                .thenReturn(Optional.of(outbox));
+
+        dispatchConsumer.consume(message);
+
+        assertThat(outbox.isRetryPending()).isTrue();
+        verify(missionCommandService, never()).createMissionForDispatch(any(), any(), any(), any(), any());
+        verify(kafkaTemplate, never()).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), any());
     }
 
     private DispatchOutbox buildOutbox() {
@@ -121,7 +216,7 @@ class DispatchConsumerTest {
                 .name("Patient Park")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .address("김천시 증산면 1길 69")
+                .address("Demo Address 1")
                 .phone("01012345678")
                 .build();
         Booking booking = Booking.builder()
@@ -139,7 +234,7 @@ class DispatchConsumerTest {
         return DispatchOutbox.builder()
                 .careCase(careCase)
                 .regionCode("GIMCHEON_JEUNGSAN")
-                .destination("김천시 증산면 1길 69")
+                .destination("Demo Address 1")
                 .build();
     }
 }

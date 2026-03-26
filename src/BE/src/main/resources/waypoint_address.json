@@ -1,0 +1,19 @@
+{
+  "mapping": [
+    {
+      "id": "Waypoint_59",
+      "waypointNumber": 59,
+      "address": "경상북도 김천시 증산면 장전4길 14"
+    },
+    {
+      "id": "Waypoint_92",
+      "waypointNumber": 92,
+      "address": "경상북도 김천시 증산면 장전3길 6-9"
+    },
+    {
+      "id": "Waypoint_142",
+      "waypointNumber": 142,
+      "address": "경상북도 김천시 증산면 장전2길 7"
+    }
+  ]
+}

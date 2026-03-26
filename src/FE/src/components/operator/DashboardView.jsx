@@ -39,7 +39,54 @@ const getWeekOfMonth = (date) => {
     return Math.floor((date.getDate() + firstDayOfMonth - 1) / 7) + 1;
 };
 
-const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missionsList = [], statistics }) => {
+const getMissionStatusBadgeClass = (status) => {
+    switch (status) {
+        case '출동 중':
+            return 'bg-blue-100 text-blue-700 border-blue-200';
+        case '도착 완료':
+            return 'bg-amber-100 text-amber-700 border-amber-200';
+        case '진료 중':
+            return 'bg-primary/10 text-primary border-primary/20';
+        case '장애 발생':
+            return 'bg-red-100 text-red-700 border-red-200';
+        case '종료/복귀':
+            return 'bg-green-100 text-green-700 border-green-200';
+        case '시연 대기':
+        case '대기':
+        case '대기 중':
+        case '추후 서비스 예정':
+        default:
+            return 'bg-slate-100 text-slate-600 border-slate-200';
+    }
+};
+
+const getDemoButtonClass = (variant, disabled) => {
+    if (disabled) {
+        return 'cursor-wait border-slate-200 bg-slate-100 text-slate-400';
+    }
+
+    switch (variant) {
+        case 'dispatch':
+            return 'border-primary/20 bg-primary text-white hover:bg-accent-1';
+        case 'arrive':
+            return 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100';
+        case 'complete':
+            return 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100';
+        default:
+            return 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100';
+    }
+};
+
+const DashboardView = ({
+    calendarMode,
+    setCalendarMode,
+    calendarEvents,
+    missionsList = [],
+    statistics,
+    pendingDemoAction = null,
+    onDemoDispatch,
+    onDemoArrive
+}) => {
     const [referenceDate, setReferenceDate] = useState(() => new Date());
     const [now, setNow] = useState(() => new Date());
     const [expandedMonthlyDate, setExpandedMonthlyDate] = useState(null);
@@ -403,11 +450,7 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                                     <div className="font-bold text-slate-800 text-base">
                                         {m.isPrimaryServiceVehicle ? `${m.patientName} 환자` : m.patientName}
                                     </div>
-                                    <div className={`text-xs px-2.5 py-1 rounded-md border font-bold ${m.status === '출동 중' || m.status === '진료 중' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                                        m.status === '대기 중' || m.status === '추후 서비스 예정' ? 'bg-slate-100 text-slate-600 border-slate-200' :
-                                            m.status === '장애 발생' ? 'bg-red-100 text-red-700 border-red-200' :
-                                                'bg-green-100 text-green-700 border-green-200'
-                                        }`}>
+                                    <div className={`text-xs px-2.5 py-1 rounded-md border font-bold ${getMissionStatusBadgeClass(m.status)}`}>
                                         {m.status}
                                     </div>
                                 </div>
@@ -427,7 +470,45 @@ const DashboardView = ({ calendarMode, setCalendarMode, calendarEvents, missions
                                         <CalendarIcon className="w-4 h-4 text-slate-400 shrink-0" />
                                         <span>배차/출동: <span className="font-bold text-slate-700">{m.time}</span></span>
                                     </div>
+                                    <div className="flex items-center justify-between gap-2 border-t border-slate-200/80 pt-2 text-xs">
+                                        <span className="text-slate-500">현재 단계</span>
+                                        <span className="font-bold text-slate-700">{m.phaseLabel}</span>
+                                    </div>
                                 </div>
+                                {m.isPrimaryServiceVehicle && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        {m.canDispatch && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onDemoDispatch?.(m.id)}
+                                                disabled={pendingDemoAction !== null}
+                                                className={`rounded-md border px-3 py-2 text-xs font-bold transition-colors ${getDemoButtonClass(
+                                                    'dispatch',
+                                                    pendingDemoAction !== null
+                                                )}`}
+                                            >
+                                                {pendingDemoAction?.missionId === m.id && pendingDemoAction?.action === 'dispatch'
+                                                    ? '출동 처리 중...'
+                                                    : '시연 출동'}
+                                            </button>
+                                        )}
+                                        {m.canArrive && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onDemoArrive?.(m.id)}
+                                                disabled={pendingDemoAction !== null}
+                                                className={`rounded-md border px-3 py-2 text-xs font-bold transition-colors ${getDemoButtonClass(
+                                                    'arrive',
+                                                    pendingDemoAction !== null
+                                                )}`}
+                                            >
+                                                {pendingDemoAction?.missionId === m.id && pendingDemoAction?.action === 'arrive'
+                                                    ? '도착 처리 중...'
+                                                    : '도착 처리'}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

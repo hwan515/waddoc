@@ -4,6 +4,7 @@ import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.entity.DispatchOutboxStatus;
 import com.waddoc.domain.dispatch.event.DispatchRequestMessage;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.lock.RedisDistributedLock;
 import lombok.RequiredArgsConstructor;
@@ -28,9 +29,13 @@ public class DispatchOutboxRelay {
     private final DispatchOutboxRepository dispatchOutboxRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final RedisDistributedLock redisDistributedLock;
+    private final DemoModePolicy demoModePolicy;
 
     @Scheduled(fixedDelayString = "${dispatch.outbox-relay-interval-ms:1000}")
     public void relay() {
+        if (demoModePolicy.isOperatorDispatchOnly()) {
+            return;
+        }
         String lockValue = redisDistributedLock.tryLock(LOCK_KEY, LOCK_TTL_SECONDS);
         if (lockValue == null) {
             return;

@@ -4,12 +4,14 @@ import com.waddoc.domain.carecase.entity.CaseStatus;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.event.DispatchRequestMessage;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.vehicle.entity.Vehicle;
 import com.waddoc.domain.vehicle.repository.VehicleRepository;
+import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.monitoring.KafkaMonitoringMetrics;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class DispatchConsumer {
     private final MissionRepository missionRepository;
     private final MissionCommandService missionCommandService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final DemoModePolicy demoModePolicy;
     private final KafkaMonitoringMetrics kafkaMonitoringMetrics;
 
     @KafkaListener(topics = KafkaTopics.DISPATCH_REQUESTS_TOPIC, groupId = CONSUMER_GROUP)
@@ -56,7 +59,13 @@ public class DispatchConsumer {
                 outbox.markCompleted();
                 return;
             }
-            if (missionRepository.findByCareCase(outbox.getCareCase()).isPresent()) {
+            if (demoModePolicy.isOperatorDispatchOnly()) {
+                outbox.markRetryPending();
+                return;
+            }
+
+            Optional<Mission> missionOptional = missionRepository.findByCareCase(outbox.getCareCase());
+            if (missionOptional.isPresent() && missionOptional.get().getPhase() != MissionPhase.CREATED) {
                 outbox.markCompleted();
                 return;
             }
@@ -80,7 +89,8 @@ public class DispatchConsumer {
                     outbox.getCareCase(),
                     vehicle.getPublicId(),
                     outbox.getDestination(),
-                    LocalDateTime.now()
+                    LocalDateTime.now(),
+                    missionOptional.map(Mission::getTargetWaypointNumber).orElse(null)
             );
             outbox.markCompleted();
 
