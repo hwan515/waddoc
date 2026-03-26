@@ -31,6 +31,7 @@ setup(
             'talker = my_ros2_basics.talker:main',
             'listener = my_ros2_basics.listener:main',
             'camera_streamer = my_ros2_basics.camera_streamer:main',
+            'biosignal_publisher = my_ros2_basics.biosignal_publisher:main',
         ],
     },
 )
