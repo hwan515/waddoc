@@ -8,9 +8,10 @@ import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
 import SystemMonitoring from '../../components/operator/SystemMonitoring';
-import { getRobotMinimapApiUrlCandidates, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
+import { getRobotMinimapApiUrlCandidates, isDemoModeEnabled, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
 const MINIMAP_POLL_INTERVAL_MS = 100;
 const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
+const DEMO_MODE_ENABLED = isDemoModeEnabled();
 const MONITORING_TAB_ENABLED = isMonitoringTabEnabled();
 
 const MONITOR_STATE_LABELS = {
@@ -277,8 +278,8 @@ const getMissionPhaseLabel = (phase) => {
 };
 
 const getDemoActionAvailability = (phase) => ({
-    canDispatch: phase === 'CREATED',
-    canArrive: ['DISPATCHED', 'EN_ROUTE'].includes(phase),
+    canDispatch: DEMO_MODE_ENABLED && phase === 'CREATED',
+    canArrive: DEMO_MODE_ENABLED && ['DISPATCHED', 'EN_ROUTE'].includes(phase),
 });
 
 const getDashboardMissionStatusLabel = (phase) => (
