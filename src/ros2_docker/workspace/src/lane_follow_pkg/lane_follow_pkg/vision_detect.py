@@ -66,8 +66,7 @@ class HybridDijkstraVisionFollower(Node):
         default_yolo_model_path = self.resolve_default_yolo_model_path()
         self.declare_parameter('waypoint_json_path', str(map_path))
         self.declare_parameter('goal_waypoint_id', '')
-        self.declare_parameter('goal_waypoint_value', -1)
-        self.declare_parameter('show_debug_windows', False)
+        self.declare_parameter('show_debug_windows', True)
         default_route_export_path = self.resolve_route_export_path(
             'vision_detect_route.json'
         )
@@ -92,12 +91,7 @@ class HybridDijkstraVisionFollower(Node):
         )
 
         self.waypoint_json_path = str(self.get_parameter('waypoint_json_path').value)
-        configured_goal = self.normalize_goal_id(
-            self.get_parameter('goal_waypoint_id').value
-        )
-        configured_goal_value = int(self.get_parameter('goal_waypoint_value').value)
-        if configured_goal is None and configured_goal_value >= 0:
-            configured_goal = self.normalize_goal_id(configured_goal_value)
+        configured_goal = str(self.get_parameter('goal_waypoint_id').value).strip()
         self.goal_wp_id = configured_goal or None
         self.pending_goal_id = self.goal_wp_id
         self.pending_goal_state_value = self.goal_id_to_state_value(self.goal_wp_id)
@@ -109,6 +103,11 @@ class HybridDijkstraVisionFollower(Node):
         self.yolo_device = str(self.get_parameter('yolo_device').value).strip()
         self.yolo_confidence = float(self.get_parameter('yolo_confidence').value)
         self.yolo_input_size = max(320, int(self.get_parameter('yolo_input_size').value))
+        self.yolo_last_detections = []
+        self.yolo_last_reason = ''
+        self.yolo_clear_frames = 0
+        self.yolo_clear_frames_threshold = 5
+
         raw_hazard_labels = self.get_parameter('yolo_hazard_labels').value
         if isinstance(raw_hazard_labels, str):
             raw_hazard_labels = [raw_hazard_labels]
@@ -164,6 +163,8 @@ class HybridDijkstraVisionFollower(Node):
         self.edges = {}
         self.path = []
         self.trajectory = []
+        self.display_path = []
+        self.display_trajectory = []
         self.last_log_time = 0.0
 
         self.trajectory_follower = TrajectoryFollower(
@@ -460,25 +461,47 @@ class HybridDijkstraVisionFollower(Node):
         )
         self.sync_route_export_state_fields()
 
-    def build_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
+    def build_route_snapshot(
+        self,
+        start_id,
+        goal_id,
+        state_value,
+        path_ids,
+        trajectory,
+        display_path_ids=None,
+        display_trajectory=None,
+    ):
         return self.route_exporter.build_route_snapshot(
             start_id=start_id,
             goal_id=goal_id,
             state_value=state_value,
             path_ids=path_ids,
             trajectory=trajectory,
+            display_path_ids=display_path_ids,
+            display_trajectory=display_trajectory,
             waypoints=self.waypoints,
             current_pose=self.current_pose(),
             speed_state=self.current_speed_state(),
         )
 
-    def export_route_snapshot(self, start_id, goal_id, state_value, path_ids, trajectory):
+    def export_route_snapshot(
+        self,
+        start_id,
+        goal_id,
+        state_value,
+        path_ids,
+        trajectory,
+        display_path_ids=None,
+        display_trajectory=None,
+    ):
         self.route_exporter.export_route(
             start_id=start_id,
             goal_id=goal_id,
             state_value=state_value,
             path_ids=path_ids,
             trajectory=trajectory,
+            display_path_ids=display_path_ids,
+            display_trajectory=display_trajectory,
             waypoints=self.waypoints,
             current_pose=self.current_pose(),
             speed_state=self.current_speed_state(),
@@ -491,6 +514,8 @@ class HybridDijkstraVisionFollower(Node):
             waypoints=self.waypoints,
             path_ids=self.path,
             trajectory=self.trajectory,
+            display_path_ids=self.display_path,
+            display_trajectory=self.display_trajectory,
             current_pose=self.current_pose(),
             speed_state=self.current_speed_state(),
             current_mode=self.current_mode,
@@ -505,6 +530,8 @@ class HybridDijkstraVisionFollower(Node):
     def clear_navigation(self, clear_goal=False, clear_pending=False, clear_reason='navigation_cleared'):
         self.path = []
         self.trajectory = []
+        self.display_path = []
+        self.display_trajectory = []
         self.route_exporter.clear_active_route()
         self.sync_route_export_state_fields()
         self.clear_tracking_state()
@@ -524,28 +551,6 @@ class HybridDijkstraVisionFollower(Node):
             return int(str(goal_id).split('_')[-1])
         except (TypeError, ValueError):
             return 0
-
-    def normalize_goal_id(self, goal_value):
-        if goal_value is None:
-            return None
-
-        text = str(goal_value).strip()
-        if not text:
-            return None
-
-        waypoints = getattr(self, 'waypoints', {})
-        if text in waypoints:
-            return text
-
-        if text.lower().startswith('waypoint_'):
-            suffix = text.split('_')[-1].strip()
-            if suffix:
-                return f'Waypoint_{suffix}'
-
-        try:
-            return f'Waypoint_{int(text)}'
-        except (TypeError, ValueError):
-            return text
 
     def show_window(self, name, image):
         self.debug_windows.show_window(name, image)
@@ -590,15 +595,21 @@ class HybridDijkstraVisionFollower(Node):
             elif not self.estop_reason:
                 self.estop_reason = 'EMERGENCY STOP!'
 
+            # Preserve the active route for YOLO-triggered stops so the vehicle
+            # can resume after the stop is released.
+            is_yolo_estop = bool(reason and reason.startswith('YOLO ROI hazard detected'))
+
             if not was_active:
                 self.get_logger().warn(self.estop_reason)
-                self.clear_navigation(
-                    clear_goal=True,
-                    clear_pending=True,
-                    clear_reason='estop',
-                )
+                if not is_yolo_estop:
+                    self.clear_navigation(
+                        clear_goal=True,
+                        clear_pending=True,
+                        clear_reason='estop',
+                    )
                 self.reset_vision_tracking()
-                self.publish_int_state(self.pub_state_waypoint, 0)
+                if not is_yolo_estop:
+                    self.publish_int_state(self.pub_state_waypoint, 0)
 
             self.cancel_pending_state_timer()
             self.publish_state_if_changed('긴급 정지')
@@ -688,7 +699,6 @@ class HybridDijkstraVisionFollower(Node):
         return self.route_planner.build_spline_trajectory(path_ids)
 
     def plan_path_to_goal(self, goal_id, state_value=None):
-        goal_id = self.normalize_goal_id(goal_id)
         if len(self.waypoints) == 0:
             self.get_logger().error('맵 정보가 비어 있어 경로를 생성할 수 없습니다.')
             if self.pending_goal_id == goal_id:
@@ -751,6 +761,8 @@ class HybridDijkstraVisionFollower(Node):
 
         self.path = route.path_ids
         self.trajectory = route.trajectory
+        self.display_path = route.display_path_ids
+        self.display_trajectory = route.display_trajectory
         self.goal_wp_id = goal_id
         self.clear_tracking_state()
 
@@ -764,6 +776,8 @@ class HybridDijkstraVisionFollower(Node):
             state_value,
             self.path,
             self.trajectory,
+            self.display_path,
+            self.display_trajectory,
         )
         self.clear_pending_goal()
         self.cancel_pending_state_timer()
@@ -922,7 +936,18 @@ class HybridDijkstraVisionFollower(Node):
         )
 
         if yolo_detections:
+            self.yolo_clear_frames = 0
             self.trigger_yolo_estop(yolo_detections)
+        elif self.estop_active and self.estop_reason.startswith('YOLO ROI hazard detected'):
+            self.yolo_clear_frames += 1
+            if self.yolo_clear_frames >= self.yolo_clear_frames_threshold:
+                self.set_estop_state(False)
+                self.estop_reason = ''
+                self.yolo_last_reason = ''
+                self.yolo_clear_frames = 0
+        else:
+            self.yolo_clear_frames = 0
+
 
         if self.estop_reason:
             height = frame.shape[0]

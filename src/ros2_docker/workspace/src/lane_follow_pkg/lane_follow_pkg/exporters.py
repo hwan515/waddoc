@@ -151,17 +151,24 @@ class MinimapRouteExporter:
             and abs(float(point_a[1]) - float(point_b[1])) <= tolerance
         )
 
-    def build_display_pose_and_path(self, *, path_ids, waypoints, trajectory, current_pose):
-        path_waypoints = self.build_path_waypoints(path_ids, waypoints)
-        display_path_waypoints = path_waypoints
-        display_trajectory = [(float(x), float(z)) for x, z in trajectory]
+    def serialize_trajectory_points(self, trajectory):
+        return [
+            {'index': index, 'x': float(x), 'z': float(z)}
+            for index, (x, z) in enumerate(trajectory)
+        ]
 
-        if path_waypoints:
+    def build_display_pose_and_path(self, *, path_ids, waypoints, trajectory, current_pose):
+        full_path_waypoints = self.build_path_waypoints(path_ids, waypoints)
+        display_path_waypoints = list(full_path_waypoints)
+        full_trajectory = [(float(x), float(z)) for x, z in trajectory]
+        display_trajectory = list(full_trajectory)
+
+        if full_path_waypoints:
             nearest_index = self.find_nearest_path_waypoint_index(
-                path_waypoints,
+                full_path_waypoints,
                 current_pose,
             )
-            display_path_waypoints = path_waypoints[nearest_index:]
+            display_path_waypoints = full_path_waypoints[nearest_index:]
             nearest_waypoint = display_path_waypoints[0]
 
             if display_trajectory:
@@ -181,15 +188,13 @@ class MinimapRouteExporter:
             elif not self.points_match(display_trajectory[0], nearest_waypoint_point):
                 display_trajectory.insert(0, nearest_waypoint_point)
 
-        trajectory_points = [
-            {'index': index, 'x': float(x), 'z': float(z)}
-            for index, (x, z) in enumerate(display_trajectory)
-        ]
-
         return {
+            'full_path_waypoint_ids': [waypoint['id'] for waypoint in full_path_waypoints],
+            'full_path_waypoints': full_path_waypoints,
+            'full_trajectory': self.serialize_trajectory_points(full_trajectory),
             'path_waypoint_ids': [waypoint['id'] for waypoint in display_path_waypoints],
             'path_waypoints': display_path_waypoints,
-            'trajectory': trajectory_points,
+            'trajectory': self.serialize_trajectory_points(display_trajectory),
         }
 
     def build_empty_route_snapshot(
@@ -226,6 +231,10 @@ class MinimapRouteExporter:
                 'z': float(goal_wp['z']),
             },
             'battery_soc': self.get_battery_soc(),
+            'full_path_waypoint_ids': [],
+            'full_path_waypoints': [],
+            'full_trajectory_point_count': 0,
+            'full_trajectory': [],
             'path_waypoint_ids': [],
             'path_waypoints': [],
             'trajectory_point_count': 0,
@@ -275,16 +284,20 @@ class MinimapRouteExporter:
         state_value,
         path_ids,
         trajectory,
+        display_path_ids,
+        display_trajectory,
         waypoints,
         current_pose,
         speed_state,
     ):
         display_data = self.build_display_pose_and_path(
-            path_ids=path_ids,
+            path_ids=display_path_ids if display_path_ids else path_ids,
             waypoints=waypoints,
-            trajectory=trajectory,
+            trajectory=display_trajectory if display_trajectory else trajectory,
             current_pose=current_pose,
         )
+        full_path_waypoints = display_data['full_path_waypoints']
+        full_trajectory_points = display_data['full_trajectory']
         path_waypoints = display_data['path_waypoints']
         trajectory_points = display_data['trajectory']
 
@@ -328,6 +341,10 @@ class MinimapRouteExporter:
                 'z': float(goal_wp['z']),
             },
             'battery_soc': self.get_battery_soc(),
+            'full_path_waypoint_ids': display_data['full_path_waypoint_ids'],
+            'full_path_waypoints': full_path_waypoints,
+            'full_trajectory_point_count': len(full_trajectory_points),
+            'full_trajectory': full_trajectory_points,
             'path_waypoint_ids': display_data['path_waypoint_ids'],
             'path_waypoints': path_waypoints,
             'trajectory_point_count': len(trajectory_points),
@@ -350,6 +367,8 @@ class MinimapRouteExporter:
         state_value,
         path_ids,
         trajectory,
+        display_path_ids=None,
+        display_trajectory=None,
         waypoints,
         current_pose,
         speed_state,
@@ -364,6 +383,8 @@ class MinimapRouteExporter:
                 state_value=state_value,
                 path_ids=path_ids,
                 trajectory=trajectory,
+                display_path_ids=display_path_ids,
+                display_trajectory=display_trajectory,
                 waypoints=waypoints,
                 current_pose=current_pose,
                 speed_state=speed_state,
@@ -384,6 +405,8 @@ class MinimapRouteExporter:
         waypoints,
         path_ids,
         trajectory,
+        display_path_ids=None,
+        display_trajectory=None,
         current_pose,
         speed_state,
         current_mode,
@@ -406,6 +429,8 @@ class MinimapRouteExporter:
                     state_value=state_value,
                     path_ids=path_ids,
                     trajectory=trajectory,
+                    display_path_ids=display_path_ids,
+                    display_trajectory=display_trajectory,
                     waypoints=waypoints,
                     current_pose=current_pose,
                     speed_state=speed_state,

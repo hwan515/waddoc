@@ -494,6 +494,7 @@ const ControlCenter = () => {
     const [selectedVehicleId, setSelectedVehicleId] = useState(null);
     const [minimapVehiclePose, setMinimapVehiclePose] = useState(null);
     const [minimapPathPoints, setMinimapPathPoints] = useState([]);
+    const [minimapFullPathPoints, setMinimapFullPathPoints] = useState([]);
     const [minimapMonitorState, setMinimapMonitorState] = useState(null);
     const [minimapVehicleSpeed, setMinimapVehicleSpeed] = useState(null);
     const [minimapGoalWaypointId, setMinimapGoalWaypointId] = useState(null);
@@ -646,6 +647,7 @@ const ControlCenter = () => {
 
                 setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
                 setMinimapPathPoints(sanitizePathPoints(pathPayload));
+                setMinimapFullPathPoints(sanitizePathPoints(fullPathPayload));
                 setMinimapMonitorState(nextState);
                 setMinimapVehicleSpeed(nextSpeed);
                 setMinimapGoalWaypointId(nextGoalWaypointId);
@@ -833,9 +835,10 @@ const ControlCenter = () => {
                         selectedVehicleId={selectedVehicleId}
                         setSelectedVehicleId={setSelectedVehicleId}
                         minimapVehiclePose={minimapVehiclePose}
-                        minimapPathPoints={effectiveMinimapPathPoints}
-                        vehicleState={effectiveVehicleState}
-                        vehicleSpeed={effectiveVehicleSpeed}
+                        minimapPathPoints={minimapPathPoints}
+                        minimapFullPathPoints={minimapFullPathPoints}
+                        vehicleState={vehicleState}
+                        vehicleSpeed={vehicleSpeed}
                         vehicleLocation={vehicleLocation}
                         minimapRouteAlert={effectiveMinimapRouteAlert}
                         updateIntervalMs={MINIMAP_POLL_INTERVAL_MS}

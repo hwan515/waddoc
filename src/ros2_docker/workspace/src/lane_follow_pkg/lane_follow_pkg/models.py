@@ -21,6 +21,8 @@ class PlannedRoute:
     goal_id: str
     path_ids: list[str]
     trajectory: list[tuple[float, float]]
+    display_path_ids: list[str]
+    display_trajectory: list[tuple[float, float]]
 
 
 @dataclass(frozen=True)

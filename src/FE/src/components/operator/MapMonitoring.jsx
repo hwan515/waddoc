@@ -49,6 +49,7 @@ const MapMonitoring = ({
     setSelectedVehicleId,
     minimapVehiclePose,
     minimapPathPoints,
+    minimapFullPathPoints,
     vehicleState = '대기',
     vehicleSpeed = 0,
     vehicleLocation = null,
@@ -56,6 +57,8 @@ const MapMonitoring = ({
     updateIntervalMs = 100,
     useMockMinimapData = false,
 }) => {
+    
+    // E-Stop REST API POST 요청 핸들러
     const handleEStop = async () => {
         if (!window.confirm('정말로 E-Stop을 발동하시겠습니까?')) return;
 
@@ -113,6 +116,7 @@ const MapMonitoring = ({
                     <MinimapPanel
                         vehiclePose={minimapVehiclePose}
                         pathPoints={minimapPathPoints}
+                        fullPathPoints={minimapFullPathPoints}
                         vehicleState={vehicleState}
                         vehicleSpeed={vehicleSpeed}
                         vehicleLocation={vehicleLocation}

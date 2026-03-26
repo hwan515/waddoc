@@ -30,6 +30,8 @@ current_state = {
         'status': None,
         'trajectory': [],
         'path_waypoints': [],
+        'full_trajectory': [],
+        'full_path_waypoints': [],
         'current_pose': None,
         'speed_ms': 0.0,
         'speed_kmh': 0.0,
@@ -228,6 +230,8 @@ def get_minimap_state():
         route_snapshot = current_state['route_snapshot']
         trajectory_points = sanitize_path_points(route_snapshot.get('trajectory', []))
         path_waypoints = sanitize_path_points(route_snapshot.get('path_waypoints', []))
+        full_trajectory_points = sanitize_path_points(route_snapshot.get('full_trajectory', []))
+        full_path_waypoints = sanitize_path_points(route_snapshot.get('full_path_waypoints', []))
 
         if len(trajectory_points) > 1:
             path_points = trajectory_points
@@ -235,6 +239,13 @@ def get_minimap_state():
             path_points = path_waypoints
         else:
             path_points = trajectory_points or path_waypoints
+
+        if len(full_trajectory_points) > 1:
+            full_path_points = full_trajectory_points
+        elif len(full_path_waypoints) > 1:
+            full_path_points = full_path_waypoints
+        else:
+            full_path_points = full_trajectory_points or full_path_waypoints
 
         route_pose = sanitize_pose(route_snapshot.get('current_pose'))
         odom_pose = sanitize_pose(current_state['minimap_pose']) if current_state['has_odom'] else None
@@ -269,6 +280,8 @@ def get_minimap_state():
             'currentPose': vehicle_pose,
             'pathPoints': path_points,
             'trajectory': path_points,
+            'fullPathPoints': full_path_points,
+            'fullTrajectory': full_path_points,
             'currentLocation': vehicle_location,
             'vehicleLocation': vehicle_location,
             'location': vehicle_location,
@@ -371,6 +384,8 @@ class Ec2ControlNode(Node):
         current_pose = sanitize_pose(payload.get('current_pose'))
         trajectory = payload.get('trajectory', [])
         path_waypoints = payload.get('path_waypoints', [])
+        full_trajectory = payload.get('full_trajectory', [])
+        full_path_waypoints = payload.get('full_path_waypoints', [])
         speed_ms = resolve_snapshot_speed_ms(payload, payload.get('current_pose'))
         speed_kmh = resolve_snapshot_speed_kmh(payload, payload.get('current_pose'), speed_ms)
 
@@ -384,6 +399,8 @@ class Ec2ControlNode(Node):
                 'status': payload.get('status'),
                 'trajectory': trajectory if isinstance(trajectory, list) else [],
                 'path_waypoints': path_waypoints if isinstance(path_waypoints, list) else [],
+                'full_trajectory': full_trajectory if isinstance(full_trajectory, list) else [],
+                'full_path_waypoints': full_path_waypoints if isinstance(full_path_waypoints, list) else [],
                 'current_pose': current_pose,
                 'speed_ms': float(speed_ms),
                 'speed_kmh': float(speed_kmh),
