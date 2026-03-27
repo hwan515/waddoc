@@ -118,6 +118,42 @@ class MqttBridgeNode(Node):
     def _on_mqtt_disconnect(self, client, userdata, rc):
         self.get_logger().warning(f'MQTT 연결 끊김: rc={rc} — 자동 재연결 대기 중')
 
+    def _parse_estop_payload(self, payload: str) -> bool:
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            data = payload
+
+        if isinstance(data, dict):
+            data = data.get('state')
+
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, int):
+            return data == 1
+        if isinstance(data, str):
+            normalized = data.strip().lower()
+            if normalized in ('1', 'true'):
+                return True
+            if normalized in ('0', 'false'):
+                return False
+
+        raise ValueError(f'unsupported estop payload: {payload!r}')
+
+    def _parse_waypoint_payload(self, payload: str) -> int:
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            data = payload
+
+        if isinstance(data, dict):
+            data = data.get('waypoint')
+
+        if isinstance(data, bool):
+            raise ValueError(f'unsupported waypoint payload: {payload!r}')
+
+        return int(data)
+
     def _on_mqtt_message(self, client, userdata, msg):
         topic = msg.topic
         try:
@@ -127,19 +163,22 @@ class MqttBridgeNode(Node):
             return
 
         if topic == TOPIC_CMD_ESTOP:
-            ros_msg = Bool()
-            ros_msg.data = payload in ('1', 'true', 'True')
-            self._estop_pub.publish(ros_msg)
-            self.get_logger().info(f'E-Stop 전달: {ros_msg.data}')
+            try:
+                ros_msg = Bool()
+                ros_msg.data = self._parse_estop_payload(payload)
+                self._estop_pub.publish(ros_msg)
+                self.get_logger().info(f'E-Stop 전달: {ros_msg.data}')
+            except ValueError as e:
+                self.get_logger().error(f'E-Stop 값 오류: {e}')
 
         elif topic == TOPIC_CMD_WAYPOINT:
             try:
                 ros_msg = Int32()
-                ros_msg.data = int(payload)
+                ros_msg.data = self._parse_waypoint_payload(payload)
                 self._waypoint_pub.publish(ros_msg)
                 self.get_logger().info(f'웨이포인트 전달: {ros_msg.data}')
-            except ValueError:
-                self.get_logger().error(f'웨이포인트 값 오류: {payload!r}')
+            except ValueError as e:
+                self.get_logger().error(f'웨이포인트 값 오류: {e}')
 
         elif topic == TOPIC_CMD_DISPATCH:
             self._handle_dispatch(payload)
