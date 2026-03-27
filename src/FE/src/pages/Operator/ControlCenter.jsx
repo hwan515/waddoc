@@ -375,13 +375,13 @@ const getErrorMessage = (error, fallbackMessage) => (
 );
 
 const loadDashboardSnapshot = async ({
-    setVehicles,
-    setSelectedVehicleId,
-    setAllMissionsList,
-    setMissionsList,
-    setStatistics,
-    setCalendarEvents
-}) => {
+                                         setVehicles,
+                                         setSelectedVehicleId,
+                                         setAllMissionsList,
+                                         setMissionsList,
+                                         setStatistics,
+                                         setCalendarEvents
+                                     }) => {
     try {
         const todayDateKey = getTodayKstDate();
 
@@ -391,7 +391,7 @@ const loadDashboardSnapshot = async ({
         });
 
         const [missionsRes, bookingsRes, vehiclesRes] = await Promise.all([
-            fetchSafe(apiClient.get('/missions', { params: { date: todayDateKey } })),
+            fetchSafe(apiClient.get('/missions', { params: { date: activeMissionDate } })),
             fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })),
             fetchSafe(apiClient.get('/admin/vehicles'))
         ]);
@@ -407,11 +407,11 @@ const loadDashboardSnapshot = async ({
         const latestMissionByVehicleId = rawMissions
             .filter((mission) => typeof mission?.vehicleId === 'string' && mission.vehicleId.trim())
             .reduce((accumulator, mission) => {
-            const currentMission = accumulator.get(mission.vehicleId);
+                const currentMission = accumulator.get(mission.vehicleId);
 
-            if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
-                accumulator.set(mission.vehicleId, mission);
-            }
+                if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
+                    accumulator.set(mission.vehicleId, mission);
+                }
 
                 return accumulator;
             }, new Map());
@@ -675,10 +675,10 @@ const ControlCenter = () => {
         setLiveVehicleLocation(nextLocation);
         setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
             vehicle.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID
-                && (
-                    shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
-                    || hasStandaloneLiveTelemetry
-                )
+            && (
+                shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
+                || hasStandaloneLiveTelemetry
+            )
                 ? {
                     ...vehicle,
                     status: nextState || vehicle.status,
@@ -777,7 +777,7 @@ const ControlCenter = () => {
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <MapIcon className="w-4 h-4" />
                             지도 모니터링
@@ -787,7 +787,7 @@ const ControlCenter = () => {
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <LayoutDashboard className="w-4 h-4" />
                             운영 대시보드
@@ -797,7 +797,7 @@ const ControlCenter = () => {
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <Users className="w-4 h-4" />
                             환자 관리
@@ -807,7 +807,7 @@ const ControlCenter = () => {
                             className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <UserCheck className="w-4 h-4" />
                             가입 승인
@@ -818,7 +818,7 @@ const ControlCenter = () => {
                                 className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'monitoring'
                                     ? 'bg-white text-primary shadow-sm'
                                     : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                    }`}
+                                }`}
                             >
                                 <BarChart3 className="w-4 h-4" />
                                 시스템 모니터링
