@@ -58,7 +58,6 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
-        '/api/minimap': createRobotProxy(robotApiProxyTarget),
         '/api/odom': createRobotProxy(robotApiProxyTarget),
         '/api/cmd': createRobotProxy(robotApiProxyTarget),
         '/api': {

@@ -1,5 +1,10 @@
 # ROS2 -> Zenoh -> FastAPI -> FE Data Flow Guide
 
+> Legacy notice
+> 이 문서는 Zenoh/FastAPI 기반 `GET /api/minimap` 흐름을 정리한 레거시 문서입니다.
+> 2026-03-27 기준 운영 관제 화면은 `robot/minimap`, `robot/odom`, `robot/state`, `robot/status` MQTT 토픽을 Spring SSE `/api/v1/robots/stream`으로 소비합니다.
+> 따라서 `/api/minimap` 관련 내용은 현재 운영 경로가 아니라 debug 또는 과거 구조 참고용으로만 봐야 합니다.
+
 이 문서는 현재 프로젝트에서 아래 흐름을 수정하거나 점검할 때 어디를 봐야 하는지 한 번에 찾기 위한 문서
 
 - ROS2 `lane_follow_pkg` 에서 어떤 topic을 publish / subscribe 하는지
@@ -14,7 +19,7 @@
 
 현재 데이터 흐름은 크게 2개입니다.
 
-### A. 실시간 차량 상태 / minimap 표시 흐름
+### A. Legacy 실시간 차량 상태 / minimap 표시 흐름
 
 1. ROS2 `lane_follow_pkg` 가 아래 topic을 publish 합니다.
    - `/odom`
@@ -26,7 +31,7 @@
 5. FastAPI가 아래 endpoint로 FE에 JSON을 반환합니다.
    - `GET /api/minimap`
    - `GET /api/odom`
-6. FE `operator/control` 은 `/api/minimap` 을 polling 해서 지도를 그립니다.
+6. 과거 FE `operator/control` 은 `/api/minimap` 을 polling 해서 지도를 그렸습니다.
 
 ### B. 차량 명령 흐름
 
@@ -48,7 +53,7 @@
 
 즉:
 
-- minimap 화면만 보려면 `GET /api/minimap` 흐름이 중요합니다.
+- legacy minimap debug를 보려면 `GET /api/minimap` 흐름이 중요합니다.
 - DB에 위치를 남기려면 `POST /api/v1/missions/{missionId}/telemetry` 도 별도로 연결해야 합니다.
 
 ## 2. ROS2 쪽 수정 포인트
@@ -254,7 +259,7 @@ self.route_exporter.update_battery_soc(new_value)
 - `/ec2_cmd/target_waypoint`
   - `Int32`
 
-### FastAPI endpoint 목록
+### Legacy FastAPI endpoint 목록
 
 현재 실제로 서비스에 포함된 endpoint:
 
@@ -301,7 +306,7 @@ Swagger 경로:
 - `has_odom`
 - `robot_state`
 
-### `GET /api/minimap` 응답 구조
+### Legacy `GET /api/minimap` 응답 구조
 
 현재 대표 응답 필드는 다음과 같습니다.
 
@@ -420,13 +425,11 @@ Swagger 경로:
 핵심 함수:
 
 - `getRobotApiUrlCandidates(path)`
-- `getRobotMinimapApiUrlCandidates()`
 - `getRobotCommandUrlCandidates(path)`
 
 사용 환경변수:
 
 - `VITE_ROBOT_API_BASE_URL`
-- `VITE_MINIMAP_API_URL`
 - `VITE_ROBOT_TERMINAL_ID`
 - `VITE_ROBOT_TERMINAL_KEY`
 
@@ -444,7 +447,6 @@ Swagger 경로:
 
 현재 dev 서버 proxy:
 
-- `/api/minimap` -> robot API target
 - `/api/odom` -> robot API target
 - `/api/cmd` -> robot API target
 - `/api` -> Spring `http://localhost:8080`

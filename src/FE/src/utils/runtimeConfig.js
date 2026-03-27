@@ -54,16 +54,6 @@ export const getRobotApiUrlCandidates = (path) => {
     ]);
 };
 
-export const getRobotMinimapApiUrlCandidates = () => {
-    const runtimeConfig = readRuntimeConfig();
-    const configuredMinimapUrl = runtimeConfig.VITE_MINIMAP_API_URL || import.meta.env.VITE_MINIMAP_API_URL || '';
-
-    return uniqueNonEmpty([
-        configuredMinimapUrl,
-        ...getRobotApiUrlCandidates('/api/minimap'),
-    ]);
-};
-
 export const isMonitoringTabEnabled = () => {
     const runtimeConfig = readRuntimeConfig();
     const configuredValue = runtimeConfig.VITE_ENABLE_MONITORING_TAB ?? import.meta.env.VITE_ENABLE_MONITORING_TAB ?? 'false';
