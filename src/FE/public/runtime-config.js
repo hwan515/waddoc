@@ -1,5 +1,4 @@
 window.__APP_CONFIG__ = Object.assign(window.__APP_CONFIG__ || {}, {
   VITE_DEMO_MODE_ENABLED: window.__APP_CONFIG__?.VITE_DEMO_MODE_ENABLED || 'false',
-  VITE_ROBOT_API_BASE_URL: window.__APP_CONFIG__?.VITE_ROBOT_API_BASE_URL || '',
   VITE_ENABLE_MONITORING_TAB: window.__APP_CONFIG__?.VITE_ENABLE_MONITORING_TAB || 'false'
 });
