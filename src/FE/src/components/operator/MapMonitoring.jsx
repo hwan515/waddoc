@@ -72,7 +72,7 @@ const MapMonitoring = ({
     };
 
     const selectedVehicleLabel = selectedVehicle
-        ? (selectedVehicle.vehicleId || selectedVehicle.id)
+        ? (selectedVehicle.displayName || selectedVehicle.vehicleId || selectedVehicle.id)
         : '차량을 선택하세요';
 
     return (
@@ -145,7 +145,7 @@ const MapMonitoring = ({
                                 >
                                     <div className="mb-2 flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <div className="text-sm font-bold text-slate-800">{vehicle.vehicleId || vehicle.id}</div>
+                                            <div className="text-sm font-bold text-slate-800">{vehicle.displayName || vehicle.vehicleId || vehicle.id}</div>
                                             {vehicle.displayPatientName && (
                                                 <div className="truncate text-[11px] text-slate-500">{vehicle.displayPatientName}</div>
                                             )}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Activity, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -10,10 +10,6 @@ const WEEK_END_HOUR = WEEK_START_HOUR + ((WEEK_SLOT_COUNT * WEEK_SLOT_INTERVAL_M
 
 const formatDateKey = (date) => (
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-);
-
-const formatTimeLabel = (date) => (
-    `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 );
 
 const formatHalfHourLabel = (totalMinutes) => {
@@ -32,6 +28,15 @@ const formatScheduleTime = (timeStr) => {
     }
 
     return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+};
+
+const formatMissionDateLabel = (dateKey) => {
+    const parsedDate = new Date(`${dateKey}T00:00:00`);
+    if (Number.isNaN(parsedDate.getTime())) {
+        return dateKey;
+    }
+
+    return `${parsedDate.getMonth() + 1}월 ${parsedDate.getDate()}일`;
 };
 
 const getWeekOfMonth = (date) => {
@@ -82,29 +87,21 @@ const DashboardView = ({
     setCalendarMode,
     calendarEvents,
     missionsList = [],
+    selectedBooking = null,
+    selectedBookingId = null,
+    onBookingSelect,
+    onMissionPanelReset,
     statistics,
     pendingDemoAction = null,
     onDemoDispatch,
     onDemoArrive
 }) => {
     const [referenceDate, setReferenceDate] = useState(() => new Date());
-    const [now, setNow] = useState(() => new Date());
     const [expandedMonthlyDate, setExpandedMonthlyDate] = useState(null);
-
-    useEffect(() => {
-        const intervalId = window.setInterval(() => {
-            setNow(new Date());
-        }, 60000);
-
-        return () => {
-            window.clearInterval(intervalId);
-        };
-    }, []);
 
     const currentYear = referenceDate.getFullYear();
     const currentMonth = referenceDate.getMonth(); // 0-indexed
-    const todayDateKey = formatDateKey(now);
-    const currentTimeLabel = formatTimeLabel(now);
+    const todayDateKey = formatDateKey(new Date());
 
     // 주간 뷰 시간표 (08:00 ~ 19:00, 30분 단위)
     const timeSlots = Array.from({ length: WEEK_SLOT_COUNT }, (_, i) => {
@@ -143,17 +140,6 @@ const DashboardView = ({
         return (elapsedMinutes / WEEK_SLOT_INTERVAL_MINUTES) * WEEK_SLOT_HEIGHT;
     };
 
-    const getCurrentTimeOffset = (date) => {
-        const currentHours = date.getHours() + (date.getMinutes() / 60);
-        if (currentHours < WEEK_START_HOUR || currentHours > WEEK_END_HOUR) {
-            return null;
-        }
-
-        return (currentHours - WEEK_START_HOUR) * WEEK_SLOT_HEIGHT;
-    };
-
-    const currentTimeOffset = getCurrentTimeOffset(now);
-
     const handleCalendarShift = (direction) => {
         setExpandedMonthlyDate(null);
         setReferenceDate((current) => {
@@ -191,9 +177,6 @@ const DashboardView = ({
     const previousPeriodLabel = calendarMode === 'weekly' ? '지난주' : '지난달';
     const nextPeriodLabel = calendarMode === 'weekly' ? '다음 주' : '다음 달';
     const currentMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-
-    const isCurrentDayVisible = currentWeekDays.some((day) => day.isToday);
-    const shouldShowCurrentTimeLine = calendarMode === 'weekly' && isCurrentDayVisible && currentTimeOffset !== null;
 
     const handleScheduleMouseDown = (event) => {
         event.preventDefault();
@@ -243,6 +226,13 @@ const DashboardView = ({
     const consultingMissionCount = statistics.consultingMissions || 0;
     const completedMissionCount = statistics.completedMissions || 0;
     const incidentMissionCount = statistics.incidentCount || 0;
+    const missionPanelTitle = '금일 출동 현황';
+    const missionPanelDescription = selectedBooking
+        ? `${formatMissionDateLabel(selectedBooking.fullDate)} ${formatScheduleTime(selectedBooking.timeStr)} · ${selectedBooking.name}`
+        : '왼쪽 예약을 누르면 해당 미션을 확인할 수 있습니다.';
+    const missionPanelEmptyMessage = selectedBooking
+        ? '선택한 예약에 연결된 미션이 아직 없습니다.'
+        : '금일 출동 예정 미션이 없습니다.';
 
     return (
         <div className="h-full flex p-4 gap-4">
@@ -332,36 +322,27 @@ const DashboardView = ({
                                             {getEventsForDate(day.fullDate).map((ev) => {
                                                 const topOffsetPx = getTopOffset(ev.timeStr);
                                                 return (
-                                                    <div
+                                                    <button
                                                         key={ev.id}
+                                                        type="button"
+                                                        onClick={() => onBookingSelect?.(ev)}
                                                         onMouseDown={handleScheduleMouseDown}
                                                         style={{ top: `${topOffsetPx}px`, height: '36px' }}
-                                                        title={`${ev.name} / ${ev.doctor || '담당의'}`}
-                                                        className={`absolute inset-x-1.5 flex items-center overflow-hidden rounded-md border-l-4 px-2 py-1 text-xs transition-colors cursor-default select-none ${getEventColor(ev.status, false)}`}
+                                                        title={`${ev.name} / ${ev.doctor || 'Unassigned'}`}
+                                                        aria-pressed={selectedBookingId === ev.id}
+                                                        className={`absolute inset-x-1.5 flex cursor-pointer items-center overflow-hidden rounded-md border-l-4 px-2 py-1 text-left text-xs transition-colors select-none focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev.status, false)}`}
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="truncate text-[11px] font-bold leading-4">
                                                                 {ev.name}
                                                             </div>
                                                             <div className="truncate text-[10px] leading-none opacity-80">
-                                                                {ev.doctor || '담당의'}
+                                                                {ev.doctor || 'Unassigned'}
                                                             </div>
                                                         </div>
-                                                    </div>
+                                                    </button>
                                                 );
                                             })}
-                                            {shouldShowCurrentTimeLine && day.isToday && (
-                                                <div
-                                                    style={{ top: `${currentTimeOffset}px` }}
-                                                    className="pointer-events-none absolute inset-x-0 z-20 flex -translate-y-1/2 items-center"
-                                                >
-                                                    <div className="flex items-center gap-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-white"></span>
-                                                        {currentTimeLabel}
-                                                    </div>
-                                                    <div className="h-px flex-1 bg-red-400"></div>
-                                                </div>
-                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -398,10 +379,16 @@ const DashboardView = ({
                                                         </div>
                                                         <div className={`mt-0.5 flex flex-1 flex-col gap-0.75 ${isExpandedDay ? 'overflow-y-auto pr-0.5 custom-scrollbar' : 'overflow-hidden'}`}>
                                                             {visibleEvents.map((ev) => (
-                                                                <div key={ev.id} className={`px-1.5 py-0.75 rounded text-[10px] leading-tight flex justify-between items-center whitespace-nowrap overflow-hidden shadow-sm ${getEventColor(ev.status, true)}`}>
-                                                                    <span className="font-bold truncate mr-1">{ev.name}</span>
+                                                                <button
+                                                                    key={ev.id}
+                                                                    type="button"
+                                                                    onClick={() => onBookingSelect?.(ev)}
+                                                                    aria-pressed={selectedBookingId === ev.id}
+                                                                    className={`flex items-center justify-between overflow-hidden whitespace-nowrap rounded px-1.5 py-0.75 text-left text-[10px] leading-tight shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev.status, true)}`}
+                                                                >
+                                                                    <span className="mr-1 truncate font-bold">{ev.name}</span>
                                                                     <span className="shrink-0 text-[9px] font-medium opacity-80">{formatScheduleTime(ev.timeStr)}</span>
-                                                                </div>
+                                                                </button>
                                                             ))}
                                                             {dayEvents.length > 3 && (
                                                                 <button
@@ -431,14 +418,37 @@ const DashboardView = ({
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
                         <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                            <Activity className="w-5 h-5 text-primary" /> 금일 출동 현황
+                            <Activity className="w-5 h-5 text-primary" /> {missionPanelTitle}
                         </h3>
                         <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-xs font-bold">
                             총 {missionsList.length}건
                         </span>
                     </div>
+                    <div className="border-t border-slate-100 bg-white px-4 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                                <div className="truncate text-xs font-medium leading-4 text-slate-700">
+                                    {missionPanelDescription}
+                                </div>
+                            </div>
+                            {selectedBooking && (
+                                <button
+                                    type="button"
+                                    onClick={onMissionPanelReset}
+                                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                    오늘 목록으로
+                                </button>
+                            )}
+                        </div>
+                    </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                        {missionsList.map(m => (
+                        {missionsList.length === 0 ? (
+                            <div className="flex h-full min-h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
+                                {missionPanelEmptyMessage}
+                            </div>
+                        ) : missionsList.map(m => (
                             <div
                                 key={m.id}
                                 className={`border rounded-lg p-4 shadow-sm transition-colors ${m.isPrimaryServiceVehicle
@@ -475,7 +485,7 @@ const DashboardView = ({
                                         <span className="font-bold text-slate-700">{m.phaseLabel}</span>
                                     </div>
                                 </div>
-                                {m.isPrimaryServiceVehicle && (
+                                {(m.canDispatch || m.canArrive) && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         {m.canDispatch && (
                                             <button

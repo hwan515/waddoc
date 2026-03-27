@@ -40,14 +40,23 @@ function localSavePlugin() {
 }
 
 // https://vite.dev/config/
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const robotApiProxyTarget = env.VITE_ROBOT_API_PROXY_TARGET
+    || env.DEV_ROBOT_API_PROXY_TARGET
+    || env.VITE_ROBOT_API_BASE_URL
+    || 'https://www.waddoc.site'
+  const backendProxyTarget = env.VITE_BACKEND_PROXY_TARGET
+    || env.DEV_BACKEND_PROXY_TARGET
+    || 'http://localhost'
+
   return {
     plugins: [react(), tailwindcss(), localSavePlugin()],
     server: {
       port: 5173,
       proxy: {
         '/api': {
-          target: 'http://localhost:8080', // 백엔드 서버 주소
+          target: backendProxyTarget,
           changeOrigin: true,
           secure: false,
         }

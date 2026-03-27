@@ -6,9 +6,6 @@ import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.entity.CareCase;
-import com.waddoc.domain.consultation.entity.ConsultationSession;
-import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
-import com.waddoc.domain.consultation.service.ConsultationLiveKitService;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
@@ -21,10 +18,7 @@ import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
 import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.mission.entity.Mission;
-import com.waddoc.domain.mission.entity.MissionPhase;
-import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
-import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
@@ -59,14 +53,10 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final CareCaseRepository careCaseRepository;
     private final DispatchOutboxRepository dispatchOutboxRepository;
-    private final MissionRepository missionRepository;
-    private final ConsultationSessionRepository consultationSessionRepository;
     private final MissionCommandService missionCommandService;
-    private final ConsultationLiveKitService consultationLiveKitService;
     private final AuditLogService auditLogService;
     private final SmsService smsService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final DemoModePolicy demoModePolicy;
     private final DispatchAssignmentPolicy dispatchAssignmentPolicy;
     private final WaypointAddressResolver waypointAddressResolver;
 
@@ -368,7 +358,6 @@ public class BookingService {
         // TODO: restore only behind an explicit instant-consult booking flow; normal same-day bookings must not auto-arrive.
         return false;
     }
-
     private Mission ensureCreatedMission(CareCase careCase, Patient patient) {
         WaypointAddressResolver.ResolvedTarget resolvedTarget = waypointAddressResolver.resolve(patient.getAddress());
         return missionCommandService.createMissionForDispatch(
@@ -377,46 +366,6 @@ public class BookingService {
                 patient.getAddress(),
                 null,
                 resolvedTarget.waypointNumber()
-        );
-    }
-
-    private void provisionImmediateConsultArtifacts(
-            CareCase careCase,
-            DispatchOutbox dispatchOutbox,
-            Mission mission
-    ) {
-        // TODO: Replace this same-day auto-provisioning with an explicit instant-consult booking flow and schedule policy.
-        // 배차 소비를 기다리지 않고 즉시 진료 가능한 상태까지 끌어올린다.
-        mission.updatePhase(MissionPhase.DISPATCHED);
-        mission.updatePhase(MissionPhase.EN_ROUTE);
-        mission.updatePhase(MissionPhase.ARRIVED);
-        missionRepository.save(mission);
-
-        // 본인확인 단계에서 바로 사용할 수 있도록 READY 세션을 미리 만든다.
-        ConsultationSession consultationSession = consultationSessionRepository.findByCareCase(careCase)
-                .orElseGet(() -> {
-                    ConsultationSession createdSession = ConsultationSession.builder()
-                            .careCase(careCase)
-                            .roomId(null)
-                            .livekitUrl(consultationLiveKitService.getLivekitUrl())
-                            .build();
-                    consultationLiveKitService.createRoom(createdSession.getRoomId());
-                    createdSession.markReady();
-                    return consultationSessionRepository.save(createdSession);
-                });
-
-        // 즉시 진료용 mission이 준비됐으면 기존 배차 outbox는 중복 처리되지 않도록 닫는다.
-        dispatchOutbox.markCompleted();
-        auditLogService.log(
-                "BOOKING_IMMEDIATE_CONSULT_PROVISIONED",
-                "CARE_CASE",
-                careCase.getPublicId(),
-                "corr_case_" + careCase.getPublicId(),
-                Map.of(
-                        "missionId", mission.getPublicId(),
-                        "sessionId", consultationSession.getPublicId(),
-                        "dispatchOutboxStatus", dispatchOutbox.getStatus().name()
-                )
         );
     }
 }

@@ -47,6 +47,10 @@ livekit:
 telemetry:
   api-key: ${TELEMETRY_API_KEY:telemetry-dev-key}
 
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:wss://www.waddoc.site/mqtt}
+  client-id: ${MQTT_CLIENT_ID:spring-waddoc-local}
+
 monitoring:
   access:
     cookie-secret: waddoc-dev-monitoring-cookie-secret-must-be-at-least-32

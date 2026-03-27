@@ -14,6 +14,44 @@ const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
 const DEMO_MODE_ENABLED = isDemoModeEnabled();
 const MONITORING_TAB_ENABLED = isMonitoringTabEnabled();
 
+const formatDateKey = (date) => (
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+);
+
+const extractDateKey = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        const matchedDate = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
+
+        if (matchedDate) {
+            return matchedDate[0];
+        }
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return null;
+    }
+
+    return formatDateKey(parsed);
+};
+
+const formatMissionDisplayTime = (mission) => {
+    if (mission?.phase === 'CREATED' && typeof mission?.appointmentTime === 'string') {
+        return mission.appointmentTime.slice(0, 5);
+    }
+
+    if (mission?.dispatchedAt) {
+        return new Date(mission.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    return '-';
+};
+
 const MONITOR_STATE_LABELS = {
     DISPATCHED: '출발',
     START: '출발',
@@ -296,6 +334,40 @@ const DASHBOARD_MISSION_LABEL_RESOLVERS = {
     phase: getDashboardMissionPhaseLabel,
 };
 
+const sortDashboardMissions = (left, right) => {
+    if (left.isPrimaryServiceVehicle !== right.isPrimaryServiceVehicle) {
+        return left.isPrimaryServiceVehicle ? -1 : 1;
+    }
+
+    const vehicleCompare = left.vehicleId.localeCompare(right.vehicleId);
+    if (vehicleCompare !== 0) {
+        return vehicleCompare;
+    }
+
+    return String(left.time || '').localeCompare(String(right.time || ''));
+};
+
+const mapMissionToDashboardItem = (mission) => {
+    const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
+
+    return {
+        id: mission.missionId,
+        missionId: mission.missionId,
+        caseId: mission.caseId || null,
+        patientName: mission.patientName || '환자명 미상',
+        destination: mission.destination || '목적지 미상',
+        vehicleId: getVehicleDisplayId(mission.vehicleId),
+        status: DASHBOARD_MISSION_LABEL_RESOLVERS.status(mission.phase),
+        phase: mission.phase,
+        phaseLabel: DASHBOARD_MISSION_LABEL_RESOLVERS.phase(mission.phase),
+        time: formatMissionDisplayTime(mission),
+        dateKey: extractDateKey(mission.appointmentDate)
+            || extractDateKey(mission.dispatchedAt || mission.createdAt || mission.updatedAt),
+        isPrimaryServiceVehicle,
+        ...getDemoActionAvailability(mission.phase)
+    };
+};
+
 const getErrorMessage = (error, fallbackMessage) => (
     error?.response?.data?.message
     || error?.message
@@ -305,24 +377,27 @@ const getErrorMessage = (error, fallbackMessage) => (
 const loadDashboardSnapshot = async ({
     setVehicles,
     setSelectedVehicleId,
+    setAllMissionsList,
     setMissionsList,
     setStatistics,
     setCalendarEvents
 }) => {
     try {
-        const today = getTodayKstDate();
+        const todayDateKey = getTodayKstDate();
 
         const fetchSafe = (req) => req.catch(err => {
             console.error('API Error:', err);
             return { data: {} };
         });
 
-        const [missionsRes, bookingsRes] = await Promise.all([
-            fetchSafe(apiClient.get('/missions', { params: { date: today } })),
-            fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } }))
+        const [missionsRes, bookingsRes, vehiclesRes] = await Promise.all([
+            fetchSafe(apiClient.get('/missions', { params: { date: activeMissionDate } })),
+            fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })),
+            fetchSafe(apiClient.get('/admin/vehicles'))
         ]);
 
         const rawMissions = missionsRes.data.missions || [];
+        const rawVehicles = Array.isArray(vehiclesRes.data) ? vehiclesRes.data : [];
         const missionDetailResponses = await Promise.all(
             rawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
         );
@@ -341,30 +416,40 @@ const loadDashboardSnapshot = async ({
                 return accumulator;
             }, new Map());
 
-        const mappedVehicles = Array.from(latestMissionByVehicleId.values())
-            .map((mission) => {
-                const statusLabel = getMonitorStateFromPhase(mission.phase);
-                const missionSpeed = normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h');
-                const missionDetail = missionDetailsById.get(mission.missionId);
-                const location = extractVehicleLocation(
-                    mission.currentLocation,
-                    missionDetail?.currentLocation,
-                    mission.location,
-                    mission
-                );
-                const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
+        const vehicleCatalog = rawVehicles.length > 0
+            ? rawVehicles
+            : Array.from(latestMissionByVehicleId.keys()).map((vehicleId) => ({ vehicleId }));
+
+        const mappedVehicles = vehicleCatalog
+            .map((vehicle) => {
+                const resolvedVehicleId = getVehicleDisplayId(vehicle?.vehicleId);
+                const mission = latestMissionByVehicleId.get(resolvedVehicleId) || {};
+                const hasMission = Boolean(mission.missionId);
+                const statusLabel = hasMission ? getMonitorStateFromPhase(mission.phase) : getMonitorStateFromPhase('WAITING');
+                const missionSpeed = hasMission ? normalizeVehicleSpeed(mission.speed, statusLabel, 'km/h') : 0;
+                const missionDetail = hasMission ? missionDetailsById.get(mission.missionId) : null;
+                const location = hasMission
+                    ? extractVehicleLocation(
+                        mission.currentLocation,
+                        missionDetail?.currentLocation,
+                        mission.location,
+                        mission
+                    )
+                    : null;
+                const isPrimaryServiceVehicle = resolvedVehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
 
                 return {
-                    id: mission.vehicleId,
-                    vehicleId: getVehicleDisplayId(mission.vehicleId),
-                    missionId: mission.missionId,
+                    id: resolvedVehicleId,
+                    vehicleId: resolvedVehicleId,
+                    displayName: vehicle?.displayName || vehicle?.code || resolvedVehicleId,
+                    missionId: mission?.missionId || null,
                     patientName: mission.patientName || '환자명 미상',
                     destination: mission.destination || '목적지 미상',
                     status: isPrimaryServiceVehicle ? statusLabel : '추후 서비스 예정',
                     location: isPrimaryServiceVehicle ? location : null,
                     battery: null,
                     speed: isPrimaryServiceVehicle ? missionSpeed : 0,
-                    lastUpdated: mission.updatedAt || mission.dispatchedAt || mission.createdAt || new Date().toISOString(),
+                    lastUpdated: mission.updatedAt || mission.dispatchedAt || mission.createdAt || vehicle?.updatedAt || vehicle?.createdAt || new Date().toISOString(),
                     mission,
                     isPrimaryServiceVehicle,
                     isFutureService: !isPrimaryServiceVehicle,
@@ -397,49 +482,14 @@ const loadDashboardSnapshot = async ({
             setSelectedVehicleId(null);
         }
 
-        const todayMissions = rawMissions.filter((mission) => {
-            const dateStr = mission.dispatchedAt || mission.createdAt || mission.updatedAt;
-            if (!dateStr) return false;
-            return new Date(dateStr).toISOString().split('T')[0] === today;
-        });
+        const mappedAllMissions = rawMissions
+            .map(mapMissionToDashboardItem)
+            .sort(sortDashboardMissions);
 
-        const mappedMissionsList = todayMissions
-            .map((mission) => {
-                const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
-                const demoActionAvailability = getDemoActionAvailability(mission.phase);
-
-                return {
-                    id: mission.missionId,
-                    patientName: isPrimaryServiceVehicle ? (mission.patientName || '환자명 미상') : '추후 서비스 예정',
-                    destination: isPrimaryServiceVehicle ? (mission.destination || '목적지 미상') : '서비스 준비 중',
-                    vehicleId: getVehicleDisplayId(mission.vehicleId),
-                    status: isPrimaryServiceVehicle ? getMissionStatusLabel(mission.phase) : '추후 서비스 예정',
-                    phase: mission.phase,
-                    phaseLabel: isPrimaryServiceVehicle ? getMissionPhaseLabel(mission.phase) : '서비스 준비 중',
-                    time: isPrimaryServiceVehicle && mission.dispatchedAt
-                        ? new Date(mission.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : '-',
-                    isPrimaryServiceVehicle,
-                    ...demoActionAvailability
-                };
-            })
-            .sort((a, b) => {
-                if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
-                    return a.isPrimaryServiceVehicle ? -1 : 1;
-                }
-
-                return a.vehicleId.localeCompare(b.vehicleId);
-            })
-            .map((mission) => (
-                mission.phase === 'CREATED'
-                    ? {
-                        ...mission,
-                        status: '대기',
-                        phaseLabel: '대기'
-                    }
-                    : mission
-            ));
-        setMissionsList(mappedMissionsList);
+        setMissionsList(
+            mappedAllMissions.filter((mission) => mission.dateKey === todayDateKey)
+        );
+        setAllMissionsList(mappedAllMissions);
 
         setStatistics({
             totalMissions: rawMissions.length,
@@ -456,13 +506,16 @@ const loadDashboardSnapshot = async ({
 
             return {
                 id: booking.bookingId,
+                bookingId: booking.bookingId,
+                caseId: booking.caseId || null,
                 name: booking.patientName,
                 type: booking.departmentName || '진료',
                 timeStr: booking.startTime,
                 dayIdx,
                 fullDate: booking.appointmentDate,
                 doctor: booking.doctorName || '담당의',
-                status: booking.status || 'CONFIRMED'
+                status: booking.status || 'CONFIRMED',
+                missionPhase: booking.missionPhase || null
             };
         });
         setCalendarEvents(mappedEvents);
@@ -474,6 +527,7 @@ const loadDashboardSnapshot = async ({
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
+    const currentUser = useAuthStore((state) => state.user);
     const { snapshotData } = useRobotSSE();
 
     // '지도' | '대시보드'
@@ -482,6 +536,7 @@ const ControlCenter = () => {
     // 캘린더 모드
     const [calendarMode, setCalendarMode] = useState('weekly');
     const [vehicles, setVehicles] = useState([]);
+    const [allMissionsList, setAllMissionsList] = useState([]);
     const [missionsList, setMissionsList] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [statistics, setStatistics] = useState({
@@ -493,6 +548,7 @@ const ControlCenter = () => {
         incidentCount: 0
     });
     const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+    const [selectedBookingEvent, setSelectedBookingEvent] = useState(null);
     const [minimapVehiclePose, setMinimapVehiclePose] = useState(null);
     const [minimapPathPoints, setMinimapPathPoints] = useState([]);
     const [minimapFullPathPoints, setMinimapFullPathPoints] = useState([]);
@@ -506,6 +562,7 @@ const ControlCenter = () => {
         loadDashboardSnapshot({
             setVehicles,
             setSelectedVehicleId,
+            setAllMissionsList,
             setMissionsList,
             setStatistics,
             setCalendarEvents
@@ -546,6 +603,7 @@ const ControlCenter = () => {
             await loadDashboardSnapshot({
                 setVehicles,
                 setSelectedVehicleId,
+                setAllMissionsList,
                 setMissionsList,
                 setStatistics,
                 setCalendarEvents
@@ -646,6 +704,12 @@ const ControlCenter = () => {
         selectedVehicle?.mission,
         minimapGoalWaypointNumber
     );
+    const selectedBookingMission = selectedBookingEvent?.caseId
+        ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
+        : null;
+    const displayedDashboardMissions = selectedBookingEvent
+        ? (selectedBookingMission ? [selectedBookingMission] : [])
+        : missionsList;
     const hasStandaloneLiveTelemetry = isValidPose(minimapVehiclePose)
         || vehicleLocation !== null
         || minimapVehicleSpeed !== null;
@@ -680,6 +744,12 @@ const ControlCenter = () => {
         logout();
         navigate('/operator/login');
     };
+
+    const operatorLoginId = currentUser?.username
+        || currentUser?.loginId
+        || currentUser?.userId
+        || currentUser?.name
+        || 'operator';
 
     const handleGoHome = () => {
         navigate('/');
@@ -765,7 +835,7 @@ const ControlCenter = () => {
                     <div className="w-px h-5 bg-white/20"></div>
                     <div className="text-sm font-medium flex items-center">
                         <span className="bg-accent-2 px-2.5 py-1 rounded text-xs mr-2 border border-white/10">관리자</span>
-                        operator님
+                        {operatorLoginId}님
                     </div>
                     <button
                         onClick={handleLogout}
@@ -799,7 +869,11 @@ const ControlCenter = () => {
                         calendarMode={calendarMode}
                         setCalendarMode={setCalendarMode}
                         calendarEvents={calendarEvents}
-                        missionsList={missionsList}
+                        missionsList={displayedDashboardMissions}
+                        selectedBooking={selectedBookingEvent}
+                        selectedBookingId={selectedBookingEvent?.id || null}
+                        onBookingSelect={setSelectedBookingEvent}
+                        onMissionPanelReset={() => setSelectedBookingEvent(null)}
                         statistics={statistics}
                         pendingDemoAction={pendingDemoAction}
                         onDemoDispatch={(missionId) => handleDemoMissionAction(missionId, 'dispatch')}

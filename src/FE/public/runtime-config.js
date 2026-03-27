@@ -1,4 +1,1 @@
-window.__APP_CONFIG__ = Object.assign(window.__APP_CONFIG__ || {}, {
-  VITE_DEMO_MODE_ENABLED: window.__APP_CONFIG__?.VITE_DEMO_MODE_ENABLED || 'false',
-  VITE_ENABLE_MONITORING_TAB: window.__APP_CONFIG__?.VITE_ENABLE_MONITORING_TAB || 'false'
-});
+window.__APP_CONFIG__ = window.__APP_CONFIG__ || {};

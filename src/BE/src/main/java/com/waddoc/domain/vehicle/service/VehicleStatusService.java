@@ -17,6 +17,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
  * 차량 운영 상태를 조회/변경하고 복구 시 대기 중인 재배차를 다시 깨운다.
  */
@@ -27,6 +29,13 @@ public class VehicleStatusService {
     private final VehicleRepository vehicleRepository;
     private final DispatchOutboxRepository dispatchOutboxRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Transactional(readOnly = true)
+    public List<VehicleResponse> getVehicles() {
+        return vehicleRepository.findAllByIsActiveTrueOrderByCreatedAtAsc().stream()
+                .map(VehicleResponse::from)
+                .toList();
+    }
 
     @Transactional(readOnly = true)
     public VehicleResponse getVehicle(String vehicleId) {
