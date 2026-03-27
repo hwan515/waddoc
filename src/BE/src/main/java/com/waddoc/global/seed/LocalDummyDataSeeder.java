@@ -148,29 +148,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             new VehicleSeed("veh_YEONGJU_01", "YEONGJU-01", "YEONGJU", "영주 1호차"),
             new VehicleSeed("veh_SANGJU_01", "SANGJU-01", "SANGJU", "상주 1호차"));
 
-    private static final List<PatientSeed> PRIORITY_PATIENT_SEEDS = List.of(
-            new PatientSeed("gim_wp_059", "이분희", LocalDate.of(1958, 6, 12), PatientGender.FEMALE, "GIMCHEON",
-                    "경상북도 김천시 증산면 장전4길 14", buildWaypointPhone(59), "patients/pat_prd_gim_waypoint59/reference.jpg",
-                    59, buildGuardianUsername(59), "이분희 보호자", DEFAULT_GUARDIAN_RELATION),
-            new PatientSeed("gim_wp_092", "박상철", LocalDate.of(1960, 9, 2), PatientGender.MALE, "GIMCHEON",
-                    "경상북도 김천시 증산면 장전3길 6-9", buildWaypointPhone(92), "patients/pat_prd_gim_waypoint92/reference.jpg",
-                    92, buildGuardianUsername(92), "박상철 보호자", DEFAULT_GUARDIAN_RELATION),
-            new PatientSeed("gim_wp_142", "정복순", LocalDate.of(1955, 1, 24), PatientGender.FEMALE, "GIMCHEON",
-                    "경상북도 김천시 증산면 장전2길 7", buildWaypointPhone(142), "patients/pat_prd_gim_waypoint142/reference.jpg",
-                    142, buildGuardianUsername(142), "정복순 보호자", DEFAULT_GUARDIAN_RELATION));
-
-    private static final List<LocalTime> AVAILABLE_SLOT_START_TIMES = List.of(
-            LocalTime.of(9, 0),
-            LocalTime.of(9, 30),
-            LocalTime.of(10, 0),
-            LocalTime.of(10, 30),
-            LocalTime.of(11, 0),
-            LocalTime.of(11, 30),
-            LocalTime.of(14, 0),
-            LocalTime.of(14, 30),
-            LocalTime.of(15, 0),
-            LocalTime.of(15, 30));
-
     private final UserRepository userRepository;
     private final PatientRepository patientRepository;
     private final DoctorProfileRepository doctorProfileRepository;
@@ -235,24 +212,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             patientSeeds.add(buildRealisticSyntheticPatientSeed(waypointNumber));
         }
         return patientSeeds;
-    }
-
-    private PatientSeed buildSyntheticPatientSeed(int waypointNumber) {
-        String suffix = buildWaypointSuffix(waypointNumber);
-        return new PatientSeed(
-                "gim_wp_" + suffix,
-                "김천환자" + suffix,
-                LocalDate.of(1945 + (waypointNumber % 35), ((waypointNumber - 1) % 12) + 1, ((waypointNumber - 1) % 28) + 1),
-                waypointNumber % 2 == 0 ? PatientGender.FEMALE : PatientGender.MALE,
-                "GIMCHEON",
-                buildTopologyWaypointAddress(waypointNumber),
-                buildWaypointPhone(waypointNumber),
-                null,
-                waypointNumber,
-                buildGuardianUsername(waypointNumber),
-                "김천보호" + suffix,
-                DEFAULT_GUARDIAN_RELATION
-        );
     }
 
     private PatientSeed buildRealisticSyntheticPatientSeed(int waypointNumber) {
