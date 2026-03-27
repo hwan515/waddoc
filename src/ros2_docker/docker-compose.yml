@@ -36,5 +36,5 @@ services:
     network_mode: "host"
     environment:
       - MTX_WEBRTCICEUDP=yes
-      - MTX_WEBRTCICEHOSTSNAT1TO1=100.89.189.27
+      - MTX_WEBRTCICEHOSTSNAT1TO1=100.85.200.7
     restart: unless-stopped
