@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Activity, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -10,10 +10,6 @@ const WEEK_END_HOUR = WEEK_START_HOUR + ((WEEK_SLOT_COUNT * WEEK_SLOT_INTERVAL_M
 
 const formatDateKey = (date) => (
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-);
-
-const formatTimeLabel = (date) => (
-    `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 );
 
 const formatHalfHourLabel = (totalMinutes) => {
@@ -101,23 +97,11 @@ const DashboardView = ({
     onDemoArrive
 }) => {
     const [referenceDate, setReferenceDate] = useState(() => new Date());
-    const [now, setNow] = useState(() => new Date());
     const [expandedMonthlyDate, setExpandedMonthlyDate] = useState(null);
-
-    useEffect(() => {
-        const intervalId = window.setInterval(() => {
-            setNow(new Date());
-        }, 60000);
-
-        return () => {
-            window.clearInterval(intervalId);
-        };
-    }, []);
 
     const currentYear = referenceDate.getFullYear();
     const currentMonth = referenceDate.getMonth(); // 0-indexed
-    const todayDateKey = formatDateKey(now);
-    const currentTimeLabel = formatTimeLabel(now);
+    const todayDateKey = formatDateKey(new Date());
 
     // 주간 뷰 시간표 (08:00 ~ 19:00, 30분 단위)
     const timeSlots = Array.from({ length: WEEK_SLOT_COUNT }, (_, i) => {
@@ -156,17 +140,6 @@ const DashboardView = ({
         return (elapsedMinutes / WEEK_SLOT_INTERVAL_MINUTES) * WEEK_SLOT_HEIGHT;
     };
 
-    const getCurrentTimeOffset = (date) => {
-        const currentHours = date.getHours() + (date.getMinutes() / 60);
-        if (currentHours < WEEK_START_HOUR || currentHours > WEEK_END_HOUR) {
-            return null;
-        }
-
-        return (currentHours - WEEK_START_HOUR) * WEEK_SLOT_HEIGHT;
-    };
-
-    const currentTimeOffset = getCurrentTimeOffset(now);
-
     const handleCalendarShift = (direction) => {
         setExpandedMonthlyDate(null);
         setReferenceDate((current) => {
@@ -204,9 +177,6 @@ const DashboardView = ({
     const previousPeriodLabel = calendarMode === 'weekly' ? '지난주' : '지난달';
     const nextPeriodLabel = calendarMode === 'weekly' ? '다음 주' : '다음 달';
     const currentMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-
-    const isCurrentDayVisible = currentWeekDays.some((day) => day.isToday);
-    const shouldShowCurrentTimeLine = calendarMode === 'weekly' && isCurrentDayVisible && currentTimeOffset !== null;
 
     const handleScheduleMouseDown = (event) => {
         event.preventDefault();
@@ -373,18 +343,6 @@ const DashboardView = ({
                                                     </button>
                                                 );
                                             })}
-                                            {shouldShowCurrentTimeLine && day.isToday && (
-                                                <div
-                                                    style={{ top: `${currentTimeOffset}px` }}
-                                                    className="pointer-events-none absolute inset-x-0 z-20 flex -translate-y-1/2 items-center"
-                                                >
-                                                    <div className="flex items-center gap-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                                                        <span className="h-1.5 w-1.5 rounded-full bg-white"></span>
-                                                        {currentTimeLabel}
-                                                    </div>
-                                                    <div className="h-px flex-1 bg-red-400"></div>
-                                                </div>
-                                            )}
                                         </div>
                                     ))}
                                 </div>

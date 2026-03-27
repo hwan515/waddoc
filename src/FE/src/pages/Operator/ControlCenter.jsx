@@ -527,6 +527,7 @@ const loadDashboardSnapshot = async ({
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
+    const currentUser = useAuthStore((state) => state.user);
     const { snapshotData } = useRobotSSE();
 
     // '지도' | '대시보드'
@@ -744,6 +745,12 @@ const ControlCenter = () => {
         navigate('/operator/login');
     };
 
+    const operatorLoginId = currentUser?.username
+        || currentUser?.loginId
+        || currentUser?.userId
+        || currentUser?.name
+        || 'operator';
+
     const handleGoHome = () => {
         navigate('/');
     };
@@ -828,7 +835,7 @@ const ControlCenter = () => {
                     <div className="w-px h-5 bg-white/20"></div>
                     <div className="text-sm font-medium flex items-center">
                         <span className="bg-accent-2 px-2.5 py-1 rounded text-xs mr-2 border border-white/10">관리자</span>
-                        operator님
+                        {operatorLoginId}님
                     </div>
                     <button
                         onClick={handleLogout}
