@@ -54,7 +54,12 @@ public class AdminDemoMissionService {
         boolean dummyCompleted = false;
 
         if (mission.getTargetWaypointNumber() != null) {
-            robotWaypointCommandClient.dispatchToWaypoint(mission.getTargetWaypointNumber());
+            robotWaypointCommandClient.dispatchMission(
+                    mission.getPublicId(),
+                    mission.getVehicleId(),
+                    mission.getTargetWaypointNumber(),
+                    mission.getDestination()
+            );
             advanceMissionTo(mission, MissionPhase.EN_ROUTE);
             waypointCommandSent = true;
         } else {

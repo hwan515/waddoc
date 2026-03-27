@@ -9,11 +9,13 @@ import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+from sensor_msgs.msg import NavSatFix
 from std_msgs.msg import Bool, Int32, String
 
 MQTT_BROKER_HOST = os.getenv('MQTT_BROKER_HOST', 'waddoc.site')
 MQTT_BROKER_PORT = int(os.getenv('MQTT_BROKER_PORT', '443'))
 MQTT_WS_PATH = os.getenv('MQTT_WS_PATH', '/mqtt')
+VEHICLE_ID = os.getenv('VEHICLE_ID', '')
 
 TOPIC_ODOM = 'robot/odom'
 TOPIC_MINIMAP = 'robot/minimap'
@@ -21,6 +23,7 @@ TOPIC_STATE = 'robot/state'
 TOPIC_STATUS = 'robot/status'
 TOPIC_CMD_ESTOP = 'robot/cmd/estop'
 TOPIC_CMD_WAYPOINT = 'robot/cmd/waypoint'
+TOPIC_CMD_DISPATCH = 'robot/cmd/dispatch'
 
 ODOM_PUBLISH_HZ = 1.0
 
@@ -39,6 +42,9 @@ class MqttBridgeNode(Node):
 
         self._last_odom = None
         self._last_state = None
+        self._last_gps = None
+        self._current_mission_id = None
+        self._vehicle_id = VEHICLE_ID
         self._lock = threading.Lock()
 
         # ROS2 구독
@@ -53,6 +59,11 @@ class MqttBridgeNode(Node):
         self.create_subscription(
             String, '/state',
             self._state_callback,
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
+        )
+        self.create_subscription(
+            NavSatFix, '/gps/fix',
+            self._gps_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
 
@@ -70,7 +81,7 @@ class MqttBridgeNode(Node):
 
         self._mqtt.will_set(
             TOPIC_STATUS,
-            json.dumps({'online': False}),
+            json.dumps({'online': False, 'vehicleId': self._vehicle_id}),
             qos=1,
             retain=True,
         )
@@ -83,6 +94,7 @@ class MqttBridgeNode(Node):
 
         self.get_logger().info(
             f'MQTT bridge 시작: wss://{MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}{MQTT_WS_PATH}'
+            f' vehicleId={self._vehicle_id}'
         )
 
     # ── MQTT 콜백 ──────────────────────────────────────────────────────────
@@ -92,8 +104,16 @@ class MqttBridgeNode(Node):
             self.get_logger().error(f'MQTT 연결 실패: rc={rc}')
             return
         self.get_logger().info('MQTT 연결 성공')
-        client.publish(TOPIC_STATUS, json.dumps({'online': True}), qos=1, retain=True)
-        client.subscribe([(TOPIC_CMD_ESTOP, 1), (TOPIC_CMD_WAYPOINT, 1)])
+        client.publish(
+            TOPIC_STATUS,
+            json.dumps({'online': True, 'vehicleId': self._vehicle_id}),
+            qos=1, retain=True,
+        )
+        client.subscribe([
+            (TOPIC_CMD_ESTOP, 1),
+            (TOPIC_CMD_WAYPOINT, 1),
+            (TOPIC_CMD_DISPATCH, 1),
+        ])
 
     def _on_mqtt_disconnect(self, client, userdata, rc):
         self.get_logger().warning(f'MQTT 연결 끊김: rc={rc} — 자동 재연결 대기 중')
@@ -120,6 +140,34 @@ class MqttBridgeNode(Node):
                 self.get_logger().info(f'웨이포인트 전달: {ros_msg.data}')
             except ValueError:
                 self.get_logger().error(f'웨이포인트 값 오류: {payload!r}')
+
+        elif topic == TOPIC_CMD_DISPATCH:
+            self._handle_dispatch(payload)
+
+    def _handle_dispatch(self, payload: str):
+        try:
+            data = json.loads(payload)
+            mission_id = data.get('missionId', '')
+            waypoint = data.get('waypoint')
+            destination = data.get('destination', '')
+            vehicle_id = data.get('vehicleId', '')
+
+            with self._lock:
+                self._current_mission_id = mission_id
+                if vehicle_id:
+                    self._vehicle_id = vehicle_id
+
+            if waypoint is not None:
+                ros_msg = Int32()
+                ros_msg.data = int(waypoint)
+                self._waypoint_pub.publish(ros_msg)
+
+            self.get_logger().info(
+                f'미션 디스패치 수신: missionId={mission_id}, '
+                f'waypoint={waypoint}, destination={destination}'
+            )
+        except (json.JSONDecodeError, ValueError) as e:
+            self.get_logger().error(f'디스패치 명령 파싱 실패: {e}')
 
     # ── ROS2 콜백 ──────────────────────────────────────────────────────────
 
@@ -148,11 +196,29 @@ class MqttBridgeNode(Node):
                 },
             }
 
+    def _gps_callback(self, msg: NavSatFix):
+        with self._lock:
+            self._last_gps = {
+                'latitude': round(msg.latitude, 7),
+                'longitude': round(msg.longitude, 7),
+            }
+
     def _publish_odom(self):
         with self._lock:
             payload = self._last_odom
+            gps = self._last_gps
+            mission_id = self._current_mission_id
+            vehicle_id = self._vehicle_id
         if payload is None:
             return
+
+        payload['vehicleId'] = vehicle_id
+        if mission_id:
+            payload['missionId'] = mission_id
+        if gps:
+            payload['latitude'] = gps['latitude']
+            payload['longitude'] = gps['longitude']
+
         self._mqtt.publish(TOPIC_ODOM, json.dumps(payload), qos=1)
 
     def _minimap_callback(self, msg: String):
@@ -163,7 +229,13 @@ class MqttBridgeNode(Node):
         if new_state == self._last_state:
             return
         self._last_state = new_state
-        self._mqtt.publish(TOPIC_STATE, json.dumps({'state': new_state}), qos=1)
+        with self._lock:
+            vehicle_id = self._vehicle_id
+            mission_id = self._current_mission_id
+        state_payload = {'state': new_state, 'vehicleId': vehicle_id}
+        if mission_id:
+            state_payload['missionId'] = mission_id
+        self._mqtt.publish(TOPIC_STATE, json.dumps(state_payload), qos=1)
 
     def destroy_node(self):
         self._mqtt.loop_stop()

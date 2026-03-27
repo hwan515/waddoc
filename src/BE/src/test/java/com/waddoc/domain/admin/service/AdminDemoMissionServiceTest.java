@@ -78,7 +78,12 @@ class AdminDemoMissionServiceTest {
         assertThat(response.isWaypointCommandSent()).isTrue();
         assertThat(response.isDummyCompleted()).isFalse();
         assertThat(outbox.isCompleted()).isTrue();
-        verify(robotWaypointCommandClient).dispatchToWaypoint(59);
+        verify(robotWaypointCommandClient).dispatchMission(
+                mission.getPublicId(),
+                mission.getVehicleId(),
+                59,
+                mission.getDestination()
+        );
     }
 
     @Test
@@ -103,7 +108,7 @@ class AdminDemoMissionServiceTest {
         assertThat(response.isWaypointCommandSent()).isFalse();
         assertThat(response.isDummyCompleted()).isTrue();
         assertThat(outbox.isCompleted()).isTrue();
-        verify(robotWaypointCommandClient, never()).dispatchToWaypoint(anyInt());
+        verify(robotWaypointCommandClient, never()).dispatchMission(anyString(), anyString(), anyInt(), anyString());
     }
 
     @Test

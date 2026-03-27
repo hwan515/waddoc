@@ -1,5 +1,7 @@
 package com.waddoc.domain.robot.config;
 
+import javax.net.ssl.SSLContext;
+
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -31,6 +33,15 @@ public class MqttConfig {
         options.setCleanSession(false);
         options.setAutomaticReconnect(true);
         options.setKeepAliveInterval(60);
+        if (brokerUrl.startsWith("wss://")) {
+            try {
+                SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+                sslContext.init(null, null, null);
+                options.setSocketFactory(sslContext.getSocketFactory());
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to configure TLS for MQTT WSS connection", e);
+            }
+        }
         factory.setConnectionOptions(options);
         return factory;
     }

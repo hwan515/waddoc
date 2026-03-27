@@ -12,6 +12,9 @@ services:
       - ROS_LOCALHOST_ONLY=1
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - MQTT_BROKER_HOST=waddoc.site
+      - MQTT_BROKER_PORT=443
+      - MQTT_WS_PATH=/mqtt
+      - VEHICLE_ID=${VEHICLE_ID:-vehicle-01}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./workspace:/root/workspace:rw

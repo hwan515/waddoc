@@ -57,35 +57,6 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # FastAPI용 Swagger UI와 OpenAPI
-        location = /swagger/fastapi {
-            proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
-            proxy_ssl_server_name on;
-            proxy_ssl_name $proxy_host;
-            proxy_set_header Host $proxy_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_redirect off;
-        }
-
-        location = /swagger/fastapi/ {
-            return 301 /swagger/fastapi;
-        }
-
-        location /swagger/fastapi/ {
-            proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
-            proxy_ssl_server_name on;
-            proxy_ssl_name $proxy_host;
-            proxy_set_header Host $proxy_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_redirect off;
-        }
-
         # Springdoc이 /swagger/spring 을 /swagger/swagger-ui/index.html 로 리다이렉트할 수 있다.
         # 나머지 /swagger/* 경로도 모두 Spring 앱으로 보내서 React가 가로채지 않게 한다.
         location /swagger/ {
@@ -121,57 +92,36 @@ http {
             return 301 /swagger/spring/openapi.json;
         }
 
-        location = /docs {
-            return 301 /swagger/fastapi;
-        }
-
-        location = /docs/ {
-            return 301 /swagger/fastapi;
-        }
-
-        location = /openapi.json {
-            return 301 /swagger/fastapi/openapi.json;
-        }
-
-        location = /redoc {
-            return 301 /swagger/fastapi;
-        }
-
-        # ROS2 minimap/command API → 원격 EC2 robot API
-        location = /api/minimap {
-            proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
-            proxy_ssl_server_name on;
-            proxy_ssl_name $proxy_host;
-            proxy_set_header Host $proxy_host;
+        # Robot telemetry SSE
+        location = /api/v1/robots/stream {
+            proxy_pass http://spring-api:8080;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_redirect off;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            add_header X-Accel-Buffering no always;
         }
 
-        location = /api/odom {
-            proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
-            proxy_ssl_server_name on;
-            proxy_ssl_name $proxy_host;
-            proxy_set_header Host $proxy_host;
+        # Doctor notification SSE
+        location = /api/v1/doctors/me/notifications/stream {
+            proxy_pass http://spring-api:8080;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_redirect off;
-        }
-
-        location /api/cmd/ {
-            proxy_pass ${DEV_ROBOT_API_PROXY_TARGET};
-            proxy_ssl_server_name on;
-            proxy_ssl_name $proxy_host;
-            proxy_set_header Host $proxy_host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_redirect off;
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            add_header X-Accel-Buffering no always;
         }
 
         # 일반 API를 Spring Boot로 전달

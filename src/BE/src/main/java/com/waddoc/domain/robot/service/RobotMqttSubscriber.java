@@ -15,6 +15,7 @@ public class RobotMqttSubscriber {
 
     private final RobotStateCache stateCache;
     private final RobotSseService sseService;
+    private final MqttMissionLocationUpdater missionLocationUpdater;
 
     @ServiceActivator(inputChannel = "mqttInboundChannel")
     public void handleMessage(Message<?> message) {
@@ -30,6 +31,7 @@ public class RobotMqttSubscriber {
             case MqttTopics.ROBOT_ODOM -> {
                 stateCache.setLastOdomJson(payload);
                 sseService.broadcast("odom", payload);
+                missionLocationUpdater.updateFromOdom(payload);
             }
             case MqttTopics.ROBOT_MINIMAP -> {
                 stateCache.setLastMinimapJson(payload);
