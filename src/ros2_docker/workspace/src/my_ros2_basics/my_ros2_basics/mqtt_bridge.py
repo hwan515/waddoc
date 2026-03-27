@@ -15,7 +15,7 @@ from std_msgs.msg import Bool, Int32, String
 MQTT_BROKER_HOST = os.getenv('MQTT_BROKER_HOST', 'www.waddoc.site')
 MQTT_BROKER_PORT = int(os.getenv('MQTT_BROKER_PORT', '443'))
 MQTT_WS_PATH = os.getenv('MQTT_WS_PATH', '/mqtt')
-VEHICLE_ID = os.getenv('VEHICLE_ID', '')
+VEHICLE_ID = os.getenv('VEHICLE_ID', 'veh_GIMCHEON_01')
 
 TOPIC_ODOM = 'robot/odom'
 TOPIC_MINIMAP = 'robot/minimap'
