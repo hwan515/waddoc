@@ -85,13 +85,17 @@ public class DispatchConsumer {
             }
 
             boolean wasRetryPending = outbox.isRetryPending();
-            missionCommandService.createMissionForDispatch(
+            Mission dispatchedMission = missionCommandService.createMissionForDispatch(
                     outbox.getCareCase(),
                     vehicle.getPublicId(),
                     outbox.getDestination(),
                     LocalDateTime.now(),
                     missionOptional.map(Mission::getTargetWaypointNumber).orElse(null)
             );
+            if (dispatchedMission.getPhase() == MissionPhase.CREATED) {
+                dispatchedMission.updatePhase(MissionPhase.DISPATCHED);
+                missionRepository.save(dispatchedMission);
+            }
             outbox.markCompleted();
 
             if (wasRetryPending) {
