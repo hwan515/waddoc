@@ -49,14 +49,12 @@ class MissionQueryServiceTest {
     void getMissionsReturnsMissionSummariesForAdminDashboard() {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
         LocalDate date = LocalDate.of(2026, 3, 11);
-        LocalDateTime fromDateTime = date.atStartOfDay();
-        LocalDateTime toDateTime = date.plusDays(1).atStartOfDay();
 
         Mission mission = buildMission();
         setField(mission.getCareCase(), "publicId", "case_T7nLp4");
         setField(mission, "publicId", "ms_F2gHn6");
 
-        when(missionRepository.findAllForAdminDashboardByPhaseAndDateRange(MissionPhase.DISPATCHED, fromDateTime, toDateTime))
+        when(missionRepository.findAllForAdminDashboardByPhaseAndAppointmentDate(MissionPhase.DISPATCHED, date))
                 .thenReturn(List.of(mission));
 
         MissionListResponse response = missionQueryService.getMissions(admin, date, MissionPhase.DISPATCHED);
@@ -67,6 +65,9 @@ class MissionQueryServiceTest {
         assertThat(response.getMissions().get(0).getCaseId()).isEqualTo("case_T7nLp4");
         assertThat(response.getMissions().get(0).getPatientName()).isEqualTo("홍길동");
         assertThat(response.getMissions().get(0).getPhase()).isEqualTo(MissionPhase.DISPATCHED);
+        assertThat(response.getMissions().get(0).getAppointmentDate()).isEqualTo(LocalDate.of(2026, 3, 11));
+        assertThat(response.getMissions().get(0).getAppointmentTime()).isEqualTo("10:00");
+        assertThat(response.getMissions().get(0).getTargetWaypointNumber()).isEqualTo(59);
         assertThat(response.getMissions().get(0).getDispatchedAt())
                 .isEqualTo(OffsetDateTime.parse("2026-03-11T08:30:00+09:00"));
         assertThat(response.getMissions().get(0).getEstimatedArrivalTime())
@@ -177,6 +178,7 @@ class MissionQueryServiceTest {
                 .destination("경북 울릉군 울릉읍...")
                 .dispatchedAt(LocalDateTime.of(2026, 3, 11, 8, 30))
                 .estimatedArrivalTime(LocalDateTime.of(2026, 3, 11, 9, 45))
+                .targetWaypointNumber(59)
                 .build();
         mission.updatePhase(MissionPhase.DISPATCHED);
         return mission;

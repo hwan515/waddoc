@@ -6,6 +6,7 @@ import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.mission.dto.ClaimMissionTerminalRequest;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
+import com.waddoc.domain.mission.dto.TerminalCurrentMissionResponse;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesRequest;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesResponse;
 import com.waddoc.domain.mission.entity.Mission;
@@ -105,6 +106,51 @@ class TerminalCheckInServiceTest {
     }
 
     @Test
+    void getCurrentMission_selectsArrivedMissionForTodayVehicle() {
+        Authentication authentication = mock(Authentication.class);
+        DeviceTerminalPrincipal principal = new DeviceTerminalPrincipal(
+                "device-terminal:robot-terminal-01",
+                "robot-terminal-01",
+                "veh_GIMCHEON_01",
+                "GIMCHEON",
+                List.of(DeviceTerminalScopes.READ_CURRENT_MISSION)
+        );
+        when(accessControlService.assertDeviceTerminalPrincipal(
+                authentication,
+                DeviceTerminalScopes.READ_CURRENT_MISSION
+        )).thenReturn(principal);
+
+        Mission enRouteMission = createCurrentClaimableMission(
+                "ms_en_route",
+                "veh_GIMCHEON_01",
+                "GIMCHEON",
+                MissionPhase.EN_ROUTE
+        );
+        Mission arrivedMission = createCurrentMission(
+                "ms_arrived",
+                "veh_GIMCHEON_01",
+                "GIMCHEON",
+                "김영희",
+                MissionPhase.ARRIVED,
+                LocalTime.of(10, 0)
+        );
+
+        when(missionRepository.findCurrentVehicleMissions(
+                eq("veh_GIMCHEON_01"),
+                any(),
+                eq(BookingStatus.CONFIRMED),
+                any()
+        )).thenReturn(List.of(enRouteMission, arrivedMission));
+
+        TerminalCurrentMissionResponse response = terminalCheckInService.getCurrentMission(authentication);
+
+        assertThat(response.isHasMission()).isTrue();
+        assertThat(response.getMissionId()).isEqualTo("ms_arrived");
+        assertThat(response.getPatientName()).isEqualTo("김영희");
+        assertThat(response.getPhase()).isEqualTo("ARRIVED");
+    }
+
+    @Test
     void claimMission_bindsUnassignedMissionToClaimingVehicle() {
         Authentication authentication = mock(Authentication.class);
         DeviceTerminalPrincipal principal = new DeviceTerminalPrincipal(
@@ -149,6 +195,51 @@ class TerminalCheckInServiceTest {
         verify(auditLogService).log(any(), any(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    void claimCurrentMission_issuesMissionTokenForSelectedMission() {
+        Authentication authentication = mock(Authentication.class);
+        DeviceTerminalPrincipal principal = new DeviceTerminalPrincipal(
+                "device-terminal:robot-terminal-01",
+                "robot-terminal-01",
+                "veh_GIMCHEON_01",
+                "GIMCHEON",
+                List.of(DeviceTerminalScopes.CLAIM_MISSION)
+        );
+        when(accessControlService.assertDeviceTerminalPrincipal(
+                authentication,
+                DeviceTerminalScopes.CLAIM_MISSION
+        )).thenReturn(principal);
+
+        Mission mission = createCurrentClaimableMission(
+                "ms_claimable",
+                null,
+                "GIMCHEON",
+                MissionPhase.ARRIVED
+        );
+        when(missionRepository.findCurrentVehicleMissions(
+                eq("veh_GIMCHEON_01"),
+                any(),
+                eq(BookingStatus.CONFIRMED),
+                any()
+        )).thenReturn(List.of(mission));
+        when(missionTerminalTokenService.issueTokenForDeviceClaim("ms_claimable", "robot-terminal-01"))
+                .thenReturn(IssueMissionTerminalTokenResponse.builder()
+                        .missionId("ms_claimable")
+                        .caseId("case_test123")
+                        .patientName("홍길동")
+                        .terminalToken("mission-terminal-token")
+                        .expiresIn(1800L)
+                        .scopes(List.of("mission:identity-check", "session:issue-patient-token"))
+                        .build());
+
+        IssueMissionTerminalTokenResponse response = terminalCheckInService.claimCurrentMission(authentication);
+
+        assertThat(mission.getVehicleId()).isEqualTo("veh_GIMCHEON_01");
+        assertThat(response.getMissionId()).isEqualTo("ms_claimable");
+        assertThat(response.getPatientName()).isEqualTo("홍길동");
+        verify(missionTerminalTokenService).issueTokenForDeviceClaim("ms_claimable", "robot-terminal-01");
+    }
+
     private Mission createLookupMission(
             String missionId,
             String vehicleId,
@@ -181,6 +272,58 @@ class TerminalCheckInServiceTest {
                 .build();
         setField(mission, "publicId", missionId);
         setField(mission, "phase", MissionPhase.ARRIVED);
+        return mission;
+    }
+
+    private Mission createCurrentMission(
+            String missionId,
+            String vehicleId,
+            String regionCode,
+            String patientName,
+            MissionPhase phase,
+            LocalTime startTime
+    ) {
+        Patient patient = mock(Patient.class);
+        when(patient.getRegionCode()).thenReturn(regionCode);
+        when(patient.getName()).thenReturn(patientName);
+
+        Booking booking = mock(Booking.class);
+        when(booking.getAppointmentDate()).thenReturn(LocalDate.of(2026, 3, 20));
+        when(booking.getStartTime()).thenReturn(startTime);
+
+        com.waddoc.domain.carecase.entity.CareCase careCase = mock(com.waddoc.domain.carecase.entity.CareCase.class);
+        when(careCase.getPatient()).thenReturn(patient);
+        when(careCase.getBooking()).thenReturn(booking);
+
+        Mission mission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId(vehicleId)
+                .destination("경북 김천시")
+                .build();
+        setField(mission, "publicId", missionId);
+        setField(mission, "phase", phase);
+        return mission;
+    }
+
+    private Mission createCurrentClaimableMission(
+            String missionId,
+            String vehicleId,
+            String regionCode,
+            MissionPhase phase
+    ) {
+        Patient patient = mock(Patient.class);
+        when(patient.getRegionCode()).thenReturn(regionCode);
+
+        com.waddoc.domain.carecase.entity.CareCase careCase = mock(com.waddoc.domain.carecase.entity.CareCase.class);
+        when(careCase.getPatient()).thenReturn(patient);
+
+        Mission mission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId(vehicleId)
+                .destination("경북 김천시")
+                .build();
+        setField(mission, "publicId", missionId);
+        setField(mission, "phase", phase);
         return mission;
     }
 
@@ -250,4 +393,5 @@ class TerminalCheckInServiceTest {
         }
         throw new IllegalArgumentException("Field not found: " + fieldName);
     }
+
 }

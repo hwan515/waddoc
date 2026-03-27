@@ -113,7 +113,6 @@ class BookingServiceTest {
 
     @Test
     void createBooking_publishesKafkaMessagesAndCreatesDispatchOutbox() {
-        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
         when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
         when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
@@ -241,8 +240,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void createBooking_sameDayProvisionImmediateMissionAndSession() {
-        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(true);
+    void createBooking_sameDayDoesNotAutoProvisionMissionAndSession() {
         when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
         when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
@@ -302,29 +300,10 @@ class BookingServiceTest {
             return booking;
         }).when(bookingRepository).save(any(Booking.class));
         when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(missionCommandService.createMissionForDispatch(any(CareCase.class), any(), any(), any(), any()))
-                .thenAnswer(invocation -> {
-                    CareCase careCase = invocation.getArgument(0);
-                    Mission mission = Mission.builder()
-                            .careCase(careCase)
-                            .vehicleId(invocation.getArgument(1))
-                            .destination(invocation.getArgument(2))
-                            .dispatchedAt(invocation.getArgument(3))
-                            .targetWaypointNumber(invocation.getArgument(4))
-                            .build();
-                    ReflectionTestUtils.setField(mission, "id", 1L);
-                    return mission;
-                });
-        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(consultationSessionRepository.findByCareCase(any(CareCase.class))).thenReturn(Optional.empty());
-        when(consultationLiveKitService.getLivekitUrl()).thenReturn("wss://livekit.example");
-        when(consultationSessionRepository.save(any(ConsultationSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         bookingService.createBooking(session.getPublicId(), request);
 
         ArgumentCaptor<DispatchOutbox> outboxCaptor = ArgumentCaptor.forClass(DispatchOutbox.class);
-        ArgumentCaptor<Mission> missionCaptor = ArgumentCaptor.forClass(Mission.class);
-        ArgumentCaptor<ConsultationSession> sessionCaptor = ArgumentCaptor.forClass(ConsultationSession.class);
 
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
         verify(missionCommandService).createMissionForDispatch(
@@ -334,18 +313,15 @@ class BookingServiceTest {
                 eq(null),
                 eq(null)
         );
-        verify(missionRepository).save(missionCaptor.capture());
-        verify(consultationLiveKitService).createRoom(any());
-        verify(consultationSessionRepository).save(sessionCaptor.capture());
+        verify(missionRepository, never()).save(any(Mission.class));
+        verify(consultationLiveKitService, never()).createRoom(any());
+        verify(consultationSessionRepository, never()).save(any(ConsultationSession.class));
 
-        assertThat(outboxCaptor.getValue().isCompleted()).isTrue();
-        assertThat(missionCaptor.getValue().getPhase()).isEqualTo(MissionPhase.ARRIVED);
-        assertThat(sessionCaptor.getValue().getStatus().name()).isEqualTo("READY");
+        assertThat(outboxCaptor.getValue().isCompleted()).isFalse();
     }
 
     @Test
     void createBooking_sameDaySkipsImmediateProvisionWhenDemoModeIsEnabled() {
-        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(false);
         when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
         when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
@@ -427,7 +403,6 @@ class BookingServiceTest {
 
     @Test
     void createBooking_assignsMappedWaypointWhenAddressIsSupported() {
-        when(demoModePolicy.isSameDayAutoProvisionEnabled()).thenReturn(false);
         when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
         when(waypointAddressResolver.resolve("경상북도 김천시 증산면 장전4길 14"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(59));

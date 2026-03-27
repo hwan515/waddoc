@@ -10,6 +10,7 @@ const clearRobotSessionState = () => {
     localStorage.removeItem('robot_device_terminal_token');
     localStorage.removeItem('robot_mission_terminal_token');
     localStorage.removeItem('current_mission_id');
+    localStorage.removeItem('current_patient_name');
 };
 
 const Finish = () => {
@@ -19,7 +20,7 @@ const Finish = () => {
         clearRobotSessionState();
 
         const timerId = setTimeout(() => {
-            navigate('/robot/setup', { replace: true });
+            navigate('/robot', { replace: true });
         }, FINISH_REDIRECT_DELAY_MS);
 
         return () => {
@@ -46,7 +47,7 @@ const Finish = () => {
                         <span className="text-white font-bold">금일 오후 8~10시</span> 사이에 배송 예정입니다.
                     </p>
                     <p className="pt-6 text-base md:text-xl text-slate-300">
-                        잠시 후 다음 진료 준비 화면으로 자동 전환됩니다.
+                        잠시 후 차량이 자율 주행중입니다. 화면으로 전환됩니다.
                     </p>
                 </div>
             </div>

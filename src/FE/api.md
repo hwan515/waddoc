@@ -1162,7 +1162,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 > 차량 태블릿은 관리자/의사 브라우저 로그인에 의존하지 않고, 환경변수로 주입된 단말 credential로 `DEVICE_TERMINAL` 토큰을 먼저 발급받는다.
 > 서버는 `ROBOT_TERMINAL_REGISTRY`에 등록된 엔트리와 `terminalId`, `terminalKey`를 대조해 `vehicleId`, `regionCode` 바인딩 정보를 함께 토큰에 싣는다.
-> 이 토큰은 후보 조회와 mission claim에만 사용할 수 있다.
+> 이 토큰은 현재 미션 조회, 후보 조회, mission claim에 사용할 수 있다.
 
 **Request Body**
 ```json
@@ -1181,6 +1181,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
   "deviceTerminalToken": "eyJhbGci...",
   "expiresIn": 1800,
   "scopes": [
+    "terminal:read-current-mission",
     "terminal:check-in-candidates",
     "terminal:claim-mission"
   ]
@@ -1196,7 +1197,72 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.2a 차량 진료 대상 후보 조회
+### 9.2a 차량 현재 미션 자동 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/terminal/current-mission` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 `DEVICE_TERMINAL` 토큰에 바인딩된 `vehicleId` 기준으로 오늘(`Asia/Seoul`) 예약 미션 중 현재 진입해야 할 미션 1건을 자동 선택한다.
+> 선택 우선순위는 `ARRIVED > VERIFYING > CONSULTING > EN_ROUTE > DISPATCHED`, 이후 `appointmentTime ASC`, `missionId ASC` 이다.
+> 메인 환자 플로우는 이 API를 사용하며, `생년월일/전화번호` 입력은 더 이상 메인 진입에서 사용하지 않는다.
+
+**Response** `200 OK`
+```json
+{
+  "hasMission": true,
+  "missionId": "ms_F2gHn6",
+  "patientName": "홍길동",
+  "appointmentDate": "2026-03-27",
+  "appointmentTime": "14:30",
+  "phase": "ARRIVED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59
+}
+```
+
+미션이 없으면:
+```json
+{
+  "hasMission": false
+}
+```
+
+---
+
+### 9.2b 차량 현재 미션 claim 및 미션 단말 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/current-mission/claim` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 현재 자동 선택된 미션 1건을 claim하고, 해당 미션 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급받는다.
+> 실제 메인 화면에서는 `phase == ARRIVED` 일 때만 이 API를 호출한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "patientName": "홍길동",
+  "terminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "mission:identity-check",
+    "session:issue-patient-token",
+    "session:status:read",
+    "vitals:write"
+  ]
+}
+```
+
+---
+
+### 9.2c 차량 진료 대상 후보 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1235,7 +1301,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.2b 차량 mission claim 및 미션 단말 토큰 발급
+### 9.2d 차량 mission claim 및 미션 단말 토큰 발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1260,6 +1326,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 {
   "missionId": "ms_F2gHn6",
   "caseId": "case_T7nLp4",
+  "patientName": "홍길동",
   "terminalToken": "eyJhbGci...",
   "expiresIn": 1800,
   "scopes": [

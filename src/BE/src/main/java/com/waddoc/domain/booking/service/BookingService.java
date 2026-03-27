@@ -129,7 +129,7 @@ public class BookingService {
                 .build());
         Mission mission = ensureCreatedMission(careCase, patient);
 
-        // 당일 예약은 테스트/운영 편의를 위해 미션과 진료방을 즉시 준비한다.
+        // 차량 phase는 실제 dispatch/MQTT telemetry 경로만이 올리도록 유지한다.
         if (shouldProvisionImmediateConsult(slot)) {
             provisionImmediateConsultArtifacts(careCase, dispatchOutbox, mission);
         }
@@ -365,8 +365,8 @@ public class BookingService {
     }
 
     private boolean shouldProvisionImmediateConsult(ScheduleSlot slot) {
-        return demoModePolicy.isSameDayAutoProvisionEnabled()
-                && slot.getSlotDate().isEqual(LocalDate.now());
+        // TODO: restore only behind an explicit instant-consult booking flow; normal same-day bookings must not auto-arrive.
+        return false;
     }
 
     private Mission ensureCreatedMission(CareCase careCase, Patient patient) {

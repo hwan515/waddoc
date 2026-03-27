@@ -83,6 +83,7 @@ const normalizeMonitorState = (value) => {
 };
 
 const phaseToMonitorState = (phase) => normalizeMonitorState(phase) || '대기';
+const getTodayKstDate = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
 
 const MOVING_MONITOR_STATES = new Set(['출발', '주행 중']);
 
@@ -309,7 +310,7 @@ const loadDashboardSnapshot = async ({
     setCalendarEvents
 }) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayKstDate();
 
         const fetchSafe = (req) => req.catch(err => {
             console.error('API Error:', err);
@@ -317,7 +318,7 @@ const loadDashboardSnapshot = async ({
         });
 
         const [missionsRes, bookingsRes] = await Promise.all([
-            fetchSafe(apiClient.get('/missions')),
+            fetchSafe(apiClient.get('/missions', { params: { date: today } })),
             fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } }))
         ]);
 

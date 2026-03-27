@@ -5,6 +5,7 @@ import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.mission.dto.ClaimMissionTerminalRequest;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
+import com.waddoc.domain.mission.dto.TerminalCurrentMissionResponse;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesRequest;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesResponse;
 import com.waddoc.domain.mission.entity.Mission;
@@ -20,10 +21,14 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 차량 단말의 체크인 후보 조회와 미션 claim 규칙을 처리한다.
@@ -32,8 +37,11 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TerminalCheckInService {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final EnumSet<MissionPhase> CLAIMABLE_PHASES =
             EnumSet.of(MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
+    private static final EnumSet<MissionPhase> CURRENT_MISSION_PHASES =
+            EnumSet.of(MissionPhase.DISPATCHED, MissionPhase.EN_ROUTE, MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -42,6 +50,34 @@ public class TerminalCheckInService {
     private final AccessControlService accessControlService;
     private final MissionTerminalTokenService missionTerminalTokenService;
     private final AuditLogService auditLogService;
+
+    @Transactional(readOnly = true)
+    public TerminalCurrentMissionResponse getCurrentMission(Authentication authentication) {
+        DeviceTerminalPrincipal principal = accessControlService.assertDeviceTerminalPrincipal(
+                authentication,
+                DeviceTerminalScopes.READ_CURRENT_MISSION
+        );
+
+        Optional<Mission> missionOptional = selectCurrentMission(principal, CURRENT_MISSION_PHASES);
+        auditLogService.log(
+                "DEVICE_TERMINAL_CURRENT_MISSION_READ",
+                "TERMINAL",
+                principal.terminalId(),
+                "corr_terminal_current_mission_" + principal.terminalId(),
+                principal.terminalId(),
+                principal.actorRole(),
+                Map.of(
+                        "hasMission", missionOptional.isPresent(),
+                        "missionId", missionOptional.map(Mission::getPublicId).orElse(""),
+                        "vehicleId", principal.vehicleId() != null ? principal.vehicleId() : "",
+                        "regionCode", principal.regionCode() != null ? principal.regionCode() : ""
+                )
+        );
+
+        return missionOptional
+                .map(TerminalCurrentMissionResponse::from)
+                .orElseGet(TerminalCurrentMissionResponse::empty);
+    }
 
     /**
      * 단말이 가진 권역/차량 범위를 기준으로 실제 조회 가능한 후보만 추려서 내려준다.
@@ -131,6 +167,35 @@ public class TerminalCheckInService {
         return missionTerminalTokenService.issueTokenForDeviceClaim(mission.getPublicId(), principal.terminalId());
     }
 
+    @Transactional
+    public IssueMissionTerminalTokenResponse claimCurrentMission(Authentication authentication) {
+        DeviceTerminalPrincipal principal = accessControlService.assertDeviceTerminalPrincipal(
+                authentication,
+                DeviceTerminalScopes.CLAIM_MISSION
+        );
+
+        Mission mission = selectCurrentMission(principal, CURRENT_MISSION_PHASES)
+                .filter(candidate -> CLAIMABLE_PHASES.contains(candidate.getPhase()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TERMINAL_MISSION_CLAIM_FORBIDDEN));
+
+        bindMissionToTerminalIfNeeded(mission, principal);
+
+        auditLogService.log(
+                "DEVICE_TERMINAL_CURRENT_MISSION_CLAIMED",
+                "MISSION",
+                mission.getPublicId(),
+                "corr_terminal_current_claim_" + mission.getPublicId(),
+                principal.terminalId(),
+                principal.actorRole(),
+                Map.of(
+                        "vehicleId", mission.getVehicleId() != null ? mission.getVehicleId() : "",
+                        "regionCode", principal.regionCode() != null ? principal.regionCode() : ""
+                )
+        );
+
+        return missionTerminalTokenService.issueTokenForDeviceClaim(mission.getPublicId(), principal.terminalId());
+    }
+
     private TerminalCheckInCandidatesResponse.Candidate toCandidate(Mission mission) {
         Booking booking = mission.getCareCase().getBooking();
         return TerminalCheckInCandidatesResponse.Candidate.builder()
@@ -160,6 +225,26 @@ public class TerminalCheckInService {
                 && request.getBirthDate6().equals(mission.getCareCase().getPatient().getBirthDate6());
     }
 
+    private Optional<Mission> selectCurrentMission(
+            DeviceTerminalPrincipal principal,
+            EnumSet<MissionPhase> phases
+    ) {
+        if (!principal.hasVehicleBinding()) {
+            return Optional.empty();
+        }
+
+        LocalDate today = LocalDate.now(KST);
+        return missionRepository.findCurrentVehicleMissions(
+                        principal.vehicleId(),
+                        today,
+                        BookingStatus.CONFIRMED,
+                        phases
+                ).stream()
+                .filter(mission -> isMissionAccessibleToTerminal(mission, principal))
+                .sorted(currentMissionComparator())
+                .findFirst();
+    }
+
     private boolean isMissionAccessibleToTerminal(Mission mission, DeviceTerminalPrincipal principal) {
         if (principal.hasRegionBinding()) {
             String patientRegionCode = normalize(mission.getCareCase().getPatient().getRegionCode());
@@ -174,6 +259,24 @@ public class TerminalCheckInService {
 
         String assignedVehicleId = normalize(mission.getVehicleId());
         return assignedVehicleId == null || principal.vehicleId().equals(assignedVehicleId);
+    }
+
+    private Comparator<Mission> currentMissionComparator() {
+        return Comparator
+                .comparingInt((Mission mission) -> phasePriority(mission.getPhase()))
+                .thenComparing(mission -> mission.getCareCase().getBooking().getStartTime())
+                .thenComparing(Mission::getPublicId);
+    }
+
+    private int phasePriority(MissionPhase phase) {
+        return switch (phase) {
+            case ARRIVED -> 0;
+            case VERIFYING -> 1;
+            case CONSULTING -> 2;
+            case EN_ROUTE -> 3;
+            case DISPATCHED -> 4;
+            default -> 99;
+        };
     }
 
     private void bindMissionToTerminalIfNeeded(Mission mission, DeviceTerminalPrincipal principal) {

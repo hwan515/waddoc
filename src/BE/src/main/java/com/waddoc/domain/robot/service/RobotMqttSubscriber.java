@@ -16,6 +16,7 @@ public class RobotMqttSubscriber {
     private final RobotStateCache stateCache;
     private final RobotSseService sseService;
     private final MqttMissionLocationUpdater missionLocationUpdater;
+    private final MqttMissionPhaseUpdater missionPhaseUpdater;
     private final RobotSnapshotAssembler robotSnapshotAssembler;
 
     @ServiceActivator(inputChannel = "mqttInboundChannel")
@@ -38,11 +39,13 @@ public class RobotMqttSubscriber {
             case MqttTopics.ROBOT_MINIMAP -> {
                 stateCache.setLastMinimapJson(payload);
                 sseService.broadcast("minimap", payload);
+                missionPhaseUpdater.updateFromMinimap(payload, stateCache.getLastStateJson());
                 yield true;
             }
             case MqttTopics.ROBOT_STATE -> {
                 stateCache.setLastStateJson(payload);
                 sseService.broadcast("state", payload);
+                missionPhaseUpdater.updateFromState(payload);
                 yield true;
             }
             case MqttTopics.ROBOT_STATUS -> {

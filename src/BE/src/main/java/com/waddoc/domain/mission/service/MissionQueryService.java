@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -61,17 +60,13 @@ public class MissionQueryService {
             return missionRepository.findAllForAdminDashboardByPhase(phase);
         }
 
-        LocalDateTime fromDateTime = date.atStartOfDay();
-        LocalDateTime toDateTime = date.plusDays(1).atStartOfDay();
-
         if (phase == null) {
-            return missionRepository.findAllForAdminDashboardByDateRange(fromDateTime, toDateTime);
+            return missionRepository.findAllForAdminDashboardByAppointmentDate(date);
         }
 
-        return missionRepository.findAllForAdminDashboardByPhaseAndDateRange(
+        return missionRepository.findAllForAdminDashboardByPhaseAndAppointmentDate(
                 phase,
-                fromDateTime,
-                toDateTime
+                date
         );
     }
 }
