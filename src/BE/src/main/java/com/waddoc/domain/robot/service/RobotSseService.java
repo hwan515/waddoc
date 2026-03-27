@@ -24,6 +24,7 @@ public class RobotSseService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final RobotStateCache stateCache;
+    private final RobotSnapshotAssembler robotSnapshotAssembler;
 
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
@@ -48,6 +49,8 @@ public class RobotSseService {
                             "minimap", stateCache.getLastMinimapJson(),
                             "state",   stateCache.getLastStateJson(),
                             "odom",    stateCache.getLastOdomJson(),
+                            "status",  stateCache.getLastStatusJson(),
+                            "snapshot", robotSnapshotAssembler.fromCache(stateCache),
                             "connectedAt", OffsetDateTime.now(KST).toString()
                     )));
         } catch (Exception e) {
@@ -60,7 +63,7 @@ public class RobotSseService {
         return emitter;
     }
 
-    public void broadcast(String eventName, String jsonPayload) {
+    public void broadcast(String eventName, Object payload) {
         if (emitters.isEmpty()) {
             return;
         }
@@ -69,7 +72,7 @@ public class RobotSseService {
                 emitter.send(SseEmitter.event()
                         .id(UUID.randomUUID().toString())
                         .name(eventName)
-                        .data(jsonPayload));
+                        .data(payload));
             } catch (Exception e) {
                 log.warn("Robot SSE delivery failed. connectionId={}, event={}", connectionId, eventName, e);
                 removeEmitter(connectionId);

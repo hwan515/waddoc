@@ -54,7 +54,7 @@ const MapMonitoring = ({
     vehicleSpeed = 0,
     vehicleLocation = null,
     minimapRouteAlert = null,
-    updateIntervalMs = 100,
+    updateIntervalMs = null,
     useMockMinimapData = false,
 }) => {
     

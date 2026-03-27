@@ -15,7 +15,7 @@ services:
       - MQTT_BROKER_HOST=www.waddoc.site
       - MQTT_BROKER_PORT=443
       - MQTT_WS_PATH=/mqtt
-      - VEHICLE_ID=${VEHICLE_ID:-vehicle-01}
+      - VEHICLE_ID=${VEHICLE_ID:-veh_GIMCHEON_01}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./workspace:/root/workspace:rw

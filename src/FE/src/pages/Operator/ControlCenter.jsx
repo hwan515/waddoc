@@ -70,17 +70,6 @@ const toFiniteNumber = (value) => {
     return Number.isFinite(parsed) ? parsed : null;
 };
 
-const extractFirstFiniteNumber = (...values) => {
-    for (const value of values) {
-        const parsed = toFiniteNumber(value);
-        if (parsed !== null) {
-            return parsed;
-        }
-    }
-
-    return null;
-};
-
 const normalizeMonitorState = (value) => {
     if (typeof value !== 'string') return null;
 
@@ -179,53 +168,6 @@ const normalizeBatterySoc = (value) => {
     }
 
     return Math.max(0, Math.min(100, parsed));
-};
-
-const extractPosePayload = (...candidates) => {
-    for (const candidate of candidates) {
-        if (!candidate || typeof candidate !== 'object') {
-            continue;
-        }
-
-        const nextPose = candidate.vehiclePose
-            ?? candidate.current_pose
-            ?? candidate.currentPose
-            ?? candidate.minimap_pose
-            ?? candidate.minimapPose
-            ?? candidate.pose;
-
-        if (isValidPose(nextPose)) {
-            return nextPose;
-        }
-
-        if (isValidPose(candidate)) {
-            return candidate;
-        }
-    }
-
-    return null;
-};
-
-const extractTelemetryVehicleId = (payload) => {
-    if (typeof payload?.vehicleId !== 'string') {
-        return ACTIVE_OPERATOR_VEHICLE_ID;
-    }
-
-    const trimmed = payload.vehicleId.trim();
-    return trimmed || ACTIVE_OPERATOR_VEHICLE_ID;
-};
-
-const shouldApplyLiveTelemetryToVehicle = (vehicle, telemetryVehicleId, liveGoalWaypointNumber = null) => {
-    if (!vehicle) {
-        return false;
-    }
-
-    const normalizedVehicleId = getVehicleDisplayId(vehicle.vehicleId || vehicle.id);
-    if (normalizedVehicleId !== telemetryVehicleId) {
-        return false;
-    }
-
-    return shouldUseLiveTelemetryForMission(vehicle.mission, liveGoalWaypointNumber);
 };
 
 const getMissionRecencyValue = (mission) => {
@@ -531,7 +473,7 @@ const loadDashboardSnapshot = async ({
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
-    const { minimapData, odomData, stateData } = useRobotSSE();
+    const { snapshotData } = useRobotSSE();
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
@@ -556,6 +498,7 @@ const ControlCenter = () => {
     const [minimapMonitorState, setMinimapMonitorState] = useState(null);
     const [minimapVehicleSpeed, setMinimapVehicleSpeed] = useState(null);
     const [minimapGoalWaypointId, setMinimapGoalWaypointId] = useState(null);
+    const [liveVehicleLocation, setLiveVehicleLocation] = useState(null);
     const [pendingDemoAction, setPendingDemoAction] = useState(null);
 
     useEffect(() => {
@@ -615,33 +558,14 @@ const ControlCenter = () => {
     };
 
     useEffect(() => {
-        if (!minimapData) return;
+        if (!snapshotData) return;
 
-        const data = minimapData;
-        const telemetryVehicleId = extractTelemetryVehicleId(data);
-        const posePayload = extractPosePayload(data);
-        const pathPayload = data?.pathPoints ?? data?.path_points ?? data?.trajectory;
-        const reportedState = normalizeMonitorState(
-            data?.state
-            ?? data?.vehicleState
-            ?? data?.missionState
-            ?? data?.status
-        );
-        const nextSpeedKmh = extractFirstFiniteNumber(
-            data?.speedKmh
-            ?? data?.speed_kmh
-            ?? data?.vehicleSpeedKmh
-            ?? posePayload?.speedKmh
-            ?? posePayload?.speed_kmh
-        );
-        const nextSpeedMs = extractFirstFiniteNumber(
-            data?.speedMs
-            ?? data?.speed_ms
-            ?? data?.vehicleSpeedMs
-            ?? data?.speed
-            ?? posePayload?.speedMs
-            ?? posePayload?.speed_ms
-        );
+        const telemetry = snapshotData.telemetry ?? {};
+        const navigation = snapshotData.navigation ?? {};
+        const posePayload = telemetry.pose;
+        const reportedState = normalizeMonitorState(telemetry.state);
+        const nextSpeedKmh = toFiniteNumber(telemetry.speedKmh);
+        const nextSpeedMs = toFiniteNumber(telemetry.speedMs);
         const nextState = inferMonitorStateFromTelemetry(
             reportedState,
             nextSpeedMs,
@@ -650,137 +574,63 @@ const ControlCenter = () => {
         const nextSpeed = nextSpeedKmh !== null
             ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
             : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
-        const nextLocation = extractVehicleLocation(
-            data?.currentLocation,
-            data?.vehicleLocation,
-            data?.location,
-            data,
-            {
-                latitude: data?.latitude,
-                longitude: data?.longitude
-            }
+        const nextLocation = createVehicleLocation(
+            telemetry.location?.lat,
+            telemetry.location?.lng
         );
-        const nextBattery = normalizeBatterySoc(
-            data?.battery_soc
-            ?? data?.batterySoc
-            ?? data?.battery
-        );
-        const rawGoalWaypointId = data?.goalWaypointId
-            ?? data?.goal_waypoint_id
-            ?? data?.goalWaypoint?.id
-            ?? data?.goal_waypoint?.id;
-        const nextGoalWaypointId = typeof rawGoalWaypointId === 'string'
-            ? rawGoalWaypointId
+        const nextBattery = normalizeBatterySoc(telemetry.batterySoc);
+        const nextGoalWaypointId = typeof navigation.goalWaypointId === 'string'
+            ? navigation.goalWaypointId
             : null;
         const nextGoalWaypointNumber = parseWaypointNumberFromGoalId(nextGoalWaypointId);
-        const fullPathPayload = data?.fullPathPoints
-            ?? data?.full_path_points
-            ?? data?.fullTrajectory
-            ?? data?.full_trajectory
-            ?? data?.globalPath
-            ?? pathPayload;
+        const pathPayload = (
+            Array.isArray(navigation.pathWaypoints) && navigation.pathWaypoints.length > 0
+                ? navigation.pathWaypoints
+                : navigation.trajectory
+        );
+        const fullPathPayload = (
+            Array.isArray(navigation.fullPathWaypoints) && navigation.fullPathWaypoints.length > 0
+                ? navigation.fullPathWaypoints
+                : (
+                    Array.isArray(navigation.fullTrajectory) && navigation.fullTrajectory.length > 0
+                        ? navigation.fullTrajectory
+                        : pathPayload
+                )
+        );
+        const hasStandaloneLiveTelemetry = isValidPose(posePayload)
+            || nextLocation !== null
+            || nextSpeed !== null
+            || nextBattery !== null
+            || nextState !== null;
 
         setMinimapVehiclePose(isValidPose(posePayload) ? posePayload : null);
         setMinimapPathPoints(sanitizePathPoints(pathPayload));
         setMinimapFullPathPoints(sanitizePathPoints(fullPathPayload));
-        setMinimapMonitorState(nextState);
-        setMinimapVehicleSpeed(nextSpeed);
+        if (nextState) {
+            setMinimapMonitorState(nextState);
+        }
+        if (nextSpeed !== null) {
+            setMinimapVehicleSpeed(nextSpeed);
+        }
         setMinimapGoalWaypointId(nextGoalWaypointId);
+        setLiveVehicleLocation(nextLocation);
         setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
-            shouldApplyLiveTelemetryToVehicle(vehicle, telemetryVehicleId, nextGoalWaypointNumber)
+            vehicle.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID
+                && (
+                    shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
+                    || hasStandaloneLiveTelemetry
+                )
                 ? {
                     ...vehicle,
                     status: nextState || vehicle.status,
                     speed: nextSpeed ?? vehicle.speed,
                     location: nextLocation || vehicle.location,
                     battery: nextBattery ?? vehicle.battery,
-                    lastUpdated: new Date().toISOString(),
+                    lastUpdated: telemetry.updatedAt || new Date().toISOString(),
                 }
                 : vehicle
         )));
-    }, [minimapData]);
-
-    useEffect(() => {
-        if (!odomData) return;
-
-        const telemetryVehicleId = extractTelemetryVehicleId(odomData);
-        const posePayload = extractPosePayload(odomData);
-        const nextLocation = extractVehicleLocation(
-            odomData?.currentLocation,
-            odomData?.vehicleLocation,
-            odomData?.location,
-            odomData,
-            {
-                latitude: odomData?.latitude,
-                longitude: odomData?.longitude
-            }
-        );
-        const nextSpeedKmh = extractFirstFiniteNumber(
-            odomData?.speedKmh,
-            odomData?.speed_kmh,
-            odomData?.vehicleSpeedKmh,
-            posePayload?.speedKmh,
-            posePayload?.speed_kmh
-        );
-        const nextSpeedMs = extractFirstFiniteNumber(
-            odomData?.speedMs,
-            odomData?.speed_ms,
-            odomData?.vehicleSpeedMs,
-            odomData?.speed,
-            posePayload?.speedMs,
-            posePayload?.speed_ms
-        );
-        const nextState = inferMonitorStateFromTelemetry(
-            minimapMonitorState,
-            nextSpeedMs,
-            nextSpeedKmh
-        );
-        const nextSpeedState = nextState || minimapMonitorState || DEFAULT_WAITING_MONITOR_STATE;
-        const nextSpeed = nextSpeedKmh !== null
-            ? normalizeVehicleSpeed(nextSpeedKmh, nextSpeedState, 'km/h')
-            : normalizeVehicleSpeed(nextSpeedMs, nextSpeedState, 'm/s');
-
-        if (isValidPose(posePayload)) {
-            setMinimapVehiclePose(posePayload);
-        }
-        if (nextState) {
-            setMinimapMonitorState(nextState);
-        }
-        setMinimapVehicleSpeed(nextSpeed);
-        setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
-            shouldApplyLiveTelemetryToVehicle(vehicle, telemetryVehicleId)
-                ? {
-                    ...vehicle,
-                    status: nextState || vehicle.status,
-                    speed: nextSpeed ?? vehicle.speed,
-                    location: nextLocation || vehicle.location,
-                    lastUpdated: new Date().toISOString(),
-                }
-                : vehicle
-        )));
-    }, [odomData, minimapMonitorState]);
-
-    useEffect(() => {
-        if (!stateData?.state) return;
-
-        const normalized = normalizeMonitorState(stateData.state);
-
-        if (!normalized) {
-            return;
-        }
-
-        const telemetryVehicleId = extractTelemetryVehicleId(stateData);
-        setMinimapMonitorState(normalized);
-        setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
-            shouldApplyLiveTelemetryToVehicle(vehicle, telemetryVehicleId)
-                ? {
-                    ...vehicle,
-                    status: normalized,
-                    lastUpdated: new Date().toISOString(),
-                }
-                : vehicle
-        )));
-    }, [stateData]);
+    }, [snapshotData]);
 
     const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
         || vehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle)
@@ -788,17 +638,21 @@ const ControlCenter = () => {
         || null;
     const vehicleState = minimapMonitorState || selectedVehicle?.status || '대기';
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
-    const vehicleLocation = selectedVehicle?.location || null;
+    const vehicleLocation = liveVehicleLocation || selectedVehicle?.location || null;
     const selectedMissionWaypointNumber = getMissionTargetWaypointNumber(selectedVehicle?.mission);
     const minimapGoalWaypointNumber = parseWaypointNumberFromGoalId(minimapGoalWaypointId);
     const selectedVehicleUsesLiveTelemetry = shouldUseLiveTelemetryForMission(
         selectedVehicle?.mission,
         minimapGoalWaypointNumber
     );
-    const effectiveVehicleState = selectedVehicleUsesLiveTelemetry
+    const hasStandaloneLiveTelemetry = isValidPose(minimapVehiclePose)
+        || vehicleLocation !== null
+        || minimapVehicleSpeed !== null;
+    const shouldDisplayLiveTelemetry = selectedVehicleUsesLiveTelemetry || hasStandaloneLiveTelemetry;
+    const effectiveVehicleState = shouldDisplayLiveTelemetry
         ? (vehicleState || DEFAULT_WAITING_MONITOR_STATE)
         : (selectedVehicle?.status || normalizeMonitorState('WAITING'));
-    const effectiveVehicleSpeed = selectedVehicleUsesLiveTelemetry
+    const effectiveVehicleSpeed = shouldDisplayLiveTelemetry
         ? vehicleSpeed
         : (selectedVehicle?.speed ?? null);
     const effectiveMinimapPathPoints = minimapPathPoints;
