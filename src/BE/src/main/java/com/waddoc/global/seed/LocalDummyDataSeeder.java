@@ -10,6 +10,9 @@ import com.waddoc.domain.consultation.entity.ConnectionState;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.dispatch.entity.DispatchOutbox;
+import com.waddoc.domain.dispatch.entity.DispatchOutboxStatus;
+import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.DoctorProfileRepository;
@@ -65,7 +68,8 @@ import java.util.Objects;
 @ConditionalOnProperty(prefix = "app.seed", name = "enabled", havingValue = "true")
 public class LocalDummyDataSeeder implements ApplicationRunner {
 
-    private static final String DEFAULT_CHANNEL = "PHONE";
+    private static final String PHONE_CHANNEL = IntakeChannel.PHONE.name();
+    private static final String WEB_SIMULATOR_CHANNEL = IntakeChannel.WEB_SIMULATOR.name();
     private static final String ADMIN_USERNAME = "seed_prod_admin";
     private static final String ADMIN_NAME = "운영 더미 관리자";
     private static final String LIVEKIT_URL_PLACEHOLDER = "__SET_LIVEKIT_URL__";
@@ -158,6 +162,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private final IntakeSessionRepository intakeSessionRepository;
     private final MissionRepository missionRepository;
     private final ConsultationSessionRepository consultationSessionRepository;
+    private final DispatchOutboxRepository dispatchOutboxRepository;
     private final VehicleRepository vehicleRepository;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
@@ -182,6 +187,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         seedGuardianLinks(patientSeeds, patientsByKey, guardiansByPatientKey, adminUser);
         seedHistoricalBookings(today, doctorsByUsername, patientsByKey, vehiclesByCode, patientSeeds);
+        seedUpcomingBookings(today, doctorsByUsername, patientsByKey, vehiclesByCode, patientSeeds);
         seedFutureSlots(today, doctorsByUsername);
 
         log.info("Prod-like dummy data synced. adminUsername={}, doctorCount={}, vehicleCodes={}, patientCount={}, guardianCount={}, futureSlotEnd={}",
@@ -495,6 +501,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             IntakeSession intakeSession = ensureIntakeSession(
                     patient,
                     patient.getPhone(),
+                    IntakeChannel.PHONE,
                     doctor.getDepartment(),
                     doctor.getDepartmentName(),
                     "3월 과거 예약 시드 생성",
@@ -508,7 +515,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     CompletionReason.BOOKING_CREATED
             );
 
-            Booking booking = ensureBooking(patient, slot, BookingStatus.COMPLETED, intakeSession, null);
+            Booking booking = ensureBooking(patient, slot, PHONE_CHANNEL, BookingStatus.COMPLETED, intakeSession, null);
             CareCase careCase = ensureCareCase(booking, intakeSession);
             syncCaseStatus(careCase, CaseStatus.COMPLETED);
 
@@ -547,6 +554,79 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     consultationEndedAt,
                     20
             );
+        }
+    }
+
+    private void seedUpcomingBookings(LocalDate today, Map<String, DoctorProfile> doctorsByUsername,
+            Map<String, Patient> patientsByKey, Map<String, Vehicle> vehiclesByCode, List<PatientSeed> patientSeeds) {
+        if (today.isAfter(FUTURE_SLOT_END_DATE)) {
+            return;
+        }
+
+        List<DoctorProfile> doctors = List.copyOf(doctorsByUsername.values());
+        Vehicle gimcheonVehicle = getVehicle(vehiclesByCode, "GIMCHEON-01");
+        int upcomingDayCount = (int) today.datesUntil(FUTURE_SLOT_END_DATE.plusDays(1)).count();
+        int upcomingBookingCount = Math.min(patientSeeds.size(), upcomingDayCount * doctors.size());
+
+        for (int index = 0; index < upcomingBookingCount; index++) {
+            PatientSeed seed = patientSeeds.get(index);
+            Patient patient = getPatient(patientsByKey, seed.key());
+            LocalDate appointmentDate = today.plusDays(index % upcomingDayCount);
+            DoctorProfile doctor = doctors.get((index / upcomingDayCount) % doctors.size());
+            LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(index % REALISTIC_SLOT_START_TIMES.size());
+            LocalTime endTime = startTime.plusMinutes(30);
+            LocalDateTime appointmentDateTime = appointmentDate.atTime(startTime);
+            LocalDateTime intakeCompletedAt = appointmentDateTime.minusHours(1);
+            LocalDateTime intakeLastActivityAt = intakeCompletedAt.minusMinutes(5);
+            LocalDateTime dispatchedAt = appointmentDateTime.minusMinutes(20);
+            LocalDateTime estimatedArrivalTime = appointmentDateTime.minusMinutes(2);
+
+            ScheduleSlot slot = ensureSlot(doctor, appointmentDate, startTime, endTime);
+            IntakeSession intakeSession = ensureIntakeSession(
+                    patient,
+                    patient.getPhone(),
+                    IntakeChannel.WEB_SIMULATOR,
+                    doctor.getDepartment(),
+                    doctor.getDepartmentName(),
+                    "오늘 이후 활성 예약 시드 생성",
+                    List.of(slot.getPublicId()),
+                    CompletionReason.BOOKING_CREATED
+            );
+            syncIntakeSessionTimeline(
+                    intakeSession,
+                    intakeLastActivityAt,
+                    intakeCompletedAt,
+                    CompletionReason.BOOKING_CREATED
+            );
+
+            Booking booking = ensureBooking(patient, slot, WEB_SIMULATOR_CHANNEL, BookingStatus.CONFIRMED, intakeSession, null);
+            CareCase careCase = ensureCareCase(booking, intakeSession);
+            syncCaseStatus(careCase, CaseStatus.CREATED);
+
+            Mission mission = ensureMission(
+                    careCase,
+                    gimcheonVehicle.getPublicId(),
+                    patient.getAddress(),
+                    dispatchedAt,
+                    estimatedArrivalTime,
+                    seed.waypointNumber()
+            );
+            syncMissionState(
+                    mission,
+                    gimcheonVehicle.getPublicId(),
+                    patient.getAddress(),
+                    dispatchedAt,
+                    estimatedArrivalTime,
+                    MissionPhase.ARRIVED,
+                    MissionPhase.EN_ROUTE,
+                    null,
+                    null,
+                    null,
+                    seed.waypointNumber()
+            );
+
+            DispatchOutbox dispatchOutbox = ensureDispatchOutbox(careCase, patient.getRegionCode(), patient.getAddress());
+            syncDispatchOutboxState(dispatchOutbox, DispatchOutboxStatus.COMPLETED);
         }
     }
 
@@ -746,9 +826,30 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         .name(name)
                         .role(role)
                         .build()));
+        syncSeedUserPassword(user);
         syncUserBasics(user, name, role);
         syncApprovalStatus(user, approver, targetStatus);
         return user;
+    }
+
+    private void syncSeedUserPassword(User user) {
+        String currentPasswordHash = user.getPasswordHash();
+        boolean passwordMatches = false;
+        if (currentPasswordHash != null) {
+            try {
+                passwordMatches = passwordEncoder.matches(defaultPassword, currentPasswordHash);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Seed user password hash is unreadable. Replacing with app.seed.default-password. username={}", user.getUsername());
+            }
+        }
+
+        if (passwordMatches) {
+            return;
+        }
+
+        user.changePasswordHash(passwordEncoder.encode(defaultPassword));
+        entityManager.flush();
+        log.info("Seed user password synced from app.seed.default-password. username={}", user.getUsername());
     }
 
     private void syncUserBasics(User user, String name, Role role) {
@@ -957,15 +1058,15 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         }
     }
 
-    private IntakeSession ensureIntakeSession(Patient patient, String callerNumber, String department,
-            String departmentName, String selectionReason, List<String> offeredSlotIds,
+    private IntakeSession ensureIntakeSession(Patient patient, String callerNumber, IntakeChannel channel,
+            String department, String departmentName, String selectionReason, List<String> offeredSlotIds,
             CompletionReason completionReason) {
         IntakeSession intakeSession = intakeSessionRepository
-                .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, IntakeChannel.PHONE)
+                .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, channel)
                 .orElseGet(() -> intakeSessionRepository.save(
                         IntakeSession.builder()
                                 .callerNumber(callerNumber)
-                                .channel(IntakeChannel.PHONE)
+                                .channel(channel)
                                 .build()));
 
         if (intakeSession.getPatient() == null || !Objects.equals(intakeSession.getPatient().getId(), patient.getId())) {
@@ -1027,7 +1128,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return slot;
     }
 
-    private Booking ensureBooking(Patient patient, ScheduleSlot slot, BookingStatus targetStatus,
+    private Booking ensureBooking(Patient patient, ScheduleSlot slot, String channel, BookingStatus targetStatus,
             IntakeSession intakeSession, String cancelReason) {
         Booking booking = bookingRepository.findBySlot(slot).orElseGet(() -> bookingRepository.save(
                 Booking.builder()
@@ -1035,7 +1136,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         .intakeSession(intakeSession)
                         .slot(slot)
                         .doctor(slot.getDoctor())
-                        .channel(DEFAULT_CHANNEL)
+                        .channel(channel)
                         .appointmentDate(slot.getSlotDate())
                         .startTime(slot.getStartTime())
                         .endTime(slot.getEndTime())
@@ -1066,7 +1167,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 .setParameter("intakeSession", intakeSession)
                 .setParameter("slot", slot)
                 .setParameter("doctor", slot.getDoctor())
-                .setParameter("channel", DEFAULT_CHANNEL)
+                .setParameter("channel", channel)
                 .setParameter("appointmentDate", slot.getSlotDate())
                 .setParameter("startTime", slot.getStartTime())
                 .setParameter("endTime", slot.getEndTime())
@@ -1106,6 +1207,44 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.flush();
         entityManager.refresh(careCase);
         return careCase;
+    }
+
+    private DispatchOutbox ensureDispatchOutbox(CareCase careCase, String regionCode, String destination) {
+        DispatchOutbox outbox = dispatchOutboxRepository.findWithPatientByCareCasePublicId(careCase.getPublicId())
+                .orElseGet(() -> dispatchOutboxRepository.save(DispatchOutbox.builder()
+                        .careCase(careCase)
+                        .regionCode(regionCode)
+                        .destination(destination)
+                        .build()));
+
+        entityManager.createQuery("""
+                update DispatchOutbox d
+                   set d.careCase = :careCase,
+                       d.regionCode = :regionCode,
+                       d.destination = :destination
+                 where d.id = :id
+                """)
+                .setParameter("careCase", careCase)
+                .setParameter("regionCode", regionCode)
+                .setParameter("destination", destination)
+                .setParameter("id", outbox.getId())
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.refresh(outbox);
+        return outbox;
+    }
+
+    private void syncDispatchOutboxState(DispatchOutbox outbox, DispatchOutboxStatus targetStatus) {
+        entityManager.createQuery("""
+                update DispatchOutbox d
+                   set d.status = :status
+                 where d.id = :id
+                """)
+                .setParameter("status", targetStatus)
+                .setParameter("id", outbox.getId())
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.refresh(outbox);
     }
 
     private void syncCaseStatus(CareCase careCase, CaseStatus targetStatus) {

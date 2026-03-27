@@ -98,4 +98,8 @@ public class User extends BaseTimeEntity {
         this.approvedByUser = approver;
         this.approvedAt = LocalDateTime.now();
     }
+
+    public void changePasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
 }
