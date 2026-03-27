@@ -391,7 +391,7 @@ const loadDashboardSnapshot = async ({
         });
 
         const [missionsRes, bookingsRes, vehiclesRes] = await Promise.all([
-            fetchSafe(apiClient.get('/missions', { params: { date: activeMissionDate } })),
+            fetchSafe(apiClient.get('/missions', { params: { date: todayDateKey } })),
             fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })),
             fetchSafe(apiClient.get('/admin/vehicles'))
         ]);

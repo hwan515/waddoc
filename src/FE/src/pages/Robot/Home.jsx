@@ -183,6 +183,7 @@ const Home = () => {
     };
 
     const patientName = currentMission?.patientName || localStorage.getItem('current_patient_name') || '환자';
+    const isReadyToStart = screenState === 'ready';
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-dark font-sans relative overflow-hidden">
@@ -202,11 +203,11 @@ const Home = () => {
                 ) : (
                     <>
                         <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight leading-tight">
-                            차량이 자율 주행중입니다.
+                            {isReadyToStart ? '차량이 도착했습니다.' : '차량이 자율 주행중입니다.'}
                         </h1>
                         <p className="text-lg md:text-2xl text-slate-300 leading-relaxed">
-                            {screenState === 'ready'
-                                ? `${currentMission?.patientName || '환자'}님 진료를 시작할 준비가 완료되었습니다.`
+                            {isReadyToStart
+                                ? `${patientName}님 진료를 시작할 준비가 완료되었습니다.`
                                 : '차량 도착 후 진료 시작 버튼이 자동으로 활성화됩니다.'}
                         </p>
                         {currentMission?.hasMission && (
