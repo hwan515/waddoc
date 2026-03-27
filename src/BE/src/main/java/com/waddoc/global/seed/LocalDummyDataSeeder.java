@@ -177,6 +177,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         Map<String, Vehicle> vehiclesByCode = seedVehicles();
         List<PatientSeed> patientSeeds = buildPatientSeeds();
         Map<String, Patient> patientsByKey = seedPatients(patientSeeds, adminUser);
+        pruneLegacySeedPatients(patientsByKey);
         Map<String, User> guardiansByPatientKey = seedGuardians(patientSeeds, adminUser);
 
         seedGuardianLinks(patientSeeds, patientsByKey, guardiansByPatientKey, adminUser);
@@ -248,6 +249,146 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     seed.referenceImagePath(), adminUser));
         }
         return patientsByKey;
+    }
+
+    private void pruneLegacySeedPatients(Map<String, Patient> patientsByKey) {
+        List<Long> keepPatientIds = patientsByKey.values().stream()
+                .map(Patient::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (keepPatientIds.isEmpty()) {
+            return;
+        }
+
+        List<Long> removablePatientIds = entityManager.createQuery("""
+                select p.id
+                  from Patient p
+                 where p.id not in :keepPatientIds
+                   and p.referenceImagePath like :legacySeedReferencePattern
+                """, Long.class)
+                .setParameter("keepPatientIds", keepPatientIds)
+                .setParameter("legacySeedReferencePattern", "patients/pat_prd_%/reference.jpg")
+                .getResultList();
+        if (removablePatientIds.isEmpty()) {
+            return;
+        }
+
+        List<Long> bookingIds = entityManager.createQuery("""
+                select b.id
+                  from Booking b
+                 where b.patient.id in :patientIds
+                """, Long.class)
+                .setParameter("patientIds", removablePatientIds)
+                .getResultList();
+        List<Long> caseIds = entityManager.createQuery("""
+                select c.id
+                  from CareCase c
+                 where c.patient.id in :patientIds
+                """, Long.class)
+                .setParameter("patientIds", removablePatientIds)
+                .getResultList();
+        List<Long> slotIds = bookingIds.isEmpty()
+                ? List.of()
+                : entityManager.createQuery("""
+                        select distinct b.slot.id
+                          from Booking b
+                         where b.id in :bookingIds
+                        """, Long.class)
+                        .setParameter("bookingIds", bookingIds)
+                        .getResultList();
+        java.util.Set<Long> intakeSessionIds = new java.util.LinkedHashSet<>(entityManager.createQuery("""
+                select distinct i.id
+                  from IntakeSession i
+                 where i.patient.id in :patientIds
+                """, Long.class)
+                .setParameter("patientIds", removablePatientIds)
+                .getResultList());
+        if (!bookingIds.isEmpty()) {
+            intakeSessionIds.addAll(entityManager.createQuery("""
+                    select distinct b.intakeSession.id
+                      from Booking b
+                     where b.id in :bookingIds
+                       and b.intakeSession is not null
+                    """, Long.class)
+                    .setParameter("bookingIds", bookingIds)
+                    .getResultList());
+        }
+
+        entityManager.createQuery("""
+                delete from PatientGuardianLink l
+                 where l.patient.id in :patientIds
+                """)
+                .setParameter("patientIds", removablePatientIds)
+                .executeUpdate();
+
+        if (!caseIds.isEmpty()) {
+            entityManager.createQuery("""
+                    delete from DispatchOutbox d
+                     where d.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from VitalMeasurement v
+                     where v.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from ConsultationSession s
+                     where s.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from Mission m
+                     where m.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from CareCase c
+                     where c.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+        }
+
+        if (!bookingIds.isEmpty()) {
+            entityManager.createQuery("""
+                    delete from Booking b
+                     where b.id in :bookingIds
+                    """)
+                    .setParameter("bookingIds", bookingIds)
+                    .executeUpdate();
+        }
+
+        if (!slotIds.isEmpty()) {
+            entityManager.createQuery("""
+                    update ScheduleSlot s
+                       set s.booked = false
+                     where s.id in :slotIds
+                    """)
+                    .setParameter("slotIds", slotIds)
+                    .executeUpdate();
+        }
+
+        if (!intakeSessionIds.isEmpty()) {
+            entityManager.createQuery("""
+                    delete from IntakeSession i
+                     where i.id in :intakeSessionIds
+                    """)
+                    .setParameter("intakeSessionIds", intakeSessionIds)
+                    .executeUpdate();
+        }
+
+        entityManager.createQuery("""
+                delete from Patient p
+                 where p.id in :patientIds
+                """)
+                .setParameter("patientIds", removablePatientIds)
+                .executeUpdate();
+        entityManager.flush();
     }
 
     private Map<String, User> seedGuardians(List<PatientSeed> patientSeeds, User adminUser) {
@@ -432,30 +573,36 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     }
 
     private void pruneUnusedSeedGuardians(List<PatientSeed> patientSeeds, java.util.Set<String> targetPatientKeys) {
-        List<String> removableGuardianUsernames = new java.util.ArrayList<>();
+        List<String> targetGuardianUsernames = new java.util.ArrayList<>();
         for (PatientSeed seed : patientSeeds) {
-            if (!targetPatientKeys.contains(seed.key())) {
-                removableGuardianUsernames.add(seed.guardianUsername());
+            if (targetPatientKeys.contains(seed.key())) {
+                targetGuardianUsernames.add(seed.guardianUsername());
             }
         }
 
-        if (removableGuardianUsernames.isEmpty()) {
+        if (targetGuardianUsernames.isEmpty()) {
             return;
         }
 
         entityManager.createQuery("""
                 delete from PatientGuardianLink l
-                 where l.guardianUser.username in :guardianUsernames
+                 where l.guardianUser.role = :role
+                   and l.guardianUser.username like :seedGuardianUsernamePattern
+                   and l.guardianUser.username not in :guardianUsernames
                 """)
-                .setParameter("guardianUsernames", removableGuardianUsernames)
+                .setParameter("role", Role.GUARDIAN)
+                .setParameter("seedGuardianUsernamePattern", "seed_prod_guardian_%")
+                .setParameter("guardianUsernames", targetGuardianUsernames)
                 .executeUpdate();
         entityManager.createQuery("""
                 delete from User u
                  where u.role = :role
-                   and u.username in :guardianUsernames
+                   and u.username like :seedGuardianUsernamePattern
+                   and u.username not in :guardianUsernames
                 """)
                 .setParameter("role", Role.GUARDIAN)
-                .setParameter("guardianUsernames", removableGuardianUsernames)
+                .setParameter("seedGuardianUsernamePattern", "seed_prod_guardian_%")
+                .setParameter("guardianUsernames", targetGuardianUsernames)
                 .executeUpdate();
         entityManager.flush();
     }
@@ -731,10 +878,10 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private Patient ensurePatient(String name, LocalDate birthDate, PatientGender gender, String regionCode,
             String address, String phone, String referenceImagePath, User uploadedBy) {
         String birthDate6 = birthDate.format(BIRTH_DATE6_FORMAT);
-        Patient patient = (referenceImagePath == null
-                ? java.util.Optional.<Patient>empty()
-                : patientRepository.findByReferenceImagePath(referenceImagePath))
-                .or(() -> patientRepository.findByPhone(phone))
+        Patient patient = patientRepository.findByPhone(phone)
+                .or(() -> (referenceImagePath == null
+                        ? java.util.Optional.<Patient>empty()
+                        : patientRepository.findAllByReferenceImagePathOrderByIdAsc(referenceImagePath).stream().findFirst()))
                 .or(() -> patientRepository.findAllByNameAndBirthDate6(name, birthDate6).stream().findFirst())
                 .orElseGet(() -> patientRepository.save(
                         Patient.builder()
