@@ -1,6 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import apiClient from '../../utils/api';
 import { UserPlus, Search, X } from 'lucide-react';
+
+const PATIENT_FETCH_SIZE = 1000;
+const FIXED_REGION_CODE = 'GIMCHEON';
+
+const buildPatientSearchParams = (searchValue) => {
+    const trimmed = searchValue.trim();
+    if (!trimmed) {
+        return {};
+    }
+
+    const normalizedPhone = trimmed.replace(/\D/g, '');
+    if (normalizedPhone && /^[\d-\s]+$/.test(trimmed)) {
+        return { phone: normalizedPhone };
+    }
+
+    return { name: trimmed };
+};
 
 const PatientManagement = () => {
     const [patients, setPatients] = useState([]);
@@ -14,17 +31,21 @@ const PatientManagement = () => {
         birthDate: '',
         phone: '',
         gender: 'UNKNOWN',
-        regionCode: '',
+        regionCode: FIXED_REGION_CODE,
         address: ''
     });
     // referenceImage is handled separately to avoid React controlling a file input directly
     const [imageFile, setImageFile] = useState(null);
 
-    const fetchPatients = async () => {
+    const fetchPatients = async (searchValue = '') => {
         try {
             setLoading(true);
-            const response = await apiClient.get('/admin/patients', { params: { size: 100 } });
-            // Assuming response.data.patients
+            const response = await apiClient.get('/admin/patients', {
+                params: {
+                    size: PATIENT_FETCH_SIZE,
+                    ...buildPatientSearchParams(searchValue)
+                }
+            });
             setPatients(response.data.patients || []);
         } catch (error) {
             console.error("Failed to fetch patients:", error);
@@ -34,8 +55,12 @@ const PatientManagement = () => {
     };
 
     useEffect(() => {
-        fetchPatients();
-    }, []);
+        const debounceId = window.setTimeout(() => {
+            fetchPatients(searchTerm);
+        }, 250);
+
+        return () => window.clearTimeout(debounceId);
+    }, [searchTerm]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -66,20 +91,23 @@ const PatientManagement = () => {
             
             alert('환자 등록이 완료되었습니다.');
             setIsModalOpen(false);
-            setFormData({ name: '', birthDate: '', phone: '', gender: 'UNKNOWN', regionCode: '', address: '' });
+            setFormData({
+                name: '',
+                birthDate: '',
+                phone: '',
+                gender: 'UNKNOWN',
+                regionCode: FIXED_REGION_CODE,
+                address: ''
+            });
             setImageFile(null);
-            fetchPatients(); // Refresh list
+            fetchPatients(searchTerm);
         } catch (error) {
             console.error("Failed to register patient:", error);
             alert('환자 등록에 실패했습니다.');
         }
     };
 
-    const filteredPatients = patients
-        .filter(p => 
-            (p.name && p.name.includes(searchTerm)) || 
-            (p.phone && p.phone.includes(searchTerm))
-        )
+    const filteredPatients = [...patients]
         .sort((a, b) => {
             const idA = String(a.patientId || '');
             const idB = String(b.patientId || '');
@@ -193,7 +221,14 @@ const PatientManagement = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">지역 코드 *</label>
-                                <input required type="text" name="regionCode" value={formData.regionCode} onChange={handleInputChange} className="w-full p-2 border rounded-lg" placeholder="GIMCHEON_JEUNGSAN"/>
+                                <input
+                                    required
+                                    type="text"
+                                    name="regionCode"
+                                    value={formData.regionCode}
+                                    readOnly
+                                    className="w-full p-2 border rounded-lg bg-gray-100 text-gray-500"
+                                />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
