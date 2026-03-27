@@ -4,14 +4,8 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
-    environment:
-      - DEV_ROBOT_API_PROXY_TARGET=${DEV_ROBOT_API_PROXY_TARGET:-https://www.waddoc.site}
     volumes:
-      - ./nginx/dev.conf.template:/etc/nginx/templates/dev.conf.template:ro
-    command:
-      - /bin/sh
-      - -c
-      - envsubst '$$DEV_ROBOT_API_PROXY_TARGET' < /etc/nginx/templates/dev.conf.template > /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'
+      - ./nginx/dev.conf.template:/etc/nginx/nginx.conf:ro
     depends_on:
       - spring-api
       - frontend
@@ -63,6 +57,8 @@ services:
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
       - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
       - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-wss://www.waddoc.site/mqtt}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-spring-waddoc-dev}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:

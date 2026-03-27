@@ -4,8 +4,8 @@
  * 배포 흐름:
  *   1. GitLab (dev 브랜치 - 추후 master로 수정) push
  *   2. Jenkins agent(EC2)에서 코드 checkout
- *   3. 변경 감지: src/BE, src/FE, src/FE-phone, src/zenoh-server, infra 중 변경된 부분만 처리
- *      - infra/nginx 및 앱 이미지(src/BE, src/FE, src/FE-phone, src/zenoh-server) 변경은 nginx 재시작
+ *   3. 변경 감지: src/BE, src/FE, src/FE-phone, infra 중 변경된 부분만 처리
+ *      - infra/nginx 및 앱 이미지(src/BE, src/FE, src/FE-phone) 변경은 nginx 재시작
  *   4. 변경된 이미지 서비스만 Docker buildx → DockerHub push
  *      - ros2_app_ec2는 배포 서버에서 로컬 build
  *   5. docker compose pull/build → up -d
@@ -99,7 +99,6 @@ pipeline {
                         env.BE_CHANGED = 'true'
                         env.FE_CHANGED = 'true'
                         env.FP_CHANGED = 'true'
-                        env.ZENOH_CHANGED = 'true'
                         env.INFRA_CHANGED = 'true'
                         env.MONITORING_CHANGED = 'true'
                         env.NGINX_CHANGED = 'true'
@@ -107,9 +106,6 @@ pipeline {
                         env.BE_CHANGED    = changedFiles.any { it.startsWith('src/BE/') } ? 'true' : 'false'
                         env.FE_CHANGED    = changedFiles.any { it.startsWith('src/FE/') && !it.startsWith('src/FE-phone/') } ? 'true' : 'false'
                         env.FP_CHANGED    = changedFiles.any { it.startsWith('src/FE-phone/') } ? 'true' : 'false'
-                        env.ZENOH_CHANGED = changedFiles.any {
-                            it.startsWith('src/zenoh-server/') || it.startsWith('src/BE/zenoh-server/')
-                        } ? 'true' : 'false'
                         env.MONITORING_CHANGED = changedFiles.any {
                             it == 'infra/docker-compose.monitoring.prod.yml' || it.startsWith('infra/monitoring/')
                         } ? 'true' : 'false'
@@ -127,7 +123,6 @@ pipeline {
                     echo "BE_CHANGED: ${env.BE_CHANGED}"
                     echo "FE_CHANGED: ${env.FE_CHANGED}"
                     echo "FP_CHANGED: ${env.FP_CHANGED}"
-                    echo "ZENOH_CHANGED: ${env.ZENOH_CHANGED}"
                     echo "MONITORING_CHANGED: ${env.MONITORING_CHANGED}"
                     echo "NGINX_CHANGED: ${env.NGINX_CHANGED}"
                     echo "INFRA_CHANGED: ${env.INFRA_CHANGED}"
@@ -226,7 +221,7 @@ pipeline {
             when {
                 expression {
                     env.BE_CHANGED == 'true' || env.FE_CHANGED == 'true' ||
-                    env.FP_CHANGED == 'true' || env.ZENOH_CHANGED == 'true' ||
+                    env.FP_CHANGED == 'true' ||
                     env.MONITORING_CHANGED == 'true' || env.NGINX_CHANGED == 'true' || env.INFRA_CHANGED == 'true'
                 }
             }
@@ -304,11 +299,6 @@ pipeline {
                                 pullServices << 'frontend-phone'
                                 deployServices << 'frontend-phone'
                             }
-                            if (env.ZENOH_CHANGED == 'true') {
-                                buildServices << 'ros2_app_ec2'
-                                deployServices << 'ros2_app_ec2'
-                            }
-
                             if (deployServices) {
                                 def svc = deployServices.join(' ')
                                 def pullSvc = pullServices.join(' ')
@@ -345,8 +335,7 @@ pipeline {
                                     env.NGINX_CHANGED == 'true' ||
                                     env.BE_CHANGED == 'true' ||
                                     env.FE_CHANGED == 'true' ||
-                                    env.FP_CHANGED == 'true' ||
-                                    env.ZENOH_CHANGED == 'true'
+                                    env.FP_CHANGED == 'true'
 
                             if (shouldRestartNginx) {
                                 echo '=== Restarting nginx (nginx/app change) ==='
@@ -383,7 +372,6 @@ pipeline {
                 if (env.BE_CHANGED == 'true') msg += ' [Backend]'
                 if (env.FE_CHANGED == 'true') msg += ' [Frontend]'
                 if (env.FP_CHANGED == 'true') msg += ' [Phone]'
-                if (env.ZENOH_CHANGED == 'true') msg += ' [Zenoh]'
                 if (env.MONITORING_CHANGED == 'true') msg += ' [Monitoring]'
                 if (env.NGINX_CHANGED == 'true') msg += ' [Nginx]'
                 if (env.INFRA_CHANGED == 'true') msg += ' [Infra]'

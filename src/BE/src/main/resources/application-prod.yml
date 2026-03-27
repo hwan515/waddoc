@@ -51,3 +51,6 @@ server:
 monitoring:
   access:
     cookie-secret: ${MONITORING_COOKIE_SECRET}
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:ws://mosquitto:9001}

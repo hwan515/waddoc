@@ -63,9 +63,10 @@ dispatch:
   default-vehicle-id: ${DISPATCH_DEFAULT_VEHICLE_ID:veh_GIMCHEON_01}
   waypoint-mapping-resource: ${DISPATCH_WAYPOINT_MAPPING_RESOURCE:classpath:waypoint_address.json}
 
-robot:
-  command-base-url: ${ROBOT_COMMAND_BASE_URL:http://localhost}
-  command-timeout-ms: ${ROBOT_COMMAND_TIMEOUT_MS:5000}
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:ws://localhost:9001}
+  client-id: ${MQTT_CLIENT_ID:spring-waddoc}
 
 monitoring:
   access:

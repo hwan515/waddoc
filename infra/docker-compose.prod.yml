@@ -83,13 +83,15 @@ services:
       - TELEMETRY_API_KEY=${TELEMETRY_API_KEY}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
-      - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
+      - MQTT_BROKER_URL=ws://mosquitto:9001
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-spring-waddoc-prod}
     volumes:
       - uploads:/data/uploads
     depends_on:
       - postgres
       - redis
       - kafka
+      - mosquitto
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -192,48 +194,26 @@ services:
       --fingerprint
     restart: unless-stopped
 
-  # === Zenoh TCP Bridge (운영 기본 포함) ===
-  zenoh_bridge_ec2:
-    image: eclipse/zenoh-bridge-ros2dds:1.7.2
-    container_name: zenoh_bridge_ec2
-    network_mode: host
-    environment:
-      - ROS_DISTRO=humble
-      - ROS_DOMAIN_ID=0
-      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General></Domain></CycloneDDS>
-    command: [ "-l", "tcp/0.0.0.0:8081" ]
+  # === MQTT Broker (Mosquitto) — 차량 통신 브로커 ===
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    expose:
+      - "9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # === ROS2 FastAPI App — minimap/제어 API ===
-  ros2_app_ec2:
-    build:
-      context: ../src/zenoh-server/router_app
-      dockerfile: Dockerfile
-    container_name: ros2_app_ec2
-    network_mode: host
-    environment:
-      - ROS_DOMAIN_ID=0
-      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      - PYTHONUNBUFFERED=1
-      - CYCLONEDDS_URI=<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General></Domain></CycloneDDS>
-    depends_on:
-      - zenoh_bridge_ec2
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    networks:
+      - waddoc-net
 
 volumes:
   pg_data:
   redis_data:
   uploads:
+  mosquitto_data:
+  mosquitto_log:
 
 
 networks:

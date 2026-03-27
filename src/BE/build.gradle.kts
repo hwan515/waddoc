@@ -51,6 +51,10 @@ dependencies {
     // LiveKit
     implementation("io.livekit:livekit-server:0.6.1")
 
+    // MQTT (spring-integration-mqtt uses Eclipse Paho v3)
+    implementation("org.springframework.integration:spring-integration-mqtt:6.3.6")
+    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+
     // MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
     annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
