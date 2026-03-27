@@ -34,16 +34,6 @@ const formatScheduleTime = (timeStr) => {
     return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
 };
 
-const shiftDateKey = (dateKey, days) => {
-    const baseDate = new Date(`${dateKey}T00:00:00`);
-    if (Number.isNaN(baseDate.getTime())) {
-        return dateKey;
-    }
-
-    baseDate.setDate(baseDate.getDate() + days);
-    return formatDateKey(baseDate);
-};
-
 const formatMissionDateLabel = (dateKey) => {
     const parsedDate = new Date(`${dateKey}T00:00:00`);
     if (Number.isNaN(parsedDate.getTime())) {
@@ -101,8 +91,10 @@ const DashboardView = ({
     setCalendarMode,
     calendarEvents,
     missionsList = [],
-    missionDate,
-    onMissionDateChange,
+    selectedBooking = null,
+    selectedBookingId = null,
+    onBookingSelect,
+    onMissionPanelReset,
     statistics,
     pendingDemoAction = null,
     onDemoDispatch,
@@ -125,7 +117,6 @@ const DashboardView = ({
     const currentYear = referenceDate.getFullYear();
     const currentMonth = referenceDate.getMonth(); // 0-indexed
     const todayDateKey = formatDateKey(now);
-    const tomorrowDateKey = shiftDateKey(todayDateKey, 1);
     const currentTimeLabel = formatTimeLabel(now);
 
     // 주간 뷰 시간표 (08:00 ~ 19:00, 30분 단위)
@@ -265,24 +256,13 @@ const DashboardView = ({
     const consultingMissionCount = statistics.consultingMissions || 0;
     const completedMissionCount = statistics.completedMissions || 0;
     const incidentMissionCount = statistics.incidentCount || 0;
-    const resolvedMissionDate = missionDate || todayDateKey;
-    const missionPanelTitle = resolvedMissionDate === todayDateKey
-        ? '금일 출동 현황'
-        : resolvedMissionDate === tomorrowDateKey
-            ? '내일 출동 현황'
-            : `${formatMissionDateLabel(resolvedMissionDate)} 출동 현황`;
-
-    const handleMissionDateShift = (days) => {
-        onMissionDateChange?.(shiftDateKey(resolvedMissionDate, days));
-    };
-
-    const handleMissionDateInputChange = (event) => {
-        if (!event.target.value) {
-            return;
-        }
-
-        onMissionDateChange?.(event.target.value);
-    };
+    const missionPanelTitle = '금일 출동 현황';
+    const missionPanelDescription = selectedBooking
+        ? `${formatMissionDateLabel(selectedBooking.fullDate)} ${formatScheduleTime(selectedBooking.timeStr)} · ${selectedBooking.name}`
+        : '왼쪽 예약을 누르면 해당 미션을 확인할 수 있습니다.';
+    const missionPanelEmptyMessage = selectedBooking
+        ? '선택한 예약에 연결된 미션이 아직 없습니다.'
+        : '금일 출동 예정 미션이 없습니다.';
 
     return (
         <div className="h-full flex p-4 gap-4">
@@ -372,22 +352,25 @@ const DashboardView = ({
                                             {getEventsForDate(day.fullDate).map((ev) => {
                                                 const topOffsetPx = getTopOffset(ev.timeStr);
                                                 return (
-                                                    <div
+                                                    <button
                                                         key={ev.id}
+                                                        type="button"
+                                                        onClick={() => onBookingSelect?.(ev)}
                                                         onMouseDown={handleScheduleMouseDown}
                                                         style={{ top: `${topOffsetPx}px`, height: '36px' }}
-                                                        title={`${ev.name} / ${ev.doctor || '담당의'}`}
-                                                        className={`absolute inset-x-1.5 flex items-center overflow-hidden rounded-md border-l-4 px-2 py-1 text-xs transition-colors cursor-default select-none ${getEventColor(ev.status, false)}`}
+                                                        title={`${ev.name} / ${ev.doctor || 'Unassigned'}`}
+                                                        aria-pressed={selectedBookingId === ev.id}
+                                                        className={`absolute inset-x-1.5 flex cursor-pointer items-center overflow-hidden rounded-md border-l-4 px-2 py-1 text-left text-xs transition-colors select-none focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev.status, false)}`}
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="truncate text-[11px] font-bold leading-4">
                                                                 {ev.name}
                                                             </div>
                                                             <div className="truncate text-[10px] leading-none opacity-80">
-                                                                {ev.doctor || '담당의'}
+                                                                {ev.doctor || 'Unassigned'}
                                                             </div>
                                                         </div>
-                                                    </div>
+                                                    </button>
                                                 );
                                             })}
                                             {shouldShowCurrentTimeLine && day.isToday && (
@@ -438,10 +421,16 @@ const DashboardView = ({
                                                         </div>
                                                         <div className={`mt-0.5 flex flex-1 flex-col gap-0.75 ${isExpandedDay ? 'overflow-y-auto pr-0.5 custom-scrollbar' : 'overflow-hidden'}`}>
                                                             {visibleEvents.map((ev) => (
-                                                                <div key={ev.id} className={`px-1.5 py-0.75 rounded text-[10px] leading-tight flex justify-between items-center whitespace-nowrap overflow-hidden shadow-sm ${getEventColor(ev.status, true)}`}>
-                                                                    <span className="font-bold truncate mr-1">{ev.name}</span>
+                                                                <button
+                                                                    key={ev.id}
+                                                                    type="button"
+                                                                    onClick={() => onBookingSelect?.(ev)}
+                                                                    aria-pressed={selectedBookingId === ev.id}
+                                                                    className={`flex items-center justify-between overflow-hidden whitespace-nowrap rounded px-1.5 py-0.75 text-left text-[10px] leading-tight shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev.status, true)}`}
+                                                                >
+                                                                    <span className="mr-1 truncate font-bold">{ev.name}</span>
                                                                     <span className="shrink-0 text-[9px] font-medium opacity-80">{formatScheduleTime(ev.timeStr)}</span>
-                                                                </div>
+                                                                </button>
                                                             ))}
                                                             {dayEvents.length > 3 && (
                                                                 <button
@@ -477,58 +466,29 @@ const DashboardView = ({
                             총 {missionsList.length}건
                         </span>
                     </div>
-                    <div className="border-t border-slate-100 bg-white px-5 py-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex items-center rounded-md border border-slate-200 bg-white shadow-sm">
+                    <div className="border-t border-slate-100 bg-white px-4 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                                <div className="truncate text-xs font-medium leading-4 text-slate-700">
+                                    {missionPanelDescription}
+                                </div>
+                            </div>
+                            {selectedBooking && (
                                 <button
                                     type="button"
-                                    onClick={() => handleMissionDateShift(-1)}
-                                    className="px-2 py-1 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
-                                    aria-label="이전 출동 날짜"
+                                    onClick={onMissionPanelReset}
+                                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50"
                                 >
                                     <ChevronLeft className="h-4 w-4" />
+                                    오늘 목록으로
                                 </button>
-                                <input
-                                    type="date"
-                                    value={resolvedMissionDate}
-                                    onChange={handleMissionDateInputChange}
-                                    className="border-x border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 focus:outline-none"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => handleMissionDateShift(1)}
-                                    className="px-2 py-1 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
-                                    aria-label="다음 출동 날짜"
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </button>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => onMissionDateChange?.(todayDateKey)}
-                                className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-colors ${resolvedMissionDate === todayDateKey
-                                    ? 'border-primary/20 bg-primary text-white'
-                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                    }`}
-                            >
-                                오늘
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => onMissionDateChange?.(tomorrowDateKey)}
-                                className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-colors ${resolvedMissionDate === tomorrowDateKey
-                                    ? 'border-primary/20 bg-primary text-white'
-                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                    }`}
-                            >
-                                내일
-                            </button>
+                            )}
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                         {missionsList.length === 0 ? (
                             <div className="flex h-full min-h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
-                                선택한 날짜의 출동 예정 미션이 없습니다.
+                                {missionPanelEmptyMessage}
                             </div>
                         ) : missionsList.map(m => (
                             <div

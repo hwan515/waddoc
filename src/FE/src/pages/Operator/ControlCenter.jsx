@@ -334,6 +334,40 @@ const DASHBOARD_MISSION_LABEL_RESOLVERS = {
     phase: getDashboardMissionPhaseLabel,
 };
 
+const sortDashboardMissions = (left, right) => {
+    if (left.isPrimaryServiceVehicle !== right.isPrimaryServiceVehicle) {
+        return left.isPrimaryServiceVehicle ? -1 : 1;
+    }
+
+    const vehicleCompare = left.vehicleId.localeCompare(right.vehicleId);
+    if (vehicleCompare !== 0) {
+        return vehicleCompare;
+    }
+
+    return String(left.time || '').localeCompare(String(right.time || ''));
+};
+
+const mapMissionToDashboardItem = (mission) => {
+    const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
+
+    return {
+        id: mission.missionId,
+        missionId: mission.missionId,
+        caseId: mission.caseId || null,
+        patientName: mission.patientName || '환자명 미상',
+        destination: mission.destination || '목적지 미상',
+        vehicleId: getVehicleDisplayId(mission.vehicleId),
+        status: DASHBOARD_MISSION_LABEL_RESOLVERS.status(mission.phase),
+        phase: mission.phase,
+        phaseLabel: DASHBOARD_MISSION_LABEL_RESOLVERS.phase(mission.phase),
+        time: formatMissionDisplayTime(mission),
+        dateKey: extractDateKey(mission.appointmentDate)
+            || extractDateKey(mission.dispatchedAt || mission.createdAt || mission.updatedAt),
+        isPrimaryServiceVehicle,
+        ...getDemoActionAvailability(mission.phase)
+    };
+};
+
 const getErrorMessage = (error, fallbackMessage) => (
     error?.response?.data?.message
     || error?.message
@@ -343,13 +377,13 @@ const getErrorMessage = (error, fallbackMessage) => (
 const loadDashboardSnapshot = async ({
     setVehicles,
     setSelectedVehicleId,
+    setAllMissionsList,
     setMissionsList,
     setStatistics,
-    setCalendarEvents,
-    selectedMissionDate
+    setCalendarEvents
 }) => {
     try {
-        const activeMissionDate = selectedMissionDate || getTodayKstDate();
+        const todayDateKey = getTodayKstDate();
 
         const fetchSafe = (req) => req.catch(err => {
             console.error('API Error:', err);
@@ -448,46 +482,14 @@ const loadDashboardSnapshot = async ({
             setSelectedVehicleId(null);
         }
 
-        const selectedDateMissions = rawMissions.filter((mission) => (
-            extractDateKey(mission.appointmentDate)
-            || extractDateKey(mission.dispatchedAt || mission.createdAt || mission.updatedAt)
-        ) === activeMissionDate);
+        const mappedAllMissions = rawMissions
+            .map(mapMissionToDashboardItem)
+            .sort(sortDashboardMissions);
 
-        const mappedMissionsList = selectedDateMissions
-            .map((mission) => {
-                const isPrimaryServiceVehicle = mission.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID;
-                const demoActionAvailability = getDemoActionAvailability(mission.phase);
-
-                return {
-                    id: mission.missionId,
-                    patientName: mission.patientName || '환자명 미상',
-                    destination: mission.destination || '목적지 미상',
-                    vehicleId: getVehicleDisplayId(mission.vehicleId),
-                    status: getMissionStatusLabel(mission.phase),
-                    phase: mission.phase,
-                    phaseLabel: getMissionPhaseLabel(mission.phase),
-                    time: formatMissionDisplayTime(mission),
-                    isPrimaryServiceVehicle,
-                    ...demoActionAvailability
-                };
-            })
-            .sort((a, b) => {
-                if (a.isPrimaryServiceVehicle !== b.isPrimaryServiceVehicle) {
-                    return a.isPrimaryServiceVehicle ? -1 : 1;
-                }
-
-                return a.vehicleId.localeCompare(b.vehicleId);
-            })
-            .map((mission) => (
-                mission.phase === 'CREATED'
-                    ? {
-                        ...mission,
-                        status: '대기',
-                        phaseLabel: '대기'
-                    }
-                    : mission
-            ));
-        setMissionsList(mappedMissionsList);
+        setMissionsList(
+            mappedAllMissions.filter((mission) => mission.dateKey === todayDateKey)
+        );
+        setAllMissionsList(mappedAllMissions);
 
         setStatistics({
             totalMissions: rawMissions.length,
@@ -504,13 +506,16 @@ const loadDashboardSnapshot = async ({
 
             return {
                 id: booking.bookingId,
+                bookingId: booking.bookingId,
+                caseId: booking.caseId || null,
                 name: booking.patientName,
                 type: booking.departmentName || '진료',
                 timeStr: booking.startTime,
                 dayIdx,
                 fullDate: booking.appointmentDate,
                 doctor: booking.doctorName || '담당의',
-                status: booking.status || 'CONFIRMED'
+                status: booking.status || 'CONFIRMED',
+                missionPhase: booking.missionPhase || null
             };
         });
         setCalendarEvents(mappedEvents);
@@ -530,6 +535,7 @@ const ControlCenter = () => {
     // 캘린더 모드
     const [calendarMode, setCalendarMode] = useState('weekly');
     const [vehicles, setVehicles] = useState([]);
+    const [allMissionsList, setAllMissionsList] = useState([]);
     const [missionsList, setMissionsList] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
     const [statistics, setStatistics] = useState({
@@ -541,7 +547,7 @@ const ControlCenter = () => {
         incidentCount: 0
     });
     const [selectedVehicleId, setSelectedVehicleId] = useState(null);
-    const [selectedMissionDate, setSelectedMissionDate] = useState(() => formatDateKey(new Date()));
+    const [selectedBookingEvent, setSelectedBookingEvent] = useState(null);
     const [minimapVehiclePose, setMinimapVehiclePose] = useState(null);
     const [minimapPathPoints, setMinimapPathPoints] = useState([]);
     const [minimapFullPathPoints, setMinimapFullPathPoints] = useState([]);
@@ -555,12 +561,12 @@ const ControlCenter = () => {
         loadDashboardSnapshot({
             setVehicles,
             setSelectedVehicleId,
+            setAllMissionsList,
             setMissionsList,
             setStatistics,
-            setCalendarEvents,
-            selectedMissionDate
+            setCalendarEvents
         });
-    }, [selectedMissionDate]);
+    }, []);
 
     const handleDemoMissionAction = async (missionId, action) => {
         const actionPathByType = {
@@ -596,10 +602,10 @@ const ControlCenter = () => {
             await loadDashboardSnapshot({
                 setVehicles,
                 setSelectedVehicleId,
+                setAllMissionsList,
                 setMissionsList,
                 setStatistics,
-                setCalendarEvents,
-                selectedMissionDate
+                setCalendarEvents
             });
         } catch (error) {
             console.error(`Demo mission ${action} error:`, error);
@@ -697,6 +703,12 @@ const ControlCenter = () => {
         selectedVehicle?.mission,
         minimapGoalWaypointNumber
     );
+    const selectedBookingMission = selectedBookingEvent?.caseId
+        ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
+        : null;
+    const displayedDashboardMissions = selectedBookingEvent
+        ? (selectedBookingMission ? [selectedBookingMission] : [])
+        : missionsList;
     const hasStandaloneLiveTelemetry = isValidPose(minimapVehiclePose)
         || vehicleLocation !== null
         || minimapVehicleSpeed !== null;
@@ -850,9 +862,11 @@ const ControlCenter = () => {
                         calendarMode={calendarMode}
                         setCalendarMode={setCalendarMode}
                         calendarEvents={calendarEvents}
-                        missionsList={missionsList}
-                        missionDate={selectedMissionDate}
-                        onMissionDateChange={setSelectedMissionDate}
+                        missionsList={displayedDashboardMissions}
+                        selectedBooking={selectedBookingEvent}
+                        selectedBookingId={selectedBookingEvent?.id || null}
+                        onBookingSelect={setSelectedBookingEvent}
+                        onMissionPanelReset={() => setSelectedBookingEvent(null)}
                         statistics={statistics}
                         pendingDemoAction={pendingDemoAction}
                         onDemoDispatch={(missionId) => handleDemoMissionAction(missionId, 'dispatch')}
