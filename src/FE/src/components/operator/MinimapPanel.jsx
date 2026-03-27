@@ -20,6 +20,7 @@ const formatSpeed = (value) => {
 };
 
 const formatUpdateInterval = (value) => {
+    if (value == null) return '실시간';
     if (typeof value !== 'number' || Number.isNaN(value)) return '-';
     if (value >= 1000) {
         return `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} sec`;
@@ -126,7 +127,7 @@ const MinimapPanel = ({
     vehicleState = '대기',
     vehicleSpeed = 0,
     vehicleLocation = null,
-    updateIntervalMs = 100,
+    updateIntervalMs = null,
     showMockBadge = false
 }) => {
     const [imageReady, setImageReady] = useState(true);
@@ -269,7 +270,7 @@ const MinimapPanel = ({
 
                     <StatCard icon={Radio} label="업데이트 주기">
                         <p className="mt-3 text-2xl font-semibold text-white">{formatUpdateInterval(updateIntervalMs)}</p>
-                        <p className="mt-1 text-xs text-slate-400">미니맵 폴링 간격</p>
+                        <p className="mt-1 text-xs text-slate-400">SSE 실시간 스트림 기준</p>
                     </StatCard>
 
                     <StatCard icon={Navigation} label="실시간 좌표">
