@@ -32,6 +32,7 @@ services:
     environment:
       - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
+      - VITE_DEMO_MODE_ENABLED=${APP_DEMO_MODE_ENABLED:-false}
       - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-true}
     restart: unless-stopped
     networks:
@@ -64,6 +65,7 @@ services:
       - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-5000}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
+      - APP_DEMO_MODE_ENABLED=${APP_DEMO_MODE_ENABLED:-false}
       # 더미 데이터 추가
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-false}
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}

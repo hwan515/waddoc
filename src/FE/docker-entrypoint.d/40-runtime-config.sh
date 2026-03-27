@@ -7,6 +7,7 @@ escape_js() {
 
 cat > /usr/share/nginx/html/runtime-config.js <<EOF
 window.__APP_CONFIG__ = Object.assign(window.__APP_CONFIG__ || {}, {
+  VITE_DEMO_MODE_ENABLED: "$(escape_js "${VITE_DEMO_MODE_ENABLED:-false}")",
   VITE_ROBOT_TERMINAL_ID: "$(escape_js "${VITE_ROBOT_TERMINAL_ID:-}")",
   VITE_ROBOT_TERMINAL_KEY: "$(escape_js "${VITE_ROBOT_TERMINAL_KEY:-}")",
   VITE_ROBOT_API_BASE_URL: "$(escape_js "${VITE_ROBOT_API_BASE_URL:-}")",

@@ -8,6 +8,7 @@ const readRuntimeConfig = () => {
 
 const trimTrailingSlash = (value) => String(value || '').replace(/\/$/, '');
 const truthyValues = new Set(['1', 'true', 'yes', 'on']);
+const isTruthyFlag = (value) => truthyValues.has(String(value).trim().toLowerCase());
 
 const normalizePath = (path) => {
     const stringPath = String(path || '');
@@ -67,6 +68,13 @@ export const isMonitoringTabEnabled = () => {
     const runtimeConfig = readRuntimeConfig();
     const configuredValue = runtimeConfig.VITE_ENABLE_MONITORING_TAB ?? import.meta.env.VITE_ENABLE_MONITORING_TAB ?? 'false';
 
-    return truthyValues.has(String(configuredValue).trim().toLowerCase());
+    return isTruthyFlag(configuredValue);
+};
+
+export const isDemoModeEnabled = () => {
+    const runtimeConfig = readRuntimeConfig();
+    const configuredValue = runtimeConfig.VITE_DEMO_MODE_ENABLED ?? import.meta.env.VITE_DEMO_MODE_ENABLED ?? 'false';
+
+    return isTruthyFlag(configuredValue);
 };
 export const getRobotCommandUrlCandidates = (path) => getRobotApiUrlCandidates(path);
