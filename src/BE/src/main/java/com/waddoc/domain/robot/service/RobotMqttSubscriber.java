@@ -16,6 +16,7 @@ public class RobotMqttSubscriber {
     private final RobotStateCache stateCache;
     private final RobotSseService sseService;
     private final MqttMissionLocationUpdater missionLocationUpdater;
+    private final RobotSnapshotAssembler robotSnapshotAssembler;
 
     @ServiceActivator(inputChannel = "mqttInboundChannel")
     public void handleMessage(Message<?> message) {
@@ -27,25 +28,37 @@ public class RobotMqttSubscriber {
             return;
         }
 
-        switch (topic) {
+        boolean shouldBroadcastSnapshot = switch (topic) {
             case MqttTopics.ROBOT_ODOM -> {
                 stateCache.setLastOdomJson(payload);
                 sseService.broadcast("odom", payload);
                 missionLocationUpdater.updateFromOdom(payload);
+                yield true;
             }
             case MqttTopics.ROBOT_MINIMAP -> {
                 stateCache.setLastMinimapJson(payload);
                 sseService.broadcast("minimap", payload);
+                yield true;
             }
             case MqttTopics.ROBOT_STATE -> {
                 stateCache.setLastStateJson(payload);
                 sseService.broadcast("state", payload);
+                yield true;
             }
             case MqttTopics.ROBOT_STATUS -> {
+                stateCache.setLastStatusJson(payload);
                 sseService.broadcast("status", payload);
                 log.info("Robot status update: {}", payload);
+                yield true;
             }
-            default -> log.warn("Unhandled MQTT topic: {}", topic);
+            default -> {
+                log.warn("Unhandled MQTT topic: {}", topic);
+                yield false;
+            }
+        };
+
+        if (shouldBroadcastSnapshot) {
+            sseService.broadcast("snapshot", robotSnapshotAssembler.fromCache(stateCache));
         }
     }
 }
