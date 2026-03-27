@@ -58,7 +58,6 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
-        '/api/odom': createRobotProxy(robotApiProxyTarget),
         '/api/cmd': createRobotProxy(robotApiProxyTarget),
         '/api': {
           target: 'http://localhost:8080', // 백엔드 서버 주소

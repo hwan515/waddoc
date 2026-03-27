@@ -1,9 +1,9 @@
 # ROS2 -> Zenoh -> FastAPI -> FE Data Flow Guide
 
 > Legacy notice
-> 이 문서는 Zenoh/FastAPI 기반 `GET /api/minimap` 흐름을 정리한 레거시 문서입니다.
+> 이 문서는 Zenoh/FastAPI 기반 `GET /api/minimap`, `GET /api/odom` 흐름을 정리한 레거시 문서입니다.
 > 2026-03-27 기준 운영 관제 화면은 `robot/minimap`, `robot/odom`, `robot/state`, `robot/status` MQTT 토픽을 Spring SSE `/api/v1/robots/stream`으로 소비합니다.
-> 따라서 `/api/minimap` 관련 내용은 현재 운영 경로가 아니라 debug 또는 과거 구조 참고용으로만 봐야 합니다.
+> 따라서 `/api/minimap`, `/api/odom` 관련 내용은 현재 운영 경로가 아니라 debug 또는 과거 구조 참고용으로만 봐야 합니다.
 
 이 문서는 현재 프로젝트에서 아래 흐름을 수정하거나 점검할 때 어디를 봐야 하는지 한 번에 찾기 위한 문서
 
@@ -31,7 +31,7 @@
 5. FastAPI가 아래 endpoint로 FE에 JSON을 반환합니다.
    - `GET /api/minimap`
    - `GET /api/odom`
-6. 과거 FE `operator/control` 은 `/api/minimap` 을 polling 해서 지도를 그렸습니다.
+6. 과거 FE `operator/control` 은 `/api/minimap` 을 polling 하고 필요 시 `/api/odom` 을 참고했습니다.
 
 ### B. 차량 명령 흐름
 
@@ -447,7 +447,6 @@ Swagger 경로:
 
 현재 dev 서버 proxy:
 
-- `/api/odom` -> robot API target
 - `/api/cmd` -> robot API target
 - `/api` -> Spring `http://localhost:8080`
 
