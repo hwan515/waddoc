@@ -1,5 +1,6 @@
 package com.waddoc.domain.robot.config;
 
+import java.net.InetAddress;
 import javax.net.ssl.SSLContext;
 
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
@@ -23,14 +24,26 @@ public class MqttConfig {
     private String brokerUrl;
 
     @Value("${mqtt.client-id:spring-waddoc}")
-    private String clientId;
+    private String baseClientId;
+
+    private final String uniqueClientId;
+
+    public MqttConfig() {
+        String hostname;
+        try {
+            hostname = InetAddress.getLocalHost().getHostName();
+        } catch (Exception e) {
+            hostname = Long.toHexString(ProcessHandle.current().pid());
+        }
+        this.uniqueClientId = hostname;
+    }
 
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
         DefaultMqttPahoClientFactory factory = new DefaultMqttPahoClientFactory();
         MqttConnectOptions options = new MqttConnectOptions();
         options.setServerURIs(new String[]{brokerUrl});
-        options.setCleanSession(false);
+        options.setCleanSession(true);
         options.setAutomaticReconnect(true);
         options.setKeepAliveInterval(60);
         if (brokerUrl.startsWith("wss://")) {
@@ -54,7 +67,7 @@ public class MqttConfig {
     @Bean
     public MqttPahoMessageDrivenChannelAdapter mqttInboundAdapter(MqttPahoClientFactory factory) {
         MqttPahoMessageDrivenChannelAdapter adapter = new MqttPahoMessageDrivenChannelAdapter(
-                clientId + "-sub", factory,
+                baseClientId + "-" + uniqueClientId + "-sub", factory,
                 MqttTopics.ROBOT_ODOM,
                 MqttTopics.ROBOT_MINIMAP,
                 MqttTopics.ROBOT_STATE,
@@ -69,7 +82,7 @@ public class MqttConfig {
     @Bean
     @ServiceActivator(inputChannel = "mqttOutboundChannel")
     public MessageHandler mqttOutboundHandler(MqttPahoClientFactory factory) {
-        MqttPahoMessageHandler handler = new MqttPahoMessageHandler(clientId + "-pub", factory);
+        MqttPahoMessageHandler handler = new MqttPahoMessageHandler(baseClientId + "-" + uniqueClientId + "-pub", factory);
         handler.setAsync(true);
         handler.setDefaultQos(1);
         return handler;
