@@ -46,7 +46,11 @@ class DeviceTerminalTokenServiceTest {
                 "robot-terminal-01",
                 "veh_GIMCHEON_01",
                 "GIMCHEON",
-                List.of(DeviceTerminalScopes.CHECK_IN_CANDIDATES, DeviceTerminalScopes.CLAIM_MISSION)
+                List.of(
+                        DeviceTerminalScopes.READ_CURRENT_MISSION,
+                        DeviceTerminalScopes.CHECK_IN_CANDIDATES,
+                        DeviceTerminalScopes.CLAIM_MISSION
+                )
         )).thenReturn("device-terminal-token");
         when(jwtTokenProvider.getDeviceTerminalTokenExpiry()).thenReturn(1800L);
 
@@ -57,6 +61,7 @@ class DeviceTerminalTokenServiceTest {
         assertThat(response.getRegionCode()).isEqualTo("GIMCHEON");
         assertThat(response.getDeviceTerminalToken()).isEqualTo("device-terminal-token");
         assertThat(response.getScopes()).containsExactly(
+                DeviceTerminalScopes.READ_CURRENT_MISSION,
                 DeviceTerminalScopes.CHECK_IN_CANDIDATES,
                 DeviceTerminalScopes.CLAIM_MISSION
         );

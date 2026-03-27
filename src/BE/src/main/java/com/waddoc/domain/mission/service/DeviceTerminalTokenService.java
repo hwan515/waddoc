@@ -46,6 +46,7 @@ public class DeviceTerminalTokenService {
         }
 
         List<String> scopes = List.of(
+                DeviceTerminalScopes.READ_CURRENT_MISSION,
                 DeviceTerminalScopes.CHECK_IN_CANDIDATES,
                 DeviceTerminalScopes.CLAIM_MISSION
         );

@@ -12,6 +12,7 @@ public class IssueMissionTerminalTokenResponse {
 
     private String missionId;
     private String caseId;
+    private String patientName;
     private String terminalToken;
     private long expiresIn;
     private List<String> scopes;
@@ -25,6 +26,7 @@ public class IssueMissionTerminalTokenResponse {
         return IssueMissionTerminalTokenResponse.builder()
                 .missionId(mission.getPublicId())
                 .caseId(mission.getCareCase().getPublicId())
+                .patientName(mission.getCareCase().getPatient().getName())
                 .terminalToken(terminalToken)
                 .expiresIn(expiresIn)
                 .scopes(List.copyOf(scopes))

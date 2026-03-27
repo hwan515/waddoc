@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -57,8 +58,9 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             select m
             from Mission m
             join fetch m.careCase c
+            join fetch c.booking b
             join fetch c.patient p
-            order by coalesce(m.dispatchedAt, m.createdAt) desc, m.publicId desc
+            order by b.appointmentDate desc, b.startTime asc, m.publicId asc
             """)
     List<Mission> findAllForAdminDashboard();
 
@@ -66,9 +68,10 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             select m
             from Mission m
             join fetch m.careCase c
+            join fetch c.booking b
             join fetch c.patient p
             where m.phase = :phase
-            order by coalesce(m.dispatchedAt, m.createdAt) desc, m.publicId desc
+            order by b.appointmentDate desc, b.startTime asc, m.publicId asc
             """)
     List<Mission> findAllForAdminDashboardByPhase(@Param("phase") MissionPhase phase);
 
@@ -76,29 +79,46 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
             select m
             from Mission m
             join fetch m.careCase c
+            join fetch c.booking b
             join fetch c.patient p
-            where coalesce(m.dispatchedAt, m.createdAt) >= :fromDateTime
-              and coalesce(m.dispatchedAt, m.createdAt) < :toDateTime
-            order by coalesce(m.dispatchedAt, m.createdAt) desc, m.publicId desc
+            where b.appointmentDate = :appointmentDate
+            order by b.startTime asc, m.publicId asc
             """)
-    List<Mission> findAllForAdminDashboardByDateRange(
-            @Param("fromDateTime") LocalDateTime fromDateTime,
-            @Param("toDateTime") LocalDateTime toDateTime
+    List<Mission> findAllForAdminDashboardByAppointmentDate(
+            @Param("appointmentDate") LocalDate appointmentDate
     );
 
     @Query("""
             select m
             from Mission m
             join fetch m.careCase c
+            join fetch c.booking b
             join fetch c.patient p
             where m.phase = :phase
-              and coalesce(m.dispatchedAt, m.createdAt) >= :fromDateTime
-              and coalesce(m.dispatchedAt, m.createdAt) < :toDateTime
-            order by coalesce(m.dispatchedAt, m.createdAt) desc, m.publicId desc
+              and b.appointmentDate = :appointmentDate
+            order by b.startTime asc, m.publicId asc
             """)
-    List<Mission> findAllForAdminDashboardByPhaseAndDateRange(
+    List<Mission> findAllForAdminDashboardByPhaseAndAppointmentDate(
             @Param("phase") MissionPhase phase,
-            @Param("fromDateTime") LocalDateTime fromDateTime,
-            @Param("toDateTime") LocalDateTime toDateTime
+            @Param("appointmentDate") LocalDate appointmentDate
+    );
+
+    @Query("""
+            select m
+            from Mission m
+            join fetch m.careCase c
+            join fetch c.booking b
+            join fetch c.patient p
+            where m.vehicleId = :vehicleId
+              and b.appointmentDate = :appointmentDate
+              and b.status = :bookingStatus
+              and m.phase in :phases
+            order by b.startTime asc, m.publicId asc
+            """)
+    List<Mission> findCurrentVehicleMissions(
+            @Param("vehicleId") String vehicleId,
+            @Param("appointmentDate") LocalDate appointmentDate,
+            @Param("bookingStatus") BookingStatus bookingStatus,
+            @Param("phases") Collection<MissionPhase> phases
     );
 }

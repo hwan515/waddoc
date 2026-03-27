@@ -2,6 +2,7 @@ package com.waddoc.domain.mission.controller;
 
 import com.waddoc.domain.mission.dto.DeviceTerminalBootstrapResponse;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
+import com.waddoc.domain.mission.dto.TerminalCurrentMissionResponse;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesResponse;
 import com.waddoc.domain.mission.service.DeviceTerminalTokenService;
 import com.waddoc.domain.mission.service.TerminalCheckInService;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -50,7 +52,7 @@ class TerminalControllerTest {
                         .terminalId("robot-terminal-01")
                         .deviceTerminalToken("device-terminal-token")
                         .expiresIn(1800)
-                        .scopes(List.of("terminal:check-in-candidates", "terminal:claim-mission"))
+                        .scopes(List.of("terminal:read-current-mission", "terminal:check-in-candidates", "terminal:claim-mission"))
                         .build());
 
         mockMvc.perform(post("/api/v1/terminal/bootstrap-token")
@@ -95,11 +97,34 @@ class TerminalControllerTest {
     }
 
     @Test
+    void getCurrentMission_returnsSelectedMission() throws Exception {
+        when(terminalCheckInService.getCurrentMission(isNull()))
+                .thenReturn(TerminalCurrentMissionResponse.builder()
+                        .hasMission(true)
+                        .missionId("ms_current_01")
+                        .patientName("홍길동")
+                        .appointmentDate("2026-03-27")
+                        .appointmentTime("10:00")
+                        .phase("ARRIVED")
+                        .vehicleId("veh_GIMCHEON_01")
+                        .targetWaypointNumber(59)
+                        .build());
+
+        mockMvc.perform(get("/api/v1/terminal/current-mission"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasMission").value(true))
+                .andExpect(jsonPath("$.missionId").value("ms_current_01"))
+                .andExpect(jsonPath("$.patientName").value("홍길동"))
+                .andExpect(jsonPath("$.phase").value("ARRIVED"));
+    }
+
+    @Test
     void claimMission_returnsMissionTerminalToken() throws Exception {
         when(terminalCheckInService.claimMission(eq("ms_F2gHn6"), any(), isNull()))
                 .thenReturn(IssueMissionTerminalTokenResponse.builder()
                         .missionId("ms_F2gHn6")
                         .caseId("case_T7nLp4")
+                        .patientName("홍길동")
                         .terminalToken("mission-terminal-token")
                         .expiresIn(1800)
                         .scopes(List.of("mission:identity-check", "session:issue-patient-token"))
@@ -115,6 +140,25 @@ class TerminalControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.missionId").value("ms_F2gHn6"))
+                .andExpect(jsonPath("$.terminalToken").value("mission-terminal-token"));
+    }
+
+    @Test
+    void claimCurrentMission_returnsMissionTerminalToken() throws Exception {
+        when(terminalCheckInService.claimCurrentMission(isNull()))
+                .thenReturn(IssueMissionTerminalTokenResponse.builder()
+                        .missionId("ms_current_01")
+                        .caseId("case_T7nLp4")
+                        .patientName("홍길동")
+                        .terminalToken("mission-terminal-token")
+                        .expiresIn(1800)
+                        .scopes(List.of("mission:identity-check", "session:issue-patient-token"))
+                        .build());
+
+        mockMvc.perform(post("/api/v1/terminal/current-mission/claim"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.missionId").value("ms_current_01"))
+                .andExpect(jsonPath("$.patientName").value("홍길동"))
                 .andExpect(jsonPath("$.terminalToken").value("mission-terminal-token"));
     }
 }

@@ -4,6 +4,7 @@ import com.waddoc.domain.mission.dto.ClaimMissionTerminalRequest;
 import com.waddoc.domain.mission.dto.DeviceTerminalBootstrapRequest;
 import com.waddoc.domain.mission.dto.DeviceTerminalBootstrapResponse;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
+import com.waddoc.domain.mission.dto.TerminalCurrentMissionResponse;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesRequest;
 import com.waddoc.domain.mission.dto.TerminalCheckInCandidatesResponse;
 import com.waddoc.domain.mission.service.DeviceTerminalTokenService;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,6 +48,12 @@ public class TerminalController {
         return ResponseEntity.ok(terminalCheckInService.lookupCandidates(request, authentication));
     }
 
+    @GetMapping("/current-mission")
+    @PreAuthorize("hasRole('DEVICE_TERMINAL')")
+    public ResponseEntity<TerminalCurrentMissionResponse> getCurrentMission(Authentication authentication) {
+        return ResponseEntity.ok(terminalCheckInService.getCurrentMission(authentication));
+    }
+
     @PostMapping("/missions/{missionId}/claim")
     @PreAuthorize("hasRole('DEVICE_TERMINAL')")
     public ResponseEntity<IssueMissionTerminalTokenResponse> claimMission(
@@ -54,5 +62,11 @@ public class TerminalController {
             Authentication authentication
     ) {
         return ResponseEntity.ok(terminalCheckInService.claimMission(missionId, request, authentication));
+    }
+
+    @PostMapping("/current-mission/claim")
+    @PreAuthorize("hasRole('DEVICE_TERMINAL')")
+    public ResponseEntity<IssueMissionTerminalTokenResponse> claimCurrentMission(Authentication authentication) {
+        return ResponseEntity.ok(terminalCheckInService.claimCurrentMission(authentication));
     }
 }
