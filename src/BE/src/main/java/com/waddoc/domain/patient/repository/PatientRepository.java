@@ -14,6 +14,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     Optional<Patient> findByPhone(String phone);
 
+    Optional<Patient> findByReferenceImagePath(String referenceImagePath);
+
     List<Patient> findAllByNameAndBirthDate6(String name, String birthDate6);
 
     Page<Patient> findAllByOrderByCreatedAtDesc(Pageable pageable);

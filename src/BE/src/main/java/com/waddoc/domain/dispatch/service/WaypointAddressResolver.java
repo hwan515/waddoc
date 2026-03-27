@@ -18,6 +18,26 @@ import java.util.stream.Collectors;
 @Component
 public class WaypointAddressResolver {
 
+    private static final String LOCAL_SEED_TOPOLOGY_ADDRESS_PREFIX = "경상북도김천시증산면위상지도웨이포인트";
+    private static final int LOCAL_SEED_WAYPOINT_START = 1;
+    private static final int LOCAL_SEED_WAYPOINT_END = 229;
+    private static final String LOCAL_SEED_REALISTIC_ADDRESS_PREFIX = "경상북도김천시증산면";
+    private static final int LOCAL_SEED_BUILDING_NUMBER_OFFSET = 3;
+    private static final List<String> LOCAL_SEED_ROAD_NAMES = List.of(
+            "황항길",
+            "평촌길",
+            "유성길",
+            "수도길",
+            "송하길",
+            "가례길",
+            "금곡길",
+            "모산길",
+            "삼도봉로",
+            "증산로",
+            "하강길",
+            "부항길"
+    );
+
     private final Map<String, Integer> waypointNumberByNormalizedAddress;
 
     public WaypointAddressResolver(
@@ -31,7 +51,14 @@ public class WaypointAddressResolver {
         if (address == null || address.isBlank()) {
             return new ResolvedTarget(null);
         }
-        return new ResolvedTarget(waypointNumberByNormalizedAddress.get(normalize(address)));
+
+        String normalizedAddress = normalize(address);
+        Integer mappedWaypointNumber = waypointNumberByNormalizedAddress.get(normalizedAddress);
+        if (mappedWaypointNumber != null) {
+            return new ResolvedTarget(mappedWaypointNumber);
+        }
+
+        return new ResolvedTarget(resolveLocalSeedWaypointNumber(normalizedAddress));
     }
 
     private Map<String, Integer> loadMappings(ObjectMapper objectMapper, Resource mappingResource) {
@@ -52,6 +79,53 @@ public class WaypointAddressResolver {
 
     private String normalize(String address) {
         return address == null ? null : address.replaceAll("\\s+", "").trim();
+    }
+
+    private Integer resolveLocalSeedWaypointNumber(String normalizedAddress) {
+        if (normalizedAddress == null) {
+            return null;
+        }
+
+        if (normalizedAddress.startsWith(LOCAL_SEED_TOPOLOGY_ADDRESS_PREFIX)) {
+            String suffix = normalizedAddress.substring(LOCAL_SEED_TOPOLOGY_ADDRESS_PREFIX.length());
+            if (!suffix.matches("\\d+")) {
+                return null;
+            }
+
+            int waypointNumber = Integer.parseInt(suffix);
+            if (waypointNumber < LOCAL_SEED_WAYPOINT_START || waypointNumber > LOCAL_SEED_WAYPOINT_END) {
+                return null;
+            }
+            return waypointNumber;
+        }
+
+        if (!normalizedAddress.startsWith(LOCAL_SEED_REALISTIC_ADDRESS_PREFIX)) {
+            return null;
+        }
+
+        String suffix = normalizedAddress.substring(LOCAL_SEED_REALISTIC_ADDRESS_PREFIX.length());
+        for (int roadIndex = 0; roadIndex < LOCAL_SEED_ROAD_NAMES.size(); roadIndex++) {
+            String normalizedRoadName = normalize(LOCAL_SEED_ROAD_NAMES.get(roadIndex));
+            if (!suffix.startsWith(normalizedRoadName)) {
+                continue;
+            }
+
+            String buildingNumberValue = suffix.substring(normalizedRoadName.length());
+            if (!buildingNumberValue.matches("\\d+")) {
+                return null;
+            }
+
+            int buildingNumber = Integer.parseInt(buildingNumberValue);
+            int waypointNumber = ((buildingNumber - LOCAL_SEED_BUILDING_NUMBER_OFFSET) * LOCAL_SEED_ROAD_NAMES.size())
+                    + roadIndex
+                    + 1;
+            if (waypointNumber < LOCAL_SEED_WAYPOINT_START || waypointNumber > LOCAL_SEED_WAYPOINT_END) {
+                return null;
+            }
+            return waypointNumber;
+        }
+
+        return null;
     }
 
     public record ResolvedTarget(Integer waypointNumber) {
