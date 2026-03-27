@@ -4,9 +4,27 @@ import { pathPointsToMinimap, vehiclePoseToMinimap } from '../../utils/worldToMi
 
 const VIEWBOX_WIDTH = 1000;
 const VIEWBOX_HEIGHT = 1000;
+const VEHICLE_BADGE_SRC = '/waddoc-badge-primary.svg';
+const VEHICLE_MARKER_SIZE = 42;
+const VEHICLE_HALO_RADIUS = 28;
+const START_MARKER_RADIUS = 5;
+const START_MARKER_STROKE_WIDTH = 1.5;
+const FLAG_POLE_HEIGHT = 26;
+const FLAG_MARKER_OVERLAP_THRESHOLD = 12;
+
 const UNITY_MINIMAP_OPTIONS = {
     origin: 'bottom-left',
     invertY: true
+};
+
+const isSameMinimapPoint = (firstPoint, secondPoint, threshold = FLAG_MARKER_OVERLAP_THRESHOLD) => {
+    if (!firstPoint || !secondPoint) {
+        return false;
+    }
+
+    const dx = firstPoint.x - secondPoint.x;
+    const dy = firstPoint.y - secondPoint.y;
+    return (dx * dx) + (dy * dy) <= (threshold * threshold);
 };
 
 const formatCoordinate = (value) => {
@@ -161,6 +179,10 @@ const MinimapPanel = ({
     const polylinePoints = minimapPathPoints.map((point) => `${point.x},${point.y}`).join(' ');
     const fullPolylinePoints = minimapFullPathPoints.map((point) => `${point.x},${point.y}`).join(' ');
     const statePresentation = getStatePresentation(vehicleState);
+    const hasActivePath = minimapPathPoints.length > 1;
+    const startMarkerPoint = hasActivePath ? minimapPathPoints[0] : null;
+    const endMarkerPoint = hasActivePath ? minimapPathPoints[minimapPathPoints.length - 1] : null;
+    const shouldRenderStartMarker = hasActivePath && !isSameMinimapPoint(startMarkerPoint, endMarkerPoint);
 
     return (
         <div className="relative h-full overflow-hidden rounded-4xl bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
@@ -202,7 +224,7 @@ const MinimapPanel = ({
                     />
                 )}
 
-                {minimapPathPoints.length > 1 && (
+                {hasActivePath && (
                     <>
                         <polyline
                             points={polylinePoints}
@@ -220,29 +242,58 @@ const MinimapPanel = ({
                             strokeLinecap="round"
                             strokeLinejoin="round"
                         />
-                        <circle
-                            cx={minimapPathPoints[0].x}
-                            cy={minimapPathPoints[0].y}
-                            r="10"
-                            fill="#22C55E"
-                            stroke="white"
-                            strokeWidth="3"
-                        />
-                        <circle
-                            cx={minimapPathPoints[minimapPathPoints.length - 1].x}
-                            cy={minimapPathPoints[minimapPathPoints.length - 1].y}
-                            r="10"
-                            fill="#F59E0B"
-                            stroke="white"
-                            strokeWidth="3"
-                        />
+                        {shouldRenderStartMarker && (
+                            <circle
+                                cx={startMarkerPoint.x}
+                                cy={startMarkerPoint.y}
+                                r={START_MARKER_RADIUS}
+                                fill="rgba(34, 197, 94, 0.42)"
+                                stroke="rgba(255, 255, 255, 0.35)"
+                                strokeWidth={START_MARKER_STROKE_WIDTH}
+                            />
+                        )}
+                        {endMarkerPoint && (
+                            <g transform={`translate(${endMarkerPoint.x} ${endMarkerPoint.y})`}>
+                                <line
+                                    x1="0"
+                                    y1="10"
+                                    x2="0"
+                                    y2={-FLAG_POLE_HEIGHT}
+                                    stroke="rgba(226, 232, 240, 0.92)"
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                />
+                                <path
+                                    d={`M 0 ${-FLAG_POLE_HEIGHT} L 16 ${-FLAG_POLE_HEIGHT + 5} L 0 ${-FLAG_POLE_HEIGHT + 11} Z`}
+                                    fill="#F59E0B"
+                                    stroke="rgba(255, 255, 255, 0.85)"
+                                    strokeWidth="1.5"
+                                    strokeLinejoin="round"
+                                />
+                                <circle
+                                    cx="0"
+                                    cy="10"
+                                    r="3"
+                                    fill="rgba(245, 158, 11, 0.92)"
+                                    stroke="rgba(255, 255, 255, 0.7)"
+                                    strokeWidth="1.5"
+                                />
+                            </g>
+                        )}
                     </>
                 )}
 
                 {minimapVehiclePose && (
                     <g transform={`translate(${minimapVehiclePose.x} ${minimapVehiclePose.y})`}>
-                        <circle r="24" fill="rgba(220, 38, 38, 0.16)" />
-                        <circle r="12" fill="#DC2626" stroke="white" strokeWidth="4" />
+                        <circle r={VEHICLE_HALO_RADIUS} fill="rgba(220, 38, 38, 0.16)" />
+                        <image
+                            href={VEHICLE_BADGE_SRC}
+                            x={-(VEHICLE_MARKER_SIZE / 2)}
+                            y={-(VEHICLE_MARKER_SIZE / 2)}
+                            width={VEHICLE_MARKER_SIZE}
+                            height={VEHICLE_MARKER_SIZE}
+                            preserveAspectRatio="xMidYMid meet"
+                        />
                     </g>
                 )}
             </svg>
