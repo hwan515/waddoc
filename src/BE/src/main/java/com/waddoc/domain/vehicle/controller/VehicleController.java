@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 /**
  * 관리자 화면에서 차량 상태를 조회하고 운영 상태를 변경하는 API다.
  */
@@ -24,6 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class VehicleController {
 
     private final VehicleStatusService vehicleStatusService;
+
+    @GetMapping
+    public ResponseEntity<List<VehicleResponse>> getVehicles() {
+        return ResponseEntity.ok(vehicleStatusService.getVehicles());
+    }
 
     @GetMapping("/{vehicleId}")
     public ResponseEntity<VehicleResponse> getVehicle(@PathVariable String vehicleId) {
