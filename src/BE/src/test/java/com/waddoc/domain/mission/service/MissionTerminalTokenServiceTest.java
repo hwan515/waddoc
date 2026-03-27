@@ -5,6 +5,7 @@ import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
@@ -49,6 +50,9 @@ class MissionTerminalTokenServiceTest {
         AuthenticatedUser doctor = new AuthenticatedUser("usr_doctor", Role.DOCTOR);
         CareCase careCase = mock(CareCase.class);
         when(careCase.getPublicId()).thenReturn("case_test123");
+        Patient patient = mock(Patient.class);
+        when(patient.getName()).thenReturn("홍길동");
+        when(careCase.getPatient()).thenReturn(patient);
 
         Mission mission = Mission.builder()
                 .careCase(careCase)
