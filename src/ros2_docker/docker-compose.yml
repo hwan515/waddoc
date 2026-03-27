@@ -2,6 +2,7 @@ services:
   ros2_humble:
     build: .
     container_name: ros2_dev_env
+    restart: unless-stopped
     network_mode: "host"
     environment:
       - DISPLAY=${DISPLAY}
@@ -11,7 +12,7 @@ services:
       - ROS_DOMAIN_ID=0
       - ROS_LOCALHOST_ONLY=1
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      - MQTT_BROKER_HOST=waddoc.site
+      - MQTT_BROKER_HOST=www.waddoc.site
       - MQTT_BROKER_PORT=443
       - MQTT_WS_PATH=/mqtt
       - VEHICLE_ID=${VEHICLE_ID:-vehicle-01}

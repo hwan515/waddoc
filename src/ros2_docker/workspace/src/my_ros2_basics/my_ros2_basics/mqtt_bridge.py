@@ -12,7 +12,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import NavSatFix
 from std_msgs.msg import Bool, Int32, String
 
-MQTT_BROKER_HOST = os.getenv('MQTT_BROKER_HOST', 'waddoc.site')
+MQTT_BROKER_HOST = os.getenv('MQTT_BROKER_HOST', 'www.waddoc.site')
 MQTT_BROKER_PORT = int(os.getenv('MQTT_BROKER_PORT', '443'))
 MQTT_WS_PATH = os.getenv('MQTT_WS_PATH', '/mqtt')
 VEHICLE_ID = os.getenv('VEHICLE_ID', '')
