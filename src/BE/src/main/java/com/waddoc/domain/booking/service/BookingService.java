@@ -32,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -117,12 +116,7 @@ public class BookingService {
                 .regionCode(patient.getRegionCode())
                 .destination(patient.getAddress())
                 .build());
-        Mission mission = ensureCreatedMission(careCase, patient);
-
-        // 차량 phase는 실제 dispatch/MQTT telemetry 경로만이 올리도록 유지한다.
-        if (shouldProvisionImmediateConsult(slot)) {
-            provisionImmediateConsultArtifacts(careCase, dispatchOutbox, mission);
-        }
+        ensureCreatedMission(careCase, patient);
 
         session.touch();
 
@@ -354,10 +348,6 @@ public class BookingService {
         return String.format("%s %d시 %d분", amPm, displayHour, minute);
     }
 
-    private boolean shouldProvisionImmediateConsult(ScheduleSlot slot) {
-        // TODO: restore only behind an explicit instant-consult booking flow; normal same-day bookings must not auto-arrive.
-        return false;
-    }
     private Mission ensureCreatedMission(CareCase careCase, Patient patient) {
         WaypointAddressResolver.ResolvedTarget resolvedTarget = waypointAddressResolver.resolve(patient.getAddress());
         return missionCommandService.createMissionForDispatch(
