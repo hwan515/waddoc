@@ -34,6 +34,25 @@ const formatScheduleTime = (timeStr) => {
     return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
 };
 
+const shiftDateKey = (dateKey, days) => {
+    const baseDate = new Date(`${dateKey}T00:00:00`);
+    if (Number.isNaN(baseDate.getTime())) {
+        return dateKey;
+    }
+
+    baseDate.setDate(baseDate.getDate() + days);
+    return formatDateKey(baseDate);
+};
+
+const formatMissionDateLabel = (dateKey) => {
+    const parsedDate = new Date(`${dateKey}T00:00:00`);
+    if (Number.isNaN(parsedDate.getTime())) {
+        return dateKey;
+    }
+
+    return `${parsedDate.getMonth() + 1}월 ${parsedDate.getDate()}일`;
+};
+
 const getWeekOfMonth = (date) => {
     const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
     return Math.floor((date.getDate() + firstDayOfMonth - 1) / 7) + 1;
@@ -82,6 +101,8 @@ const DashboardView = ({
     setCalendarMode,
     calendarEvents,
     missionsList = [],
+    missionDate,
+    onMissionDateChange,
     statistics,
     pendingDemoAction = null,
     onDemoDispatch,
@@ -104,6 +125,7 @@ const DashboardView = ({
     const currentYear = referenceDate.getFullYear();
     const currentMonth = referenceDate.getMonth(); // 0-indexed
     const todayDateKey = formatDateKey(now);
+    const tomorrowDateKey = shiftDateKey(todayDateKey, 1);
     const currentTimeLabel = formatTimeLabel(now);
 
     // 주간 뷰 시간표 (08:00 ~ 19:00, 30분 단위)
@@ -243,6 +265,24 @@ const DashboardView = ({
     const consultingMissionCount = statistics.consultingMissions || 0;
     const completedMissionCount = statistics.completedMissions || 0;
     const incidentMissionCount = statistics.incidentCount || 0;
+    const resolvedMissionDate = missionDate || todayDateKey;
+    const missionPanelTitle = resolvedMissionDate === todayDateKey
+        ? '금일 출동 현황'
+        : resolvedMissionDate === tomorrowDateKey
+            ? '내일 출동 현황'
+            : `${formatMissionDateLabel(resolvedMissionDate)} 출동 현황`;
+
+    const handleMissionDateShift = (days) => {
+        onMissionDateChange?.(shiftDateKey(resolvedMissionDate, days));
+    };
+
+    const handleMissionDateInputChange = (event) => {
+        if (!event.target.value) {
+            return;
+        }
+
+        onMissionDateChange?.(event.target.value);
+    };
 
     return (
         <div className="h-full flex p-4 gap-4">
@@ -431,14 +471,66 @@ const DashboardView = ({
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
                         <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                            <Activity className="w-5 h-5 text-primary" /> 금일 출동 현황
+                            <Activity className="w-5 h-5 text-primary" /> {missionPanelTitle}
                         </h3>
                         <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-full text-xs font-bold">
                             총 {missionsList.length}건
                         </span>
                     </div>
+                    <div className="border-t border-slate-100 bg-white px-5 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center rounded-md border border-slate-200 bg-white shadow-sm">
+                                <button
+                                    type="button"
+                                    onClick={() => handleMissionDateShift(-1)}
+                                    className="px-2 py-1 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                                    aria-label="이전 출동 날짜"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                <input
+                                    type="date"
+                                    value={resolvedMissionDate}
+                                    onChange={handleMissionDateInputChange}
+                                    className="border-x border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 focus:outline-none"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleMissionDateShift(1)}
+                                    className="px-2 py-1 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                                    aria-label="다음 출동 날짜"
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onMissionDateChange?.(todayDateKey)}
+                                className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-colors ${resolvedMissionDate === todayDateKey
+                                    ? 'border-primary/20 bg-primary text-white'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                    }`}
+                            >
+                                오늘
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onMissionDateChange?.(tomorrowDateKey)}
+                                className={`rounded-md border px-2.5 py-1 text-xs font-bold transition-colors ${resolvedMissionDate === tomorrowDateKey
+                                    ? 'border-primary/20 bg-primary text-white'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                    }`}
+                            >
+                                내일
+                            </button>
+                        </div>
+                    </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                        {missionsList.map(m => (
+                        {missionsList.length === 0 ? (
+                            <div className="flex h-full min-h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
+                                선택한 날짜의 출동 예정 미션이 없습니다.
+                            </div>
+                        ) : missionsList.map(m => (
                             <div
                                 key={m.id}
                                 className={`border rounded-lg p-4 shadow-sm transition-colors ${m.isPrimaryServiceVehicle
@@ -475,7 +567,7 @@ const DashboardView = ({
                                         <span className="font-bold text-slate-700">{m.phaseLabel}</span>
                                     </div>
                                 </div>
-                                {m.isPrimaryServiceVehicle && (
+                                {(m.canDispatch || m.canArrive) && (
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         {m.canDispatch && (
                                             <button
