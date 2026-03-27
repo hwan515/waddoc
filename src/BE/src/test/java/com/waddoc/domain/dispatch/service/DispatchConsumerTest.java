@@ -113,6 +113,13 @@ class DispatchConsumerTest {
                 .thenReturn(Optional.of(vehicle));
         when(missionRepository.existsByVehicleIdAndPhaseIn(eq("veh_00000001"), any()))
                 .thenReturn(false);
+        when(missionCommandService.createMissionForDispatch(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> Mission.builder()
+                        .careCase(invocation.getArgument(0))
+                        .vehicleId(invocation.getArgument(1))
+                        .destination(invocation.getArgument(2))
+                        .targetWaypointNumber(invocation.getArgument(4))
+                        .build());
 
         dispatchConsumer.consume(message);
 
@@ -156,6 +163,13 @@ class DispatchConsumerTest {
                 .thenReturn(Optional.of(vehicle));
         when(missionRepository.existsByVehicleIdAndPhaseIn(eq("veh_GIMCHEON_01"), any()))
                 .thenReturn(false);
+        when(missionCommandService.createMissionForDispatch(any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> Mission.builder()
+                        .careCase(invocation.getArgument(0))
+                        .vehicleId(invocation.getArgument(1))
+                        .destination(invocation.getArgument(2))
+                        .targetWaypointNumber(invocation.getArgument(4))
+                        .build());
 
         dispatchConsumer.consume(message);
 
