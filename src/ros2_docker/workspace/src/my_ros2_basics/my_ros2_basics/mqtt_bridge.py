@@ -3,6 +3,7 @@ import math
 import os
 import ssl
 import threading
+from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 import rclpy
@@ -44,6 +45,7 @@ class MqttBridgeNode(Node):
         self._last_state = None
         self._last_gps = None
         self._current_mission_id = None
+        self._current_goal_waypoint_id = None
         self._vehicle_id = VEHICLE_ID
         self._lock = threading.Lock()
 
@@ -193,6 +195,7 @@ class MqttBridgeNode(Node):
 
             with self._lock:
                 self._current_mission_id = mission_id
+                self._current_goal_waypoint_id = str(waypoint) if waypoint is not None else None
                 if vehicle_id:
                     self._vehicle_id = vehicle_id
 
@@ -244,9 +247,10 @@ class MqttBridgeNode(Node):
 
     def _publish_odom(self):
         with self._lock:
-            payload = self._last_odom
+            payload = dict(self._last_odom) if self._last_odom else None
             gps = self._last_gps
             mission_id = self._current_mission_id
+            goal_waypoint_id = self._current_goal_waypoint_id
             vehicle_id = self._vehicle_id
         if payload is None:
             return
@@ -257,11 +261,31 @@ class MqttBridgeNode(Node):
         if gps:
             payload['latitude'] = gps['latitude']
             payload['longitude'] = gps['longitude']
+        if goal_waypoint_id:
+            payload['goalWaypointId'] = goal_waypoint_id
+        payload['updatedAt'] = datetime.now(timezone.utc).isoformat()
 
         self._mqtt.publish(TOPIC_ODOM, json.dumps(payload), qos=1)
 
     def _minimap_callback(self, msg: String):
-        self._mqtt.publish(TOPIC_MINIMAP, msg.data, qos=1)
+        try:
+            payload = json.loads(msg.data)
+        except json.JSONDecodeError:
+            self.get_logger().error('Minimap payload JSON 파싱 실패')
+            return
+
+        with self._lock:
+            mission_id = self._current_mission_id
+            goal_waypoint_id = self._current_goal_waypoint_id
+            vehicle_id = self._vehicle_id
+
+        payload['vehicleId'] = vehicle_id
+        if mission_id:
+            payload['missionId'] = mission_id
+        if goal_waypoint_id and not payload.get('goalWaypointId') and not payload.get('goal_waypoint_id'):
+            payload['goalWaypointId'] = goal_waypoint_id
+        payload['updatedAt'] = datetime.now(timezone.utc).isoformat()
+        self._mqtt.publish(TOPIC_MINIMAP, json.dumps(payload, ensure_ascii=False), qos=1)
 
     def _state_callback(self, msg: String):
         new_state = msg.data
@@ -271,9 +295,16 @@ class MqttBridgeNode(Node):
         with self._lock:
             vehicle_id = self._vehicle_id
             mission_id = self._current_mission_id
-        state_payload = {'state': new_state, 'vehicleId': vehicle_id}
+            goal_waypoint_id = self._current_goal_waypoint_id
+        state_payload = {
+            'state': new_state,
+            'vehicleId': vehicle_id,
+            'updatedAt': datetime.now(timezone.utc).isoformat(),
+        }
         if mission_id:
             state_payload['missionId'] = mission_id
+        if goal_waypoint_id:
+            state_payload['goalWaypointId'] = goal_waypoint_id
         self._mqtt.publish(TOPIC_STATE, json.dumps(state_payload), qos=1)
 
     def destroy_node(self):
