@@ -66,7 +66,7 @@ class HybridDijkstraVisionFollower(Node):
         default_yolo_model_path = self.resolve_default_yolo_model_path()
         self.declare_parameter('waypoint_json_path', str(map_path))
         self.declare_parameter('goal_waypoint_id', '')
-        self.declare_parameter('show_debug_windows', True)
+        self.declare_parameter('show_debug_windows', False)
         default_route_export_path = self.resolve_route_export_path(
             'vision_detect_route.json'
         )
