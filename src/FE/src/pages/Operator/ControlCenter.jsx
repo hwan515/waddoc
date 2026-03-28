@@ -180,6 +180,20 @@ const createVehicleLocation = (latitudeValue, longitudeValue) => {
     return { lat, lng };
 };
 
+const createPoseFallbackLocation = (pose) => {
+    if (!isValidPose(pose)) {
+        return null;
+    }
+
+    return {
+        lat: pose.x,
+        lng: pose.z,
+        latLabel: 'X',
+        lngLabel: 'Z',
+        source: 'pose',
+    };
+};
+
 const extractVehicleLocation = (...candidates) => {
     for (const candidate of candidates) {
         if (!candidate || typeof candidate !== 'object') {
@@ -193,6 +207,18 @@ const extractVehicleLocation = (...candidates) => {
 
         if (nextLocation) {
             return nextLocation;
+        }
+
+        const poseFallback = createPoseFallbackLocation(
+            candidate.pose
+            ?? candidate.current_pose
+            ?? candidate.currentPose
+            ?? candidate.minimap_pose
+            ?? candidate.minimapPose
+        );
+
+        if (poseFallback) {
+            return poseFallback;
         }
     }
 
@@ -361,11 +387,48 @@ const mapMissionToDashboardItem = (mission) => {
         phase: mission.phase,
         phaseLabel: DASHBOARD_MISSION_LABEL_RESOLVERS.phase(mission.phase),
         time: formatMissionDisplayTime(mission),
+        targetWaypointNumber: mission.targetWaypointNumber ?? null,
+        sourceMission: mission,
         dateKey: extractDateKey(mission.appointmentDate)
             || extractDateKey(mission.dispatchedAt || mission.createdAt || mission.updatedAt),
         isPrimaryServiceVehicle,
         ...getDemoActionAvailability(mission.phase)
     };
+};
+
+const applySelectedBookingMissionToVehicles = (vehicles, selectedBookingMission) => {
+    if (!selectedBookingMission?.vehicleId) {
+        return vehicles;
+    }
+
+    return vehicles.map((vehicle) => {
+        if (vehicle.vehicleId !== selectedBookingMission.vehicleId) {
+            return vehicle;
+        }
+
+        const overlayMission = selectedBookingMission.sourceMission || {
+            missionId: selectedBookingMission.missionId,
+            caseId: selectedBookingMission.caseId,
+            patientName: selectedBookingMission.patientName,
+            destination: selectedBookingMission.destination,
+            vehicleId: selectedBookingMission.vehicleId,
+            phase: selectedBookingMission.phase,
+            targetWaypointNumber: selectedBookingMission.targetWaypointNumber,
+        };
+
+        return {
+            ...vehicle,
+            missionId: selectedBookingMission.missionId,
+            patientName: selectedBookingMission.patientName || vehicle.patientName,
+            destination: selectedBookingMission.destination || vehicle.destination,
+            mission: {
+                ...(vehicle.mission || {}),
+                ...overlayMission,
+            },
+            displayPatientName: selectedBookingMission.patientName || vehicle.displayPatientName,
+            displayDestination: selectedBookingMission.destination || vehicle.displayDestination,
+        };
+    });
 };
 
 const getErrorMessage = (error, fallbackMessage) => (
@@ -636,23 +699,23 @@ const ControlCenter = () => {
         const nextLocation = createVehicleLocation(
             telemetry.location?.lat,
             telemetry.location?.lng
-        );
+        ) || createPoseFallbackLocation(posePayload);
         const nextBattery = normalizeBatterySoc(telemetry.batterySoc);
         const nextGoalWaypointId = typeof navigation.goalWaypointId === 'string'
             ? navigation.goalWaypointId
             : null;
         const nextGoalWaypointNumber = parseWaypointNumberFromGoalId(nextGoalWaypointId);
         const pathPayload = (
-            Array.isArray(navigation.pathWaypoints) && navigation.pathWaypoints.length > 0
-                ? navigation.pathWaypoints
-                : navigation.trajectory
+            Array.isArray(navigation.trajectory) && navigation.trajectory.length > 0
+                ? navigation.trajectory
+                : navigation.pathWaypoints
         );
         const fullPathPayload = (
-            Array.isArray(navigation.fullPathWaypoints) && navigation.fullPathWaypoints.length > 0
-                ? navigation.fullPathWaypoints
+            Array.isArray(navigation.fullTrajectory) && navigation.fullTrajectory.length > 0
+                ? navigation.fullTrajectory
                 : (
-                    Array.isArray(navigation.fullTrajectory) && navigation.fullTrajectory.length > 0
-                        ? navigation.fullTrajectory
+                    Array.isArray(navigation.fullPathWaypoints) && navigation.fullPathWaypoints.length > 0
+                        ? navigation.fullPathWaypoints
                         : pathPayload
                 )
         );
@@ -691,9 +754,13 @@ const ControlCenter = () => {
         )));
     }, [snapshotData]);
 
-    const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
-        || vehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle)
-        || vehicles[0]
+    const selectedBookingMission = selectedBookingEvent?.caseId
+        ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
+        : null;
+    const displayVehicles = applySelectedBookingMissionToVehicles(vehicles, selectedBookingMission);
+    const selectedVehicle = displayVehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+        || displayVehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle)
+        || displayVehicles[0]
         || null;
     const vehicleState = minimapMonitorState || selectedVehicle?.status || '대기';
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
@@ -704,9 +771,6 @@ const ControlCenter = () => {
         selectedVehicle?.mission,
         minimapGoalWaypointNumber
     );
-    const selectedBookingMission = selectedBookingEvent?.caseId
-        ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
-        : null;
     const displayedDashboardMissions = selectedBookingEvent
         ? (selectedBookingMission ? [selectedBookingMission] : [])
         : missionsList;
@@ -849,7 +913,7 @@ const ControlCenter = () => {
             <main className="flex-1 overflow-hidden relative">
                 {activeTab === 'map' && (
                     <MapMonitoring
-                        vehicles={vehicles}
+                        vehicles={displayVehicles}
                         selectedVehicle={selectedVehicle}
                         selectedVehicleId={selectedVehicleId}
                         setSelectedVehicleId={setSelectedVehicleId}

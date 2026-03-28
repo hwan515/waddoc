@@ -326,14 +326,15 @@ const MinimapPanel = ({
 
                     <StatCard icon={Navigation} label="실시간 좌표">
                         <div className="mt-3 space-y-2">
-                            <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
-                            <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
+                            <CoordinateRow axis={vehicleLocation?.latLabel || '위도'} value={formatCoordinate(vehicleLocation?.lat)} />
+                            <CoordinateRow axis={vehicleLocation?.lngLabel || '경도'} value={formatCoordinate(vehicleLocation?.lng)} />
                         </div>
-                        <p className="mt-3 text-xs text-slate-400">차량 리스트와 동일</p>
+                        <p className="mt-3 text-xs text-slate-400">
+                            {vehicleLocation?.source === 'pose' ? 'GPS 미수신 시 맵 좌표 표시' : '차량 리스트와 동일'}
+                        </p>
                     </StatCard>
                 </div>
             </div>
-
             {!minimapVehiclePose && (
                 <div className="absolute bottom-4 left-[calc(28%+1rem)] rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white shadow-lg backdrop-blur-sm">
                     odom 위치 데이터가 연결되면 차량 마커가 표시됩니다.
