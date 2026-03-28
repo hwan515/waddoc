@@ -67,7 +67,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/guardians/signup").permitAll()
                         .requestMatchers("/api/v1/admin/monitoring/authorize").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/monitoring/session").permitAll()
-                        .requestMatchers("/api/v1/bookings/**").permitAll()
                         .requestMatchers("/api/v1/sessions/webhook/livekit").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/missions/*/telemetry").permitAll()
                         .anyRequest().authenticated()

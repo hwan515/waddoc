@@ -18,7 +18,7 @@ import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
 import com.waddoc.global.type.ApprovalStatus;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -29,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
  * 보호자 회원가입과 로그인, 리프레시 토큰 수명주기를 한곳에서 관리한다.
  */
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
     private static final String REFRESH_TOKEN_COOKIE_NAME = "refresh_token";
@@ -42,6 +41,27 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final LoginEligibilityService loginEligibilityService;
+    private final boolean refreshCookieSecure;
+
+    public AuthService(
+            UserRepository userRepository,
+            PatientRepository patientRepository,
+            PatientGuardianLinkRepository patientGuardianLinkRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            RefreshTokenService refreshTokenService,
+            LoginEligibilityService loginEligibilityService,
+            @Value("${auth.refresh-cookie.secure:true}") boolean refreshCookieSecure
+    ) {
+        this.userRepository = userRepository;
+        this.patientRepository = patientRepository;
+        this.patientGuardianLinkRepository = patientGuardianLinkRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.refreshTokenService = refreshTokenService;
+        this.loginEligibilityService = loginEligibilityService;
+        this.refreshCookieSecure = refreshCookieSecure;
+    }
 
     /**
      * 보호자 계정을 만들고 환자와의 연결 요청을 함께 생성한다.
@@ -49,7 +69,7 @@ public class AuthService {
     @Transactional
     public GuardianSignupResponse signupGuardian(GuardianSignupRequest request) {
         Patient patient = patientRepository.findByPhone(request.getPatientPhone())
-                .orElseThrow(() -> new BusinessException(ErrorCode.PATIENT_PHONE_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.GUARDIAN_SIGNUP_FAILED));
 
         User existingUser = userRepository.findByUsername(request.getUsername()).orElse(null);
         if (existingUser != null) {
@@ -186,7 +206,7 @@ public class AuthService {
     private void addRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
-                .secure(false)
+                .secure(refreshCookieSecure)
                 .path(REFRESH_TOKEN_COOKIE_PATH)
                 .sameSite("Strict")
                 .maxAge(maxAgeSeconds)
@@ -198,7 +218,7 @@ public class AuthService {
     private void deleteRefreshTokenCookie(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(refreshCookieSecure)
                 .path(REFRESH_TOKEN_COOKIE_PATH)
                 .sameSite("Strict")
                 .maxAge(0)

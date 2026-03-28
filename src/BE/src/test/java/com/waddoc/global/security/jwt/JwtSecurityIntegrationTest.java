@@ -152,6 +152,83 @@ class JwtSecurityIntegrationTest {
     }
 
     @Test
+    void bookingDetailRejectsUnauthenticatedRequest() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("AUTH_UNAUTHORIZED");
+    }
+
+    @Test
+    void authenticatedBookingDetailPassesSecurityBoundary() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_guardian", Role.GUARDIAN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(response.getBody()).contains("BOOKING_NOT_FOUND");
+    }
+
+    @Test
+    void bookingCancelRejectsUnauthenticatedRequest() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security/cancel",
+                HttpMethod.POST,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("AUTH_UNAUTHORIZED");
+    }
+
+    @Test
+    void guardianCannotCancelBookingThroughAuthenticatedEndpoint() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_guardian", Role.GUARDIAN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security/cancel",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
+        assertThat(response.getBody()).contains("AUTH_FORBIDDEN");
+    }
+
+    @Test
+    void adminCanReachAuthenticatedBookingCancelEndpoint() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security/cancel",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(response.getBody()).contains("BOOKING_NOT_FOUND");
+    }
+
+    @Test
     void bearerAccessTokenCanReadAdminPatientsWithoutFilters() {
         String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
         HttpHeaders headers = new HttpHeaders();

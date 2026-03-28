@@ -25,6 +25,7 @@ public enum ErrorCode {
     AUTH_DOCTOR_PROFILE_REQUIRED(HttpStatus.FORBIDDEN, "AUTH_DOCTOR_PROFILE_REQUIRED", "의사 프로필이 연결되지 않은 계정입니다."),
     AUTH_USERNAME_CONFLICT(HttpStatus.CONFLICT, "AUTH_USERNAME_CONFLICT", "이미 사용 중인 로그인 ID입니다."),
     AUTH_GUARDIAN_NOT_APPROVED(HttpStatus.FORBIDDEN, "AUTH_GUARDIAN_NOT_APPROVED", "승인되지 않았거나 연결된 환자가 없는 보호자 계정입니다."),
+    GUARDIAN_SIGNUP_FAILED(HttpStatus.NOT_FOUND, "GUARDIAN_SIGNUP_FAILED", "가입 요청 처리에 실패했습니다."),
 
     // Patient
     PATIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PATIENT_NOT_FOUND", "해당 환자를 찾을 수 없습니다."),

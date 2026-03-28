@@ -54,6 +54,9 @@ mqtt:
 monitoring:
   access:
     cookie-secret: waddoc-dev-monitoring-cookie-secret-must-be-at-least-32
+auth:
+  refresh-cookie:
+    secure: false
 app:
   demo-mode:
     enabled: true
