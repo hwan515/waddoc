@@ -3,7 +3,6 @@ import { LogOut, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } 
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
-import { logoutSession } from '../../utils/logout';
 import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
@@ -624,6 +623,7 @@ const loadDashboardSnapshot = async ({
 
 const ControlCenter = () => {
     const navigate = useNavigate();
+    const logout = useAuthStore((state) => state.logout);
     const currentUser = useAuthStore((state) => state.user);
     const { snapshotData, stateData, statusData } = useRobotSSE();
 
@@ -853,7 +853,7 @@ const ControlCenter = () => {
         } catch (error) {
             console.error('Monitoring session cleanup failed:', error);
         }
-        await logoutSession();
+        logout();
         navigate('/operator/login');
     };
 
