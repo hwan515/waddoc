@@ -89,7 +89,7 @@ const MapMonitoring = ({
                 />
             </div>
 
-            <div className="flex w-[clamp(29rem,34vw,34rem)] shrink-0 flex-col gap-4">
+            <div className="flex w-[clamp(22rem,28vw,26rem)] shrink-0 flex-col gap-4">
                 <button
                     onClick={handleEStop}
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-600/30 transition-transform hover:bg-red-700 active:scale-100"

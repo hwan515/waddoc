@@ -461,7 +461,7 @@ const DashboardView = ({
             </div>
 
             {/* 우측: 현황 및 통계 패널 */}
-            <div className="w-112.5 flex flex-col gap-4 shrink-0">
+            <div className="w-[clamp(22rem,28vw,26rem)] flex flex-col gap-4 shrink-0">
                 {/* 우측 상단: 금일 미션 (출동) 현황 */}
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
