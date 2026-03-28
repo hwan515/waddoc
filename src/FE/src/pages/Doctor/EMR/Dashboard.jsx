@@ -158,8 +158,8 @@ const LegacyEMRDashboard = () => {
     const [patientDB, setPatientDB] = useState({});
     const [historyDB, setHistoryDB] = useState({});
 
-    // 3. 현재 선택된 환자
-    const [selectedPatientId, setSelectedPatientId] = useState(null);
+    // 3. 현재 선택된 예약
+    const [selectedReservationId, setSelectedReservationId] = useState(null);
 
     const syncAssignedCases = useCallback(async () => {
         try {
@@ -212,7 +212,7 @@ const LegacyEMRDashboard = () => {
 
     // 환자 선택 (디테일 조회)
     const handlePatientSelect = async (ptNo, caseId) => {
-        setSelectedPatientId(ptNo);
+        setSelectedReservationId(caseId);
 
         // 만약 환자 상세 정보가 아직 API에서 불러와지지 않았거나(미상), SSE로 등록된 임시 상태라면
         if (!patientDB[ptNo] || patientDB[ptNo].age === '미상') {
@@ -299,7 +299,7 @@ const LegacyEMRDashboard = () => {
             if (notif.caseId) {
                 await handlePatientSelect(notif.patientId, notif.caseId);
             } else {
-                setSelectedPatientId(notif.patientId);
+                setSelectedReservationId(notificationReservation.id);
             }
             await syncAssignedCases();
         } catch (err) {
@@ -330,9 +330,13 @@ const LegacyEMRDashboard = () => {
     const filteredReservations = [...reservations]
         .filter(res => filterType === '전체' || res.type === filterType)
         .sort(sortReservations);
-    const effectiveSelectedPatientId = reservations.some((reservation) => reservation.ptNo === selectedPatientId)
-        ? selectedPatientId
-        : (reservations[0]?.ptNo || null);
+    const effectiveSelectedReservationId = filteredReservations.some((reservation) => reservation.id === selectedReservationId)
+        ? selectedReservationId
+        : (filteredReservations.find((reservation) => !TERMINAL_CASE_STATUSES.has(reservation.caseStatus))?.id
+            || filteredReservations[0]?.id
+            || null);
+    const effectiveSelectedReservation = filteredReservations.find((reservation) => reservation.id === effectiveSelectedReservationId) || null;
+    const effectiveSelectedPatientId = effectiveSelectedReservation?.ptNo || null;
     const selectedPatientInfo = patientDB[effectiveSelectedPatientId] || null;
     const selectedHistory = historyDB[effectiveSelectedPatientId] || [];
 
@@ -401,20 +405,18 @@ const LegacyEMRDashboard = () => {
                         </div>
                     </div>
 
-                    {/* 데이터 테이블 Header 영역 */}
-                    <div className="bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
-                        <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">번호</div>
-                        <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">환자명</div>
-                        <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">성별</div>
-                        <div className="flex-1 min-w-0 border-r border-[#3B62A4] py-1 text-left px-2">병명/증상</div>
-                        <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">날짜</div>
-                        <div className="w-16 shrink-0 border-r border-[#3B62A4] py-1">시간</div>
-                        <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">구분</div>
-                        <div className="w-28 shrink-0 py-1">상태 (액션)</div>
-                    </div>
+                    <div className="flex-1 overflow-y-auto bg-white" style={{ scrollbarGutter: 'stable' }}>
+                        <div className="sticky top-0 z-10 bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
+                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">번호</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">환자명</div>
+                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">성별</div>
+                            <div className="flex-1 min-w-0 border-r border-[#3B62A4] py-1 text-left px-2">병명/증상</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">날짜</div>
+                            <div className="w-16 shrink-0 border-r border-[#3B62A4] py-1">시간</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">구분</div>
+                            <div className="w-28 shrink-0 py-1">상태</div>
+                        </div>
 
-                    {/* 데이터 테이블 Body 영역 */}
-                    <div className="flex-1 overflow-y-auto bg-white">
                         {filteredReservations.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-slate-400 text-sm">
                                 데이터가 없습니다.
@@ -429,7 +431,7 @@ const LegacyEMRDashboard = () => {
                                     <div
                                         key={res.id}
                                         onClick={() => handlePatientSelect(res.ptNo, res.id)}
-                                        className={`flex text-xs border-b border-slate-200 cursor-pointer ${effectiveSelectedPatientId === res.ptNo ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
+                                        className={`flex text-xs border-b border-slate-200 cursor-pointer ${effectiveSelectedReservationId === res.id ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
                                             }`}
                                     >
                                         <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200">{idx + 1}</div>
@@ -504,7 +506,10 @@ const LegacyEMRDashboard = () => {
                                                 <td colSpan="5" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.address}</td>
                                             </tr>
                                             <tr>
-                                                <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">특이사항 (알러지)</th>
+                                                <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">
+                                                    <span className="block">특이사항</span>
+                                                    <span className="mt-0.5 block text-[11px] leading-tight">(알러지 등)</span>
+                                                </th>
                                                 <td colSpan="5" className="border border-slate-300 px-2 py-1.5 text-red-600 font-bold h-12 align-top">{selectedPatientInfo.note}</td>
                                             </tr>
                                         </tbody>
