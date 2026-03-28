@@ -27,7 +27,7 @@ const getStatusBadge = (status) => {
             return 'bg-amber-100 text-amber-700 border-amber-200';
         case '진료 중':
         case '본인 확인':
-            return 'bg-purple-100 text-purple-700 border-purple-200';
+            return 'bg-amber-100 text-amber-800 border-amber-200';
         case '복귀 중':
         case '종료/복귀':
             return 'bg-yellow-100 text-yellow-700 border-yellow-200';

@@ -94,8 +94,8 @@ const getStatePresentation = (state) => {
         case '본인 확인':
             return {
                 label: normalizedState,
-                chipClass: 'border-violet-300/30 bg-violet-400/12 text-violet-100',
-                dotClass: 'bg-violet-300'
+                chipClass: 'border-amber-300/30 bg-amber-400/12 text-amber-100',
+                dotClass: 'bg-amber-300'
             };
         case '긴급 정지':
         case '긴급정지':

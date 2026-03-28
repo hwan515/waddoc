@@ -453,21 +453,23 @@ const loadDashboardSnapshot = async ({
             return { data: {} };
         });
 
-        const [missionsRes, bookingsRes, vehiclesRes] = await Promise.all([
+        const [todayMissionsRes, allMissionsRes, bookingsRes, vehiclesRes] = await Promise.all([
             fetchSafe(apiClient.get('/missions', { params: { date: todayDateKey } })),
+            fetchSafe(apiClient.get('/missions')),
             fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })),
             fetchSafe(apiClient.get('/admin/vehicles'))
         ]);
 
-        const rawMissions = missionsRes.data.missions || [];
+        const todayRawMissions = todayMissionsRes.data.missions || [];
+        const allRawMissions = allMissionsRes.data.missions || [];
         const rawVehicles = Array.isArray(vehiclesRes.data) ? vehiclesRes.data : [];
         const missionDetailResponses = await Promise.all(
-            rawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
+            todayRawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
         );
         const missionDetailsById = new Map(
-            rawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
+            todayRawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
         );
-        const latestMissionByVehicleId = rawMissions
+        const latestMissionByVehicleId = todayRawMissions
             .filter((mission) => typeof mission?.vehicleId === 'string' && mission.vehicleId.trim())
             .reduce((accumulator, mission) => {
                 const currentMission = accumulator.get(mission.vehicleId);
@@ -545,22 +547,23 @@ const loadDashboardSnapshot = async ({
             setSelectedVehicleId(null);
         }
 
-        const mappedAllMissions = rawMissions
+        const mappedTodayMissions = todayRawMissions
+            .map(mapMissionToDashboardItem)
+            .sort(sortDashboardMissions);
+        const mappedAllMissions = allRawMissions
             .map(mapMissionToDashboardItem)
             .sort(sortDashboardMissions);
 
-        setMissionsList(
-            mappedAllMissions.filter((mission) => mission.dateKey === todayDateKey)
-        );
+        setMissionsList(mappedTodayMissions);
         setAllMissionsList(mappedAllMissions);
 
         setStatistics({
-            totalMissions: rawMissions.length,
-            activeMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
-            dispatchingMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
-            consultingMissions: rawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
-            completedMissions: rawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
-            incidentCount: rawMissions.filter((mission) => mission.phase === 'INCIDENT').length
+            totalMissions: allRawMissions.length,
+            activeMissions: allRawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+            dispatchingMissions: allRawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
+            consultingMissions: allRawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+            completedMissions: allRawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
+            incidentCount: allRawMissions.filter((mission) => mission.phase === 'INCIDENT').length
         });
 
         const mappedEvents = (bookingsRes.data.bookings || []).map((booking) => {
