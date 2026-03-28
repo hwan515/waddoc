@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -162,5 +163,23 @@ class LocalDummyDataSeederTest {
         assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(seeder, "assertSeedDefaultPasswordConfigured"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("APP_SEED_DEFAULT_PASSWORD must be set when app.seed.enabled=true");
+    }
+
+    @Test
+    void resolveUpcomingActiveBookingEndDateKeepsUpcomingSeedToSameDay() {
+        LocalDate today = LocalDate.of(2026, 3, 27);
+
+        LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
+
+        assertThat(result).isEqualTo(today);
+    }
+
+    @Test
+    void resolveUpcomingActiveBookingEndDateDoesNotExceedFutureSlotEndDate() {
+        LocalDate today = LocalDate.of(2026, 4, 13);
+
+        LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
+
+        assertThat(result).isEqualTo(today);
     }
 }
