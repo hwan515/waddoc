@@ -18,6 +18,7 @@ services:
     environment:
       - GF_SERVER_ROOT_URL=https://${SERVER_DOMAIN}/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}

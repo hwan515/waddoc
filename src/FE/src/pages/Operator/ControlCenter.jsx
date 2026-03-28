@@ -3,6 +3,7 @@ import { LogOut, Map as MapIcon, LayoutDashboard, Users, UserCheck, BarChart3 } 
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
+import { logoutSession } from '../../utils/logout';
 import MapMonitoring from '../../components/operator/MapMonitoring';
 import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
@@ -146,14 +147,45 @@ const DEFAULT_WAITING_MONITOR_STATE = phaseToMonitorState('WAITING');
 const MOVING_SPEED_THRESHOLD_MS = 0.1;
 const MOVING_SPEED_THRESHOLD_KMH = 0.5;
 
-const inferMonitorStateFromTelemetry = (normalizedState, speedMs, speedKmh) => {
+const inferMonitorStateFromTelemetry = ({
+    normalizedState,
+    speedMs,
+    speedKmh,
+    online,
+    navigationCleared,
+    navigationClearReason,
+    targetWaypointValue,
+    pathWaypoints,
+    fullPathWaypoints,
+}) => {
     const parsedSpeedMs = toFiniteNumber(speedMs);
     const parsedSpeedKmh = toFiniteNumber(speedKmh);
     const hasMovingSpeed = (parsedSpeedMs !== null && parsedSpeedMs > MOVING_SPEED_THRESHOLD_MS)
         || (parsedSpeedKmh !== null && parsedSpeedKmh > MOVING_SPEED_THRESHOLD_KMH);
+    const parsedTargetWaypointValue = toFiniteNumber(targetWaypointValue);
+    const hasRoute = (Array.isArray(pathWaypoints) && pathWaypoints.length > 0)
+        || (Array.isArray(fullPathWaypoints) && fullPathWaypoints.length > 0);
+    const normalizedClearReason = typeof navigationClearReason === 'string'
+        ? navigationClearReason.trim().toLowerCase()
+        : '';
 
     if (hasMovingSpeed && (normalizedState === null || WAITING_MONITOR_STATES.has(normalizedState))) {
         return getMonitorStateFromPhase('EN_ROUTE');
+    }
+
+    if (normalizedState === null) {
+        if (online === false) {
+            return DEFAULT_WAITING_MONITOR_STATE;
+        }
+
+        if (
+            navigationCleared === true
+            && !hasRoute
+            && (parsedTargetWaypointValue === null || parsedTargetWaypointValue === 0)
+            && (!normalizedClearReason || normalizedClearReason === 'waiting_goal')
+        ) {
+            return DEFAULT_WAITING_MONITOR_STATE;
+        }
     }
 
     return normalizedState;
@@ -592,9 +624,8 @@ const loadDashboardSnapshot = async ({
 
 const ControlCenter = () => {
     const navigate = useNavigate();
-    const logout = useAuthStore((state) => state.logout);
     const currentUser = useAuthStore((state) => state.user);
-    const { snapshotData } = useRobotSSE();
+    const { snapshotData, stateData, statusData } = useRobotSSE();
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
@@ -688,14 +719,28 @@ const ControlCenter = () => {
         const telemetry = snapshotData.telemetry ?? {};
         const navigation = snapshotData.navigation ?? {};
         const posePayload = telemetry.pose;
-        const reportedState = normalizeMonitorState(telemetry.state);
+        const reportedState = normalizeMonitorState(
+            telemetry.state
+            ?? stateData?.state
+            ?? stateData?.vehicleState
+            ?? stateData?.status
+        );
+        const telemetryOnline = typeof telemetry.online === 'boolean'
+            ? telemetry.online
+            : (typeof statusData?.online === 'boolean' ? statusData.online : null);
         const nextSpeedKmh = toFiniteNumber(telemetry.speedKmh);
         const nextSpeedMs = toFiniteNumber(telemetry.speedMs);
-        const nextState = inferMonitorStateFromTelemetry(
-            reportedState,
-            nextSpeedMs,
-            nextSpeedKmh
-        );
+        const nextState = inferMonitorStateFromTelemetry({
+            normalizedState: reportedState,
+            speedMs: nextSpeedMs,
+            speedKmh: nextSpeedKmh,
+            online: telemetryOnline,
+            navigationCleared: navigation.cleared,
+            navigationClearReason: navigation.clearReason,
+            targetWaypointValue: navigation.targetWaypointValue,
+            pathWaypoints: navigation.pathWaypoints,
+            fullPathWaypoints: navigation.fullPathWaypoints,
+        });
         const nextSpeed = nextSpeedKmh !== null
             ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
             : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
@@ -755,7 +800,7 @@ const ControlCenter = () => {
                 }
                 : vehicle
         )));
-    }, [snapshotData]);
+    }, [snapshotData, stateData, statusData]);
 
     const selectedBookingMission = selectedBookingEvent?.caseId
         ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
@@ -808,7 +853,7 @@ const ControlCenter = () => {
         } catch (error) {
             console.error('Monitoring session cleanup failed:', error);
         }
-        logout();
+        await logoutSession();
         navigate('/operator/login');
     };
 
@@ -927,7 +972,6 @@ const ControlCenter = () => {
                         vehicleSpeed={effectiveVehicleSpeed}
                         vehicleLocation={vehicleLocation}
                         minimapRouteAlert={effectiveMinimapRouteAlert}
-                        updateIntervalMs={undefined}
                         useMockMinimapData={false}
                     />
                 )}
