@@ -49,8 +49,8 @@ public class ConsultationIdentityVerificationClient {
         bodyBuilder.part("verificationId", verificationId);
         bodyBuilder.part("patientId", patientId);
         bodyBuilder.part("verificationMode", "FACE_AND_IDCARD");
-        // GPU 서버 계약에 맞춰 기준 이미지, 실시간 얼굴, 신분증 이미지를 모두 보낸다.
-        addFilePart(bodyBuilder, "referenceImage", referenceImage, referenceImageFilename);
+        // 기준 이미지가 있으면 등록 얼굴과 실시간 얼굴까지 함께 검증하고, 없으면 실시간 얼굴-신분증 얼굴 및 OCR만 검증한다.
+        addOptionalFilePart(bodyBuilder, "referenceImage", referenceImage, referenceImageFilename);
         addFilePart(bodyBuilder, "faceImage", faceImage, faceImageFilename);
         addFilePart(bodyBuilder, "idCardImage", idCardImage, idCardImageFilename);
 
@@ -66,7 +66,9 @@ public class ConsultationIdentityVerificationClient {
                 log.error("Identity verification returned empty response. verificationId={}, patientId={}", verificationId, patientId);
                 throw new BusinessException(ErrorCode.AI_IDV_REQUEST_FAILED);
             }
-            return response.toResult();
+            IdentityVerificationResult result = response.toResult();
+            logIdentityVerificationResponse(verificationId, patientId, response, result);
+            return result;
         } catch (BusinessException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -78,6 +80,13 @@ public class ConsultationIdentityVerificationClient {
     private void addFilePart(MultipartBodyBuilder bodyBuilder, String partName, byte[] content, String filename) {
         bodyBuilder.part(partName, new NamedByteArrayResource(content, filename))
                 .contentType(MediaTypeFactory.getMediaType(filename).orElse(MediaType.APPLICATION_OCTET_STREAM));
+    }
+
+    private void addOptionalFilePart(MultipartBodyBuilder bodyBuilder, String partName, byte[] content, String filename) {
+        if (content == null || filename == null || filename.isBlank()) {
+            return;
+        }
+        addFilePart(bodyBuilder, partName, content, filename);
     }
 
     private static String firstNonBlank(String... values) {
@@ -96,6 +105,61 @@ public class ConsultationIdentityVerificationClient {
             }
         }
         return null;
+    }
+
+    private void logIdentityVerificationResponse(
+            String verificationId,
+            String patientId,
+            IdentityVerificationApiResponse response,
+            IdentityVerificationResult result
+    ) {
+        IdentityVerificationResult.OcrData ocr = result.getOcr();
+        log.info(
+                "Identity verification response received. verificationId={}, patientId={}, status={}, matched={}, faceSimilarityScore={}, idCardFaceSimilarityScore={}, reasonCodes={}, ocrNameMasked={}, ocrRrnMasked={}, ocrBirthDate6Masked={}, ocrAddressMasked={}",
+                verificationId,
+                patientId,
+                response.getStatus(),
+                result.isMatched(),
+                result.getFaceSimilarityScore(),
+                result.getIdCardFaceSimilarityScore(),
+                result.getReasonCodes(),
+                maskName(ocr != null ? ocr.getName() : null),
+                ocr != null ? ocr.getRrnMasked() : null,
+                maskBirthDate6(ocr != null ? ocr.getBirthDate6() : null),
+                maskAddress(ocr != null ? ocr.getAddress() : null)
+        );
+    }
+
+    private static String maskName(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        if (name.length() == 1) {
+            return name;
+        }
+        if (name.length() == 2) {
+            return name.charAt(0) + "*";
+        }
+        return name.charAt(0) + "*" + name.charAt(name.length() - 1);
+    }
+
+    private static String maskBirthDate6(String birthDate6) {
+        if (birthDate6 == null || birthDate6.isBlank()) {
+            return null;
+        }
+        return birthDate6.length() >= 2 ? birthDate6.substring(0, 2) + "****" : "**";
+    }
+
+    private static String maskAddress(String address) {
+        if (address == null || address.isBlank()) {
+            return null;
+        }
+        String normalized = address.replaceAll("\\s+", " ").trim();
+        String[] tokens = normalized.split(" ");
+        if (tokens.length >= 2) {
+            return tokens[0] + " " + tokens[1] + " ...";
+        }
+        return tokens[0] + " ...";
     }
 
     private static String extractBirthDate6(String rrnLike) {

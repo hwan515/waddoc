@@ -11,6 +11,7 @@ import com.waddoc.domain.guardian.dto.GuardianConsultationSummariesResponse;
 import com.waddoc.domain.guardian.dto.GuardianPatientsResponse;
 import com.waddoc.domain.patient.entity.GuardianLinkStatus;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.patient.entity.PatientGuardianLink;
 import com.waddoc.domain.patient.repository.PatientGuardianLinkRepository;
 import com.waddoc.domain.user.entity.Role;
@@ -66,6 +67,7 @@ class GuardianQueryServiceTest {
                 .regionCode("ULLEUNG")
                 .address("Ulleung-eup, Ulleung-gun")
                 .phone("01012345678")
+                .gender(PatientGender.FEMALE)
                 .build();
         PatientGuardianLink link = PatientGuardianLink.builder()
                 .patient(patient)
@@ -88,6 +90,7 @@ class GuardianQueryServiceTest {
         assertThat(response.getPatients().get(0).getPhone()).isEqualTo("01012345678");
         assertThat(response.getPatients().get(0).getRegionCode()).isEqualTo("ULLEUNG");
         assertThat(response.getPatients().get(0).getAddress()).isEqualTo("Ulleung-eup, Ulleung-gun");
+        assertThat(response.getPatients().get(0).getGender()).isEqualTo(PatientGender.FEMALE);
         assertThat(response.getPatients().get(0).getRelation()).isEqualTo("DAUGHTER");
         verify(accessControlService).assertGuardian(new AuthenticatedUser("usr_guardian", Role.GUARDIAN));
     }

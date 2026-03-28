@@ -8,6 +8,12 @@ import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
+import com.waddoc.domain.consultation.entity.ConsultationSession;
+import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.consultation.service.ConsultationLiveKitService;
+import com.waddoc.domain.dispatch.entity.DispatchOutbox;
+import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
+import com.waddoc.domain.dispatch.service.WaypointAddressResolver;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
@@ -16,10 +22,18 @@ import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.notification.dto.NewBookingNotificationPayload;
+import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.patient.entity.PatientGender;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.domain.mission.service.MissionCommandService;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
+import com.waddoc.global.config.DemoModePolicy;
+import com.waddoc.global.config.DispatchAssignmentPolicy;
+import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.sms.SmsService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,8 +41,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,8 +54,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,19 +76,47 @@ class BookingServiceTest {
     private CareCaseRepository careCaseRepository;
 
     @Mock
+    private DispatchOutboxRepository dispatchOutboxRepository;
+
+    @Mock
+    private MissionRepository missionRepository;
+
+    @Mock
+    private ConsultationSessionRepository consultationSessionRepository;
+
+    @Mock
+    private MissionCommandService missionCommandService;
+
+    @Mock
+    private ConsultationLiveKitService consultationLiveKitService;
+
+    @Mock
     private AuditLogService auditLogService;
 
     @Mock
     private SmsService smsService;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Mock
+    private DemoModePolicy demoModePolicy;
+
+    @Mock
+    private DispatchAssignmentPolicy dispatchAssignmentPolicy;
+
+    @Mock
+    private WaypointAddressResolver waypointAddressResolver;
 
     @InjectMocks
     private BookingService bookingService;
 
     @Test
-    void createBooking_publishesBookingCreatedEvents() {
+    void createBooking_publishesKafkaMessagesAndCreatesDispatchOutbox() {
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
+
         User doctorUser = User.builder()
                 .username("doctor")
                 .passwordHash("encoded")
@@ -87,9 +132,9 @@ class BookingServiceTest {
 
         ScheduleSlot slot = ScheduleSlot.builder()
                 .doctor(doctor)
-                .slotDate(LocalDate.of(2026, 3, 21))
-                .startTime(LocalTime.of(10, 0))
-                .endTime(LocalTime.of(10, 30))
+                .slotDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(10, 30))
+                .endTime(LocalTime.of(11, 0))
                 .build();
 
         Patient patient = Patient.builder()
@@ -126,34 +171,59 @@ class BookingServiceTest {
             ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 18, 12, 0));
             return booking;
         }).when(bookingRepository).save(any(Booking.class));
+        when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        CreateBookingResponse response = bookingService.createBooking(session.getPublicId(), request);
+        TransactionSynchronizationManager.initSynchronization();
 
-        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        CreateBookingResponse response;
+        try {
+            response = bookingService.createBooking(session.getPublicId(), request);
+
+            List<TransactionSynchronization> synchronizations =
+                    TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        ArgumentCaptor<SmsRequestMessage> smsCaptor = ArgumentCaptor.forClass(SmsRequestMessage.class);
+        ArgumentCaptor<NewBookingNotificationPayload> notificationCaptor =
+                ArgumentCaptor.forClass(NewBookingNotificationPayload.class);
+        ArgumentCaptor<DispatchOutbox> outboxCaptor = ArgumentCaptor.forClass(DispatchOutbox.class);
 
         assertThat(response.getBookingId()).isNotBlank();
         assertThat(response.getCaseId()).isNotBlank();
         assertThat(response.getTtsMessage()).isNotBlank();
-        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        assertThat(response.getTtsMessage()).contains("오전 10시 30분");
+        verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null),
+                eq(null)
+        );
+        verify(kafkaTemplate).send(eq(KafkaTopics.SMS_REQUESTS_TOPIC), smsCaptor.capture());
+        verify(kafkaTemplate).send(
+                eq(KafkaTopics.DOCTOR_NOTIFICATIONS_TOPIC),
+                eq(response.getDoctor().getDoctorId()),
+                notificationCaptor.capture()
+        );
 
-        BookingCreatedSmsEvent smsEvent = eventCaptor.getAllValues().stream()
-                .filter(BookingCreatedSmsEvent.class::isInstance)
-                .map(BookingCreatedSmsEvent.class::cast)
-                .findFirst()
-                .orElseThrow();
-        BookingCreatedDoctorNotificationEvent notificationEvent = eventCaptor.getAllValues().stream()
-                .filter(BookingCreatedDoctorNotificationEvent.class::isInstance)
-                .map(BookingCreatedDoctorNotificationEvent.class::cast)
-                .findFirst()
-                .orElseThrow();
+        DispatchOutbox savedOutbox = outboxCaptor.getValue();
+        assertThat(savedOutbox.getRegionCode()).isEqualTo("ULLEUNG");
+        assertThat(savedOutbox.getDestination()).isEqualTo("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69");
+        assertThat(savedOutbox.getCareCase()).isNotNull();
+        assertThat(savedOutbox.isCompleted()).isFalse();
 
-        assertThat(smsEvent.bookingId()).isEqualTo(response.getBookingId());
+        SmsRequestMessage smsEvent = smsCaptor.getValue();
+        assertThat(smsEvent.correlationId()).isEqualTo(response.getBookingId());
         assertThat(smsEvent.recipientPhone()).isEqualTo("01012345678");
-        assertThat(smsEvent.message()).contains("2026-03-21, 10:00");
+        assertThat(smsEvent.message()).contains(slot.getSlotDate() + ", 10:30");
         assertThat(smsEvent.message()).contains("Doctor Kim");
 
-        NewBookingNotificationPayload payload = notificationEvent.payload();
-        assertThat(notificationEvent.doctorId()).isEqualTo(response.getDoctor().getDoctorId());
+        NewBookingNotificationPayload payload = notificationCaptor.getValue();
         assertThat(payload.getType()).isEqualTo("NEW_BOOKING");
         assertThat(payload.getBookingId()).isEqualTo(response.getBookingId());
         assertThat(payload.getCaseId()).isEqualTo(response.getCaseId());
@@ -167,6 +237,173 @@ class BookingServiceTest {
         assertThat(payload.getStartTime()).isEqualTo(response.getStartTime());
         assertThat(payload.getLocation()).isEqualTo("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69");
         assertThat(payload.getCreatedAt()).isEqualTo(response.getCreatedAt());
+    }
+
+    @Test
+    void createBooking_sameDayDoesNotAutoProvisionMissionAndSession() {
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now())
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(smsService.getContactNumber()).thenReturn("01049163720");
+        doAnswer(invocation -> {
+            Booking booking = invocation.getArgument(0);
+            ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 21, 12, 0));
+            return booking;
+        }).when(bookingRepository).save(any(Booking.class));
+        when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(missionCommandService.createMissionForDispatch(any(CareCase.class), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    CareCase careCase = invocation.getArgument(0);
+                    Mission mission = Mission.builder()
+                            .careCase(careCase)
+                            .vehicleId(invocation.getArgument(1))
+                            .destination(invocation.getArgument(2))
+                            .dispatchedAt(invocation.getArgument(3))
+                            .targetWaypointNumber(invocation.getArgument(4))
+                            .build();
+                    ReflectionTestUtils.setField(mission, "id", 1L);
+                    return mission;
+                });
+
+        bookingService.createBooking(session.getPublicId(), request);
+
+        ArgumentCaptor<DispatchOutbox> outboxCaptor = ArgumentCaptor.forClass(DispatchOutbox.class);
+
+        verify(dispatchOutboxRepository).save(outboxCaptor.capture());
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
+                eq(null),
+                eq(null)
+        );
+        verify(missionRepository, never()).save(any(Mission.class));
+        verify(consultationLiveKitService, never()).createRoom(any());
+        verify(consultationSessionRepository, never()).save(any(ConsultationSession.class));
+
+        assertThat(outboxCaptor.getValue().isCompleted()).isFalse();
+    }
+
+    @Test
+    void createBooking_assignsMappedWaypointWhenAddressIsSupported() {
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(waypointAddressResolver.resolve("경상북도 김천시 증산면 장전4길 14"))
+                .thenReturn(new WaypointAddressResolver.ResolvedTarget(59));
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("GIMCHEON")
+                .address("경상북도 김천시 증산면 장전4길 14")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(smsService.getContactNumber()).thenReturn("01049163720");
+        doAnswer(invocation -> {
+            Booking booking = invocation.getArgument(0);
+            ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 25, 12, 0));
+            return booking;
+        }).when(bookingRepository).save(any(Booking.class));
+        when(dispatchOutboxRepository.save(any(DispatchOutbox.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.createBooking(session.getPublicId(), request);
+
+        verify(missionCommandService).createMissionForDispatch(
+                any(CareCase.class),
+                eq("veh_GIMCHEON_01"),
+                eq("경상북도 김천시 증산면 장전4길 14"),
+                eq(null),
+                eq(59)
+        );
     }
 
     @Test

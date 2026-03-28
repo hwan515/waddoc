@@ -20,6 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 
+/**
+ * 세션 재참여가 필요할 때 의사 또는 환자의 LiveKit 토큰을 다시 발급한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

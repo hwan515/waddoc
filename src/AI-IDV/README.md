@@ -1,148 +1,86 @@
-# AI-IDV Implementation Plan
+# AI-IDV
 
-현재 구현 상태와 운영 절차는 [GPU_SERVER_RUNBOOK.md](c:/Users/SSAFY/Desktop/second_PJT/S14P21A603/src/AI-IDV/GPU_SERVER_RUNBOOK.md)를 기준으로 본다.
+`src/AI-IDV`는 차량 탑승 환자 본인확인을 위한 FastAPI 기반 GPU 서버 구현 영역이다.
 
-## Goal
+현재 문서 역할은 아래처럼 나눈다.
 
-`src/AI-IDV`는 차량 탑승 환자 본인확인을 위한 FastAPI 기반 GPU 서버 구현 영역으로 사용한다.
+- `README.md`: 코드 기준 현재 계약과 범위 요약
+- `GPU_SERVER_RUNBOOK.md`: 설치, 기동, 운영 메모, 실제 구축 이슈
 
-이번 범위의 목표는 아래 3가지를 만족하는 IDV 서버를 설계하고 구현하는 것이다.
+## 현재 구현 범위
 
-- `POST /idv/api/v1/verify` 단일 엔드포인트로 얼굴 대조, 신분증 OCR, 신분증 얼굴 대조를 수행한다.
-- 모델 스택은 `SCRFD + AdaFace + PP-OCRv5(korean)`로 고정한다.
-- Spring Boot 메인 서버가 이 API를 호출하고, 차량 FE는 GPU 서버를 직접 호출하지 않는다.
+구현된 API:
 
-## Scope
+- `GET /idv/api/v1/health`
+- `POST /idv/api/v1/verify`
 
-포함 범위:
+구현된 모델 스택:
 
-- FastAPI 라우터, 스키마, 서비스 계층 추가
-- GPU 모델 preload 및 공용 model registry 구성
-- 얼굴 검출/정렬/임베딩 추론
-- 신분증 OCR 및 응답 정규화
-- 품질 검사와 `reasonCodes` 조합
-- 헬스체크 및 추론 timeout/에러 응답 정리
+- `SCRFD`
+- `AdaFace`
+- `PaddleOCR`
 
-제외 범위:
+이 서버가 담당하는 일:
 
-- STT
-- Triage
-- Consent
+- `referenceImage` 얼굴 검출 및 임베딩 비교
+- `faceImage` 얼굴 검출, 품질 검사, 임베딩 생성
+- `idCardImage` OCR
+- `idCardImage` 내부 얼굴과 `faceImage` 간 임베딩 비교
+
+이 서버가 하지 않는 일:
+
+- 환자 기준 이미지 조회
+- OCR 결과와 환자 원본 정보 재검증
+- 본인확인 성공 상태 캐시 저장
 - LiveKit 토큰 발급
-- Spring의 최종 환자 정보 재검증 로직
+- FE 촬영 UX 제어
 
-## Model Stack
+위 범위는 Spring Boot 및 FE 문서와 의도적으로 분리된다.
 
-### 1. Face Detection / Alignment
+## 빠른 진입점
 
-- Model: `SCRFD`
-- 역할:
-  - `referenceImage` 얼굴 검출
-  - `faceImage` 얼굴 검출
-  - `idCardImage` 내부 얼굴 검출
-  - landmark 기반 정렬
+핵심 파일:
 
-### 2. Face Recognition / Embedding
+- 앱 엔트리포인트: `app/main.py`
+- 설정: `app/core/config.py`
+- health 라우트: `app/api/v1/routes/health.py`
+- verify 라우트: `app/api/v1/routes/idv.py`
+- 추론 오케스트레이션: `app/services/idv_service.py`
+- 모델 로더: `app/services/idv_model_registry.py`
+- OCR 파서: `app/services/idv_ocr_parser.py`
+- 품질 검사: `app/services/idv_quality_service.py`
+- 유사도 계산: `app/services/idv_similarity.py`
+- 양자화 스크립트: `scripts/quantize_adaface_onnx.py`
+- 양자화 비교: `scripts/compare_quantized_models.py`
+- 운영 절차: `GPU_SERVER_RUNBOOK.md`
 
-- Model: `AdaFace`
-- 역할:
-  - `referenceImage` embedding 생성
-  - `faceImage` embedding 생성
-  - `idCardImage` 내부 얼굴 embedding 생성
-  - cosine similarity 계산
-- 운영 기본 형식:
-  - `adaface_ir101_webface12m.onnx`
-- checkpoint 변환:
-  - 공식 pretrained checkpoint `adaface_ir101_webface12m.ckpt`를 한 번 `onnx`로 export한 뒤 운영에 사용한다.
-
-### 3. OCR
-
-- Model: `PP-OCRv5(korean)`
-- 역할:
-  - 신분증 텍스트 검출 및 인식
-  - `name`, `rrn`, `address` 추출
-  - OCR confidence 산출
-
-## Runtime Assumptions
-
-- GPU 메모리: `16GB+`
-- Inference device: `cuda`
-- FastAPI worker: `1`
-- 모델은 앱 startup 시 preload
-- 다중 worker 금지
-
-## Model Assets
-
-- AdaFace 공식 pretrained 모델은 `ckpt` 형식으로 제공된다.
-- 운영 기본 경로:
-  - `./models/adaface/adaface_ir101_webface12m.onnx`
-- 변환 입력 경로:
-  - `./models/adaface/adaface_ir101_webface12m.ckpt`
-- 예시 다운로드:
-
-```bash
-python3 -m pip install gdown
-mkdir -p ./models/adaface
-python3 -m gdown https://drive.google.com/uc?id=1dswnavflETcnAuplZj1IOKKP0eM8ITgT -O ./models/adaface/adaface_ir101_webface12m.ckpt
-```
-
-- `huggingface-cli`를 사용할 수도 있지만 필수는 아니다.
-- 운영 서버에서는 `torch`와 `paddlepaddle-gpu` 충돌 가능성이 있으므로, runtime은 `onnxruntime-gpu + paddleocr + paddlepaddle-gpu` 조합을 기본으로 한다.
-- checkpoint export는 별도 1회 작업으로 수행한다.
-
-### AdaFace ONNX Export
-
-checkpoint를 내려받은 뒤 아래처럼 ONNX로 변환한다.
-
-```bash
-python3 -m pip install -r requirements-export.txt
-python3 scripts/export_adaface_to_onnx.py \
-  --checkpoint ./models/adaface/adaface_ir101_webface12m.ckpt \
-  --output ./models/adaface/adaface_ir101_webface12m.onnx \
-  --architecture ir_101
-```
-
-운영 서버 `.env`는 아래 값을 사용한다.
-
-```bash
-IDV_ADAFACE_MODEL_PATH=./models/adaface/adaface_ir101_webface12m.onnx
-```
-
-## Directory Plan
-
-```text
-src/AI-IDV/
-  README.md
-  app/
-    main.py
-    core/
-      config.py
-    api/
-      v1/
-        routes/
-          health.py
-          idv.py
-    schemas/
-      idv.py
-    services/
-      idv_model_registry.py
-      idv_service.py
-      idv_quality_service.py
-      idv_ocr_parser.py
-      idv_similarity.py
-```
-
-## API Contract
+## API 계약
 
 ### `GET /idv/api/v1/health`
 
-응답:
+현재 구현은 단순 `"status": "ok"`만 반환하지 않는다.
+
+응답 예시:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "ready": true,
+  "components": {
+    "scrfd": true,
+    "adaface": true,
+    "ppocr": true
+  },
+  "modelVersion": "scrfd-adaface-ppocrv5-korean-v1",
+  "lastError": null
 }
 ```
+
+동작 규칙:
+
+- 세 모델이 모두 적재되면 `status="ok"`, `ready=true`
+- 하나라도 미적재면 `status="degraded"`, `ready=false`
+- `lastError`에는 마지막 로딩 실패 원인이 남는다
 
 ### `POST /idv/api/v1/verify`
 
@@ -151,11 +89,18 @@ Request: `multipart/form-data`
 - `verificationId`
 - `patientId`
 - `verificationMode=FACE_AND_IDCARD`
-- `referenceImage`
+- `referenceImage` (optional)
 - `faceImage`
 - `idCardImage`
 
-Response:
+제약:
+
+- `verificationMode`는 `FACE_AND_IDCARD`만 허용
+- 파일은 비어 있으면 안 된다
+- 파일 크기는 `IDV_MAX_IMAGE_MB`를 초과할 수 없다
+- OpenCV로 디코드 가능한 이미지여야 한다
+
+응답 예시:
 
 ```json
 {
@@ -180,64 +125,78 @@ Response:
 }
 ```
 
-## Processing Pipeline
+응답 규칙:
 
-### Step 1. Input Validation
+- `matched`는 `reasonCodes`가 비어 있을 때만 `true`
+- `status`는 `matched=true`면 `SUCCEEDED`, 아니면 `FAILED`
+- `referenceImage`가 없으면 `faceSimilarityScore`는 `null`일 수 있다
+- `ocr`에는 `rrnMasked`만 포함되고 원문 주민번호는 응답으로 내보내지 않는다
 
-- multipart 필수 파트 존재 확인
-- 이미지 MIME/type 확인
-- 빈 파일 차단
-- 파일 크기 상한 적용
+## 현재 처리 파이프라인
 
-### Step 2. Reference Face Processing
+### 1. 입력 적재
 
-- `referenceImage`에서 얼굴 검출
-- 단일 얼굴만 허용
-- landmark 기반 정렬
-- AdaFace embedding 생성
+- 업로드 파일 바이트를 읽는다
+- 빈 파일, 최대 크기 초과, 디코드 불가 이미지를 바로 거절한다
 
-### Step 3. Live Face Processing
+### 2. 얼굴 검출
 
-- `faceImage`에서 얼굴 검출
-- 단일 얼굴만 허용
-- blur, glare, low-light 등 기본 품질 체크
-- 정렬 후 AdaFace embedding 생성
-- `faceSimilarityScore` 계산
+- `referenceImage`가 있으면 얼굴을 검출한다
+- `faceImage`에서 얼굴을 검출한다
+- `idCardImage`에서도 얼굴을 검출한다
 
-### Step 4. ID Card OCR Processing
+현재 구현은 별도 "신분증 문서 검출기"를 두지 않는다. `idCardImage`에 대해 수행하는 시각 처리는 OCR과 얼굴 검출이다.
 
-- `idCardImage`에서 신분증 영역 품질 검사
-- PP-OCRv5(korean) 실행
-- OCR 결과에서 `name`, `rrn`, `address` 파싱
-- 주민번호 원문은 메모리 내에서만 사용
-- 응답에는 `rrnMasked`만 포함
+### 3. 라이브 얼굴 품질 검사
 
-### Step 5. ID Card Face Processing
+`faceImage`에 대해서만 아래 품질 지표를 계산한다.
 
-- `idCardImage` 내부 얼굴 검출
-- 정렬 후 AdaFace embedding 생성
-- `faceImage` embedding과 비교
-- `idCardFaceSimilarityScore` 계산
+- blur score
+- brightness score
+- glare ratio
 
-### Step 6. Decision
+이 값이 임계값을 넘으면 `LOW_FACE_QUALITY`를 reason code에 추가한다.
 
-`matched=true` 조건:
+### 4. 얼굴 임베딩 및 유사도 계산
 
-- `faceSimilarityScore >= IDV_FACE_REFERENCE_THRESHOLD`
+- 얼굴 정렬은 landmark 기반 affine transform을 사용한다
+- AdaFace 입력은 `112x112`, `BGR -> NCHW`, `[-1, 1]` 정규화로 변환한다
+- `referenceImage`가 있고 기준 얼굴 검출에 성공한 경우에만 `faceSimilarityScore`를 계산한다
+- `idCardImage`에서는 검출된 얼굴 중 가장 큰 얼굴만 사용해 `idCardFaceSimilarityScore`를 계산한다
+
+### 5. OCR
+
+- PaddleOCR `predict()`가 가능하면 우선 사용한다
+- 아니면 legacy `ocr()` 경로로 fallback 한다
+- OCR 결과에서 아래 필드를 파싱한다
+  - `name`
+  - `rrn`
+  - `address`
+- 외부 응답에는 `rrnMasked`만 포함한다
+
+### 6. 최종 판정
+
+현재 구현의 `matched=true` 조건은 아래와 같다.
+
+- `referenceImage`가 있으면 기준 얼굴 검출 성공
+- `faceImage`에서 단일 얼굴 검출 성공
+- `idCardImage`에서 얼굴 검출 성공
+- 라이브 얼굴 품질 검사 통과
+- OCR confidence가 `IDV_OCR_MIN_CONFIDENCE` 이상
+- `name`, `rrn`, `address`가 모두 파싱됨
+- `referenceImage`가 있을 때만 `faceSimilarityScore >= IDV_FACE_REFERENCE_THRESHOLD`
 - `idCardFaceSimilarityScore >= IDV_FACE_IDCARD_THRESHOLD`
-- `ocrConfidence >= IDV_OCR_MIN_CONFIDENCE`
-- `name`, `rrn`, `address` 추출 성공
-- 얼굴 검출/단일 얼굴/신분증 검출 품질 검사 통과
 
-실패 시 `matched=false`와 함께 `reasonCodes`를 반환한다.
+반대로 말하면 현재 구현은 `reasonCodes`가 하나라도 생기면 실패한다.
 
-## Reason Code Plan
+## 실제 reason code
+
+현재 코드에서 실제로 추가되는 reason code는 아래 목록이다.
 
 - `REFERENCE_FACE_NOT_FOUND`
 - `LIVE_FACE_NOT_FOUND`
 - `MULTIPLE_FACES_DETECTED`
 - `LOW_FACE_QUALITY`
-- `IDCARD_NOT_DETECTED`
 - `IDCARD_FACE_NOT_FOUND`
 - `LOW_FACE_SIMILARITY`
 - `LOW_IDCARD_FACE_SIMILARITY`
@@ -245,126 +204,94 @@ Response:
 - `OCR_LOW_CONFIDENCE`
 - `REQUIRED_OCR_FIELDS_MISSING`
 
-## Service Responsibilities
+이전 계획 문서에 있던 `IDCARD_NOT_DETECTED`는 현재 코드에서 사용하지 않는다.
 
-### `idv_model_registry.py`
+## 설정 기준
 
-- SCRFD, AdaFace, PP-OCRv5 모델 로딩
-- singleton 관리
-- startup preload
-
-### `idv_service.py`
-
-- 전체 추론 orchestration
-- request -> pipeline -> response 변환
-
-### `idv_quality_service.py`
-
-- blur/glare/single-face/document-detected 검사
-- `qualityChecks` 생성
-
-### `idv_ocr_parser.py`
-
-- OCR raw output 파싱
-- `name`, `rrn`, `address` 추출
-- `rrnMasked` 생성
-
-### `idv_similarity.py`
-
-- embedding normalization
-- cosine similarity 계산
-- threshold 비교
-
-## Config Plan
-
-`config.py`에 아래 항목을 추가한다.
-
-- `IDV_DEVICE=cuda`
-- `IDV_SCRFD_MODEL_PATH`
-- `IDV_ADAFACE_MODEL_PATH`
-- `IDV_ADAFACE_ARCHITECTURE`
-- `IDV_OCR_LANG=korean`
-- `IDV_FACE_REFERENCE_THRESHOLD`
-- `IDV_FACE_IDCARD_THRESHOLD`
-- `IDV_OCR_MIN_CONFIDENCE`
-- `IDV_MAX_CONCURRENCY`
-- `IDV_TIMEOUT_MS`
-- `IDV_MAX_IMAGE_MB`
-
-## Concurrency Plan
-
-- GPU 서버는 `uvicorn --workers 1`
-- IDV 추론은 `asyncio.Semaphore`로 동시 처리 수 제한
-- 기본값은 `1~2` 수준에서 시작
-- timeout 발생 시 추론 중단 후 에러 응답 반환
-
-## Logging / Security Rules
-
-- 로그에 주민번호 원문 저장 금지
-- 로그 필드:
-  - `verificationId`
-  - `patientId`
-  - `matched`
-  - `reasonCodes`
-  - latency
-- 이미지 원본 저장은 기본 비활성
-- 디버그 저장이 필요하면 별도 운영 옵션으로 분리
-
-## Implementation Steps
-
-1. `app/main.py`와 `/idv/api/v1` 라우터 골격 추가
-2. `config.py`에 IDV 관련 env 추가
-3. `idv_model_registry.py`에서 모델 preload 구현
-4. `idv_similarity.py`와 `idv_quality_service.py` 구현
-5. `idv_ocr_parser.py` 구현
-6. `idv_service.py`에서 전체 pipeline 연결
-7. `schemas/idv.py` request/response 스키마 정의
-8. `/idv/api/v1/health`, `/idv/api/v1/verify` 라우터 연결
-9. unit/integration 테스트 추가
-10. Spring 연동 smoke test 수행
-
-## Test Plan
-
-### Unit
-
-- cosine similarity 계산
-- OCR parsing
-- rrn masking
-- reason code 조합
-
-### Integration
-
-- multipart 업로드 -> JSON 응답
-- 정상 케이스
-- 얼굴 불일치
-- 신분증 얼굴 불일치
-- OCR 실패
-- 신분증 미검출
-
-### Offline Eval
-
-- 실제 샘플셋으로 threshold 튜닝
-- false accept / false reject 확인
-
-## Acceptance Criteria
-
-- `POST /idv/api/v1/verify`가 문서 계약대로 응답한다.
-- 동일 인물일 때 `matched=true`가 안정적으로 나온다.
-- 타인 얼굴 또는 신분증 불일치 시 `matched=false`가 나온다.
-- 주민번호 원문이 응답/로그에 남지 않는다.
-- Spring에서 이 응답을 받아 본인확인 성공 상태를 캐시에 저장할 수 있다.
-
-## Runtime Install
-
-운영 서버 runtime 설치:
+주요 환경 변수:
 
 ```bash
-python -m pip install -r requirements.txt
-python -m pip install paddlepaddle-gpu==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+CORS_ORIGINS=http://localhost:5173
+IDV_DEVICE=cuda
+IDV_DET_SIZE=640,640
+IDV_SCRFD_MODEL_NAME=buffalo_l
+IDV_SCRFD_ROOT=./models/insightface
+IDV_ADAFACE_MODEL_PATH=./models/adaface/adaface_ir101_webface12m.onnx
+IDV_ADAFACE_ARCHITECTURE=ir_101
+IDV_OCR_LANG=korean
+IDV_FACE_REFERENCE_THRESHOLD=0.35
+IDV_FACE_IDCARD_THRESHOLD=0.30
+IDV_OCR_MIN_CONFIDENCE=0.80
+IDV_MAX_CONCURRENCY=1
+IDV_TIMEOUT_MS=5000
+IDV_MAX_IMAGE_MB=8
+IDV_FAIL_FAST_ON_STARTUP=false
+IDV_ADAFACE_QUANTIZATION=fp32
+IDV_MODEL_VERSION=scrfd-adaface-ppocrv5-korean-v1
 ```
 
-checkpoint export 전용 설치:
+세부 값은 `.env.example`와 `app/core/config.py`를 기준으로 본다.
 
-```bash
-python -m pip install -r requirements-export.txt
-```
+## 모델 양자화
+
+AdaFace ONNX 모델은 FP16/INT8 양자화를 지원한다.
+
+지원 variant:
+
+- `fp32`: 기본값. 원본 ONNX 모델
+- `fp16`: FP16 양자화. GPU 추론 시 권장. 모델 크기 약 50% 감소
+- `int8`: INT8 동적 양자화. CPU 추론 시 권장. 모델 크기 약 75% 감소
+
+설정: `IDV_ADAFACE_QUANTIZATION` 환경변수로 선택한다.
+
+양자화 생성, 검증, 적용 절차는 `GPU_SERVER_RUNBOOK.md`를 참고한다.
+
+## 의존성 정책
+
+운영 런타임:
+
+- `fastapi`
+- `uvicorn`
+- `python-multipart`
+- `pydantic-settings`
+- `numpy`
+- `opencv-python-headless`
+- `onnxruntime-gpu`
+- `insightface`
+- `paddleocr`
+- 별도 설치: `paddlepaddle-gpu==3.2.0`
+
+export 전용 런타임:
+
+- `torch`
+- `onnx`
+- `onnxscript`
+
+운영 런타임과 export 런타임을 분리하는 이유는 `torch`와 `paddlepaddle-gpu`의 CUDA/NCCL 충돌 가능성 때문이다.
+
+## 테스트 현황
+
+저장소에 있는 테스트:
+
+- `tests/test_config.py`
+- `tests/test_idv_model_registry.py`
+- `tests/test_idv_ocr_parser.py`
+- `tests/test_idv_similarity.py`
+
+현재 테스트가 보장하는 범위:
+
+- env alias 파싱
+- AdaFace 입력 전처리
+- OCR 파싱 및 주민번호 마스킹
+- cosine similarity 계산
+
+현재 저장소 기준으로 route/service 통합 테스트는 없다.
+
+## 현재 한계
+
+- `POST /idv/api/v1/verify` 수동 smoke test는 완료됐지만 자동화된 route/service 통합 테스트는 아직 없다
+- Spring Boot와의 실제 연동 smoke test도 아직 미완료 상태다
+- `qualityChecks.idCardDetected`는 현재 구현상 실질적인 문서 검출 결과가 아니라 고정 `true`로 내려간다
+- 별도 신분증 문서 검출 reason code는 아직 없다
+
+운영 절차와 구축 이슈는 `GPU_SERVER_RUNBOOK.md`를 본다.

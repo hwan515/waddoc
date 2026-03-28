@@ -3,6 +3,7 @@ package com.waddoc.domain.guardian.controller;
 import com.waddoc.domain.guardian.dto.GuardianPatientResponse;
 import com.waddoc.domain.guardian.dto.GuardianPatientsResponse;
 import com.waddoc.domain.guardian.service.GuardianQueryService;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.global.error.GlobalExceptionHandler;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,7 @@ class GuardianControllerTest {
                                 .phone("01012345678")
                                 .regionCode("ULLEUNG")
                                 .address("Ulleung-eup, Ulleung-gun")
+                                .gender(PatientGender.FEMALE)
                                 .relation("DAUGHTER")
                                 .approvedAt(LocalDate.of(2026, 1, 15))
                                 .build()
@@ -60,6 +62,7 @@ class GuardianControllerTest {
                 .andExpect(jsonPath("$.patients[0].phone").value("01012345678"))
                 .andExpect(jsonPath("$.patients[0].regionCode").value("ULLEUNG"))
                 .andExpect(jsonPath("$.patients[0].address").value("Ulleung-eup, Ulleung-gun"))
+                .andExpect(jsonPath("$.patients[0].gender").value("FEMALE"))
                 .andExpect(jsonPath("$.patients[0].relation").value("DAUGHTER"))
                 .andExpect(jsonPath("$.patients[0].approvedAt").value("2026-01-15"));
     }

@@ -11,6 +11,7 @@ import com.waddoc.domain.user.entity.Role;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.DeviceTerminalPrincipal;
 import com.waddoc.global.security.MissionTerminalPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -94,6 +95,25 @@ public class AccessControlService {
                 throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
             }
             return new AccessActor(missionTerminalPrincipal.subject(), missionTerminalPrincipal.actorRole());
+        }
+
+        throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+    }
+
+    public AccessActor assertDeviceTerminal(Authentication authentication, String requiredScope) {
+        DeviceTerminalPrincipal deviceTerminalPrincipal = assertDeviceTerminalPrincipal(authentication, requiredScope);
+        return new AccessActor(deviceTerminalPrincipal.terminalId(), deviceTerminalPrincipal.actorRole());
+    }
+
+    public DeviceTerminalPrincipal assertDeviceTerminalPrincipal(Authentication authentication, String requiredScope) {
+        assertAuthenticated(authentication);
+
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof DeviceTerminalPrincipal deviceTerminalPrincipal) {
+            if (!deviceTerminalPrincipal.hasScope(requiredScope)) {
+                throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
+            }
+            return deviceTerminalPrincipal;
         }
 
         throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);

@@ -13,6 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+/**
+ * 환자 본인 확인에 쓸 기준 이미지를 파일 스토리지에 저장한다.
+ */
 @Service
 public class PatientReferenceImageStorageService {
 

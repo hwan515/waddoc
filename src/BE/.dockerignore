@@ -1,0 +1,9 @@
+.git
+.gradle
+.gradle-local
+build
+bin
+local-storage
+*.iml
+.idea
+.vscode

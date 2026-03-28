@@ -159,6 +159,39 @@ class ConsultationPatientTokenServiceTest {
                 .isEqualTo(ErrorCode.IDENTITY_CHECK_NOT_CONFIRMED);
     }
 
+    @Test
+    void issuePatientTokenByMission_resolvesSessionFromMission() {
+        Authentication authentication = adminAuthentication();
+        ConsultationSession session = buildSession("pat_test123");
+        Mission mission = buildMission(session);
+        mission.updatePhase(MissionPhase.VERIFYING);
+
+        when(missionRepository.findWithDetailsByPublicId("ms_test123")).thenReturn(Optional.of(mission));
+        when(consultationSessionRepository.findByCareCase(mission.getCareCase())).thenReturn(Optional.of(session));
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
+        when(missionIdentityCheckCacheService.findVerified("ms_test123", "pat_test123"))
+                .thenReturn(Optional.of(new MissionIdentityCheckCacheService.VerifiedIdentityCheck(
+                        OffsetDateTime.parse("2026-03-18T10:05:00+09:00"),
+                        600
+                )));
+        when(consultationLiveKitService.issuePatientToken(session, session.getCareCase().getPatient())).thenReturn("patient-token");
+        when(consultationLiveKitService.getParticipantTokenExpiresInSeconds()).thenReturn(7200);
+
+        IssuePatientTokenResponse response = consultationPatientTokenService.issuePatientTokenByMission(
+                "ms_test123",
+                authentication
+        );
+
+        assertThat(response.getSessionId()).isEqualTo("ses_test123");
+        assertThat(response.getPatientToken()).isEqualTo("patient-token");
+        verify(missionRepository).findWithDetailsByPublicId("ms_test123");
+        verify(consultationSessionRepository).findByCareCase(mission.getCareCase());
+    }
+
     private Mission buildMission(ConsultationSession session) {
         Mission mission = Mission.builder()
                 .careCase(session.getCareCase())

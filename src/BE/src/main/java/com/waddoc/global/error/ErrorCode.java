@@ -19,6 +19,7 @@ public enum ErrorCode {
     AUTH_ACCOUNT_LOCKED(HttpStatus.LOCKED, "AUTH_ACCOUNT_LOCKED", "비활성화된 계정입니다."),
     AUTH_UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "인증이 필요합니다."),
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "해당 작업에 접근할 권한이 없습니다."),
+    AUTH_TERMINAL_BOOTSTRAP_DISABLED(HttpStatus.SERVICE_UNAVAILABLE, "AUTH_TERMINAL_BOOTSTRAP_DISABLED", "차량 단말 인증 설정이 비어 있습니다."),
     AUTH_REFRESH_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_REFRESH_EXPIRED", "리프레시 토큰이 만료되었거나 유효하지 않습니다."),
     AUTH_TOKEN_REUSE(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_REUSE", "이미 사용되었거나 무효화된 리프레시 토큰입니다."),
     AUTH_DOCTOR_PROFILE_REQUIRED(HttpStatus.FORBIDDEN, "AUTH_DOCTOR_PROFILE_REQUIRED", "의사 프로필이 연결되지 않은 계정입니다."),
@@ -51,6 +52,8 @@ public enum ErrorCode {
     MISSION_NOT_READY(HttpStatus.FORBIDDEN, "MISSION_NOT_READY", "미션이 환자 참가 가능한 준비 상태가 아닙니다."),
     MISSION_ALREADY_EXISTS(HttpStatus.CONFLICT, "MISSION_ALREADY_EXISTS", "이미 생성된 미션이 존재합니다."),
     MISSION_PHASE_TRANSITION_INVALID(HttpStatus.BAD_REQUEST, "MISSION_PHASE_TRANSITION_INVALID", "허용되지 않는 미션 단계 전환입니다."),
+    DEMO_MODE_DISABLED(HttpStatus.FORBIDDEN, "DEMO_MODE_DISABLED", "이 기능은 데모 모드에서만 사용할 수 있습니다."),
+    ROBOT_COMMAND_REQUEST_FAILED(HttpStatus.BAD_GATEWAY, "ROBOT_COMMAND_REQUEST_FAILED", "로봇 명령 API 호출에 실패했습니다."),
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND", "진료 세션을 찾을 수 없습니다."),
     SESSION_NOT_IN_PROGRESS(HttpStatus.CONFLICT, "SESSION_NOT_IN_PROGRESS", "세션이 진행 중 상태가 아닙니다."),
     PATIENT_NOT_JOINED_SESSION(HttpStatus.CONFLICT, "PATIENT_NOT_JOINED_SESSION", "해당 환자는 아직 이 세션에 입장한 이력이 없습니다."),
@@ -58,6 +61,7 @@ public enum ErrorCode {
     REFERENCE_IMAGE_MISSING(HttpStatus.CONFLICT, "REFERENCE_IMAGE_MISSING", "환자 기준 이미지가 등록되지 않았습니다."),
     IDENTITY_CHECK_FAILED(HttpStatus.FORBIDDEN, "IDENTITY_CHECK_FAILED", "본인 확인에 실패했습니다. 다시 촬영해주세요."),
     IDENTITY_CHECK_NOT_CONFIRMED(HttpStatus.FORBIDDEN, "IDENTITY_CHECK_NOT_CONFIRMED", "최근 본인 확인 성공 상태가 없습니다. 다시 본인 확인을 진행해주세요."),
+    TERMINAL_MISSION_CLAIM_FORBIDDEN(HttpStatus.FORBIDDEN, "TERMINAL_MISSION_CLAIM_FORBIDDEN", "선택한 접수 정보로는 해당 미션을 시작할 수 없습니다."),
     LIVEKIT_ROOM_CREATE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "LIVEKIT_ROOM_CREATE_FAILED", "LiveKit 룸 생성에 실패했습니다."),
     AI_IDV_REQUEST_FAILED(HttpStatus.BAD_GATEWAY, "AI_IDV_REQUEST_FAILED", "본인 확인 AI 서버 호출에 실패했습니다."),
     CONSULTATION_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "CONSULTATION_SUMMARY_NOT_FOUND", "진료 요약을 찾을 수 없습니다."),
@@ -67,6 +71,7 @@ public enum ErrorCode {
     BOOKING_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "BOOKING_NOT_CANCELLABLE", "취소할 수 없는 상태의 예약입니다."),
     SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "SLOT_NOT_FOUND", "유효하지 않은 슬롯입니다."),
     SLOT_NOT_IN_RECOMMENDATION(HttpStatus.BAD_REQUEST, "SLOT_NOT_IN_RECOMMENDATION", "해당 세션의 추천 결과에 포함되지 않은 슬롯입니다."),
+    VEHICLE_NOT_FOUND(HttpStatus.NOT_FOUND, "VEHICLE_NOT_FOUND", "차량을 찾을 수 없습니다."),
 
     // Recommendation
     RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "RECOMMENDATION_NOT_FOUND", "추천 결과를 찾을 수 없습니다."),

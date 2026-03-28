@@ -7,6 +7,7 @@ import com.waddoc.domain.intake.entity.ConfidenceLevel;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.vital.dto.VitalMeasurementResponse;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -24,9 +25,15 @@ public class CaseDetailResponse {
     private IntakeSummary intakeSummary;
     private String missionId;
     private String sessionId;
+    private VitalMeasurementResponse vitals;
     private LocalDateTime createdAt;
 
-    public static CaseDetailResponse of(CareCase careCase, Mission mission, ConsultationSession session) {
+    public static CaseDetailResponse of(
+            CareCase careCase,
+            Mission mission,
+            ConsultationSession session,
+            VitalMeasurementResponse vitals
+    ) {
         return CaseDetailResponse.builder()
                 .caseId(careCase.getPublicId())
                 .status(careCase.getStatus())
@@ -36,6 +43,7 @@ public class CaseDetailResponse {
                 .intakeSummary(IntakeSummary.from(careCase.getIntakeSession()))
                 .missionId(mission != null ? mission.getPublicId() : null)
                 .sessionId(session != null ? session.getPublicId() : null)
+                .vitals(vitals)
                 .createdAt(careCase.getCreatedAt())
                 .build();
     }
@@ -46,12 +54,20 @@ public class CaseDetailResponse {
         private String patientId;
         private String name;
         private String birthDate6;
+        private String birthDate;
+        private String gender;
+        private String phone;
+        private String address;
 
         static PatientInfo from(Patient patient) {
             return PatientInfo.builder()
                     .patientId(patient.getPublicId())
                     .name(patient.getName())
                     .birthDate6(patient.getBirthDate6())
+                    .birthDate(patient.getBirthDate() != null ? patient.getBirthDate().toString() : null)
+                    .gender(patient.getGender() != null ? patient.getGender().name() : null)
+                    .phone(patient.getPhone())
+                    .address(patient.getAddress())
                     .build();
         }
     }

@@ -1,32 +1,109 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
-import { generateECGData, mockConsultationDetails, mockVitals } from '../../mockdata/consultations';
+import useConsultationSummarySave from '../../hooks/useConsultationSummarySave';
 import apiClient from '../../utils/api';
 
+const EMPTY_VITALS = {
+    caseId: null,
+    temperature: null,
+    bloodPressureSys: null,
+    bloodPressureDia: null,
+    heartRate: null,
+    spO2: null,
+    ecgWaveform: null,
+    ecgSamplingHz: null,
+    ecgDurationSeconds: null,
+    measuredAt: null,
+    createdAt: null,
+    updatedAt: null,
+};
+
+const DEMO_CONSULTATION_DETAILS = {
+    caseId: 'test-room',
+    patientName: '데모 환자',
+    patientId: 'demo-patient',
+    age: 34,
+    gender: 'MALE',
+    symptoms: '테스트용 진료입니다.',
+    recentVisits: '최근 진료 기록 없음',
+    department: '내과',
+    bloodType: '확인 불가',
+    allergies: '데이터 없음',
+    medicalHistory: '데이터 없음',
+    doctorName: '데모 의사',
+};
+
+const DEMO_VITALS = {
+    ...EMPTY_VITALS,
+    temperature: 36.7,
+    bloodPressureSys: 128,
+    bloodPressureDia: 82,
+    heartRate: 72,
+    spO2: 98,
+    ecgWaveform: [0.12, 0.18, 0.11, -0.05, 0.45, 1.1, 0.38, -0.12, 0.08, 0.1, 0.14, 0.22, 0.12, -0.08, 0.5, 1.05, 0.33, -0.1, 0.07, 0.09],
+    ecgSamplingHz: 25,
+    ecgDurationSeconds: 8,
+    measuredAt: new Date().toISOString(),
+};
+
+const normalizeVitals = (vitals) => ({
+    ...EMPTY_VITALS,
+    ...(vitals || {}),
+});
+
+const createFallbackDetails = (caseId) => ({
+    caseId: caseId || null,
+    patientName: '알 수 없음',
+    patientId: null,
+    age: '-',
+    gender: null,
+    symptoms: '문진 내용이 없습니다.',
+    recentVisits: '최근 진료 기록 없음',
+    department: '내과',
+    bloodType: '확인 불가',
+    allergies: '데이터 없음',
+    medicalHistory: '데이터 없음',
+    doctorName: '담당의 미확인',
+});
+
 const VideoConference = () => {
-    // eslint-disable-next-line no-unused-vars
     const { id } = useParams();
     const navigate = useNavigate();
+    const isDemoMode = !id || id === 'test-room' || id.startsWith('RV_');
 
     const [isJoined, setIsJoined] = useState(false);
+    const [livekitToken, setLivekitToken] = useState('');
+    const [livekitUrl, setLivekitUrl] = useState('');
+    const [sessionId, setSessionId] = useState(null);
+    const isDoctorEndingRef = useRef(false);
+
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
-    const [ecgData, setEcgData] = useState(generateECGData(50));
-    
+
     // API 데이터 상태
     const [consultationDetails, setConsultationDetails] = useState(null);
+    const [vitals, setVitals] = useState(EMPTY_VITALS);
     const [isLoading, setIsLoading] = useState(true);
+    const {
+        isSavingSummary,
+        summarySaveStatus,
+        saveSummary,
+    } = useConsultationSummarySave({
+        sessionId,
+        isDemoMode,
+    });
 
     // 진료 내역 데이터 조회
     useEffect(() => {
         const fetchCaseDetails = async () => {
-            if (!id || id === 'test-room' || id.startsWith('RV_')) {
+            if (isDemoMode) {
                 // 테스트용 방일 경우 mock 활용
-                setConsultationDetails(mockConsultationDetails);
+                setConsultationDetails(DEMO_CONSULTATION_DETAILS);
+                setVitals(DEMO_VITALS);
                 setIsLoading(false);
                 return;
             }
@@ -56,84 +133,73 @@ const VideoConference = () => {
                     department: intake.departmentName || '내과',
                     bloodType: pt.bloodType ? pt.bloodType.replace('_PLUS', '+').replace('_MINUS', '-') : '확인 불가',
                     allergies: '데이터 없음',
-                    medicalHistory: '데이터 없음'
+                    medicalHistory: '데이터 없음',
+                    doctorName: caseData.doctor?.name || '담당의 미확인',
                 });
+                setVitals(normalizeVitals(caseData.vitals));
             } catch (error) {
                 console.error("Failed to fetch case details:", error);
-                setConsultationDetails(mockConsultationDetails); // 에러 시 더미 데이터 폴백 추가
+                setConsultationDetails(createFallbackDetails(id));
+                setVitals(EMPTY_VITALS);
             } finally {
                 setIsLoading(false);
             }
         };
 
         fetchCaseDetails();
-    }, [id]);
+    }, [id, isDemoMode]);
 
-    // 강제 화면 송출을 위해 임시 Ref 유지 (PreJoin용)
-    const localVideoRef = null;
-
-    // 카메라/마이크 On/Off 상태 동기화 (LiveKitRoom에서 props로 제어됨)
-    // PreJoinRoom에서 미디어 초기화를 담당하도록 변경 가능하지만, 현재는 LiveKitRoom 진입 전 상태로만 사용
-    useEffect(() => {
-        // initCamera(videoEnabled, micEnabled);
-        return () => {
-            // cleanupMedia();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-
-    // 심전도 차트 실시간 업데이트
-    useEffect(() => {
-        if (!isJoined) return;
-
-        const ecgInterval = setInterval(() => {
-            setEcgData(prev => {
-                const newData = [...prev.slice(1)];
-                const lastTime = prev[prev.length - 1].time;
-                newData.push({
-                    time: lastTime + 1,
-                    value: lastTime % 10 === 0 ? 90 : lastTime % 10 === 1 ? -30 : lastTime % 10 === 2 ? 70 : Math.random() * 10 - 5
-                });
-                return newData;
+    const handleEndCall = async (summaryData) => {
+        if (summaryData) {
+            isDoctorEndingRef.current = true;
+            const result = await saveSummary(summaryData, {
+                successMessage: '진료 요약을 저장하고 진료를 종료했습니다.',
+                savingMessage: '진료 종료 기록을 저장하는 중입니다.',
+                errorMessage: '진료 종료 기록 저장에 실패했습니다.',
             });
-        }, 100);
 
-        return () => clearInterval(ecgInterval);
-    }, [isJoined]);
+            if (!result.ok) {
+                isDoctorEndingRef.current = false;
+                return;
+            }
+        }
 
-    const handleEndCall = () => {
         navigate('/emr/dashboard');
     };
 
     const handleJoin = async () => {
         try {
-            if (!id || id === 'test-room' || id.startsWith('RV_')) {
+            if (isDemoMode) {
                 console.warn('임시(데모) 예약건이므로 방 생성 API를 건너뛰고 데모 모드로 전환합니다.');
+                setLivekitToken('test-token');
+                setLivekitUrl('wss://test.livekit.cloud');
                 setIsJoined(true);
                 return;
             }
 
             // [API 연동] 의사의 진료 세션 생성 및 LiveKit 토큰 발급 요청
             // POST /api/v1/cases/{caseId}/sessions
+            console.log(`🚀 [API 호출 준비] 전달받은 URL 파라미터(Case ID): ${id}`);
+            console.log(`➜ 호출될 엔드포인트: /api/v1/cases/${id}/sessions`);
+
             const response = await apiClient.post(`/cases/${id}/sessions`);
-            
+
             if (response.data && response.data.doctorToken) {
-                // 발급받은 토큰과 LiveKit URL을 로컬 스토리지에 보관 (추후 LiveKitRoom 컴포넌트에 주입 용도)
-                localStorage.setItem('webrtc_doctor_token', response.data.doctorToken);
-                if (response.data.room && response.data.room.livekitUrl) {
-                    localStorage.setItem('webrtc_livekit_url', response.data.room.livekitUrl);
-                }
-                
+                setLivekitToken(response.data.doctorToken);
+                setLivekitUrl(response.data.room?.livekitUrl || 'wss://test.livekit.cloud');
+                setSessionId(response.data.sessionId);
+
                 console.log("✅ 의사 세션(LiveKit) 생성 완료:", response.data);
             }
-            
+
             // 현재 단계(LiveKit 적용)에서는 발급받은 토큰으로 방에 입장
             setIsJoined(true);
-            
+
         } catch (error) {
             console.error("❌ 세션 생성 API 호출 실패:", error);
             console.warn("백엔드 세션 생성 API 호출에 실패했습니다.\n데모 진행을 위해 가짜 토큰으로 임시 입장합니다.");
+            setLivekitToken('test-token');
+            setLivekitUrl('wss://test.livekit.cloud');
             setIsJoined(true);
         }
     };
@@ -157,30 +223,33 @@ const VideoConference = () => {
         );
     }
 
-    const livekitToken = localStorage.getItem('webrtc_doctor_token') || 'test-token';
-    const livekitUrl = localStorage.getItem('webrtc_livekit_url') || 'wss://test.livekit.cloud';
-
     // 메인 화상 진료실 (의사 권한으로 접속)
     return (
         <LiveKitRoom
-            connect={livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
+            connect={!!livekitToken && livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
             video={videoEnabled}
             audio={micEnabled}
             token={livekitToken}
             serverUrl={livekitUrl}
             data-lk-theme="default"
             className="w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
-            onDisconnected={handleEndCall}
+            onDisconnected={() => {
+                if (isDoctorEndingRef.current) {
+                    return;
+                }
+                handleEndCall(null);
+            }}
         >
             <ConsultationRoom
                 details={consultationDetails}
-                vitals={mockVitals}
-                ecgData={ecgData}
+                vitals={vitals}
                 micEnabled={micEnabled}
                 setMicEnabled={setMicEnabled}
                 videoEnabled={videoEnabled}
                 setVideoEnabled={setVideoEnabled}
                 onEndCall={handleEndCall}
+                isSavingSummary={isSavingSummary}
+                summarySaveStatus={summarySaveStatus}
                 role="DOCTOR"
             />
             {/* LiveKit 오디오 랜더링 허용을 위한 트랙 랜더러 (기본 숨김) */}

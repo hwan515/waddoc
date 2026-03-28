@@ -14,7 +14,6 @@ const AuthStep = () => {
     const [authStatus, setAuthStatus] = useState('idle'); // idle, capturing, submitting, success, fail
     const [captureStep, setCaptureStep] = useState('face'); // 'face' -> 'idcard' -> 'submitting' -> 'done'
     const [errorMsg, setErrorMsg] = useState('');
-    const [failCount, setFailCount] = useState(0);
     const failCountRef = useRef(0);
 
     const [faceImgData, setFaceImgData] = useState(null);
@@ -33,15 +32,97 @@ const AuthStep = () => {
     const detectionIntervalRef = useRef(null);
     const countdownRef = useRef(null);
 
+    const startVideo = () => {
+        navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })
+            .then((stream) => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+            })
+            .catch((err) => {
+                console.error(err);
+                setErrorMsg("카메라 접근을 허용해주세요.");
+            });
+    };
+
+    const stopVideo = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+        }
+    };
+
+    const extractApiErrorMessage = (error, fallbackMessage) => {
+        const detail = error?.response?.data?.detail;
+        const message = error?.response?.data?.message;
+        return detail || message || fallbackMessage;
+    };
+
     // base64를 Blob으로 변환하는 유틸 함수
     const base64ToBlob = (base64, mimeType = 'image/jpeg') => {
+        const resolvedMimeType = mimeType || base64.match(/^data:([^;]+);base64,/)?.[1] || 'image/jpeg';
         const byteString = atob(base64.split(',')[1]);
         const ab = new ArrayBuffer(byteString.length);
         const ia = new Uint8Array(ab);
         for (let i = 0; i < byteString.length; i++) {
             ia[i] = byteString.charCodeAt(i);
         }
-        return new Blob([ab], { type: mimeType });
+        return new Blob([ab], { type: resolvedMimeType });
+    };
+
+    const captureVideoFrame = ({ cropRect } = {}) => {
+        const video = videoRef.current;
+        if (!video) {
+            throw new Error('Video stream is not ready');
+        }
+
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+            throw new Error('Canvas context is not available');
+        }
+
+        if (!cropRect) {
+            canvas.width = sourceWidth;
+            canvas.height = sourceHeight;
+            ctx.drawImage(video, 0, 0, sourceWidth, sourceHeight);
+            return canvas;
+        }
+
+        const containerWidth = video.clientWidth || sourceWidth;
+        const containerHeight = video.clientHeight || sourceHeight;
+        const scale = Math.max(containerWidth / sourceWidth, containerHeight / sourceHeight);
+        const renderedWidth = sourceWidth * scale;
+        const renderedHeight = sourceHeight * scale;
+        const offsetX = Math.max(0, (renderedWidth - containerWidth) / 2);
+        const offsetY = Math.max(0, (renderedHeight - containerHeight) / 2);
+
+        const overlayX = containerWidth * cropRect.x;
+        const overlayY = containerHeight * cropRect.y;
+        const overlayWidth = containerWidth * cropRect.width;
+        const overlayHeight = containerHeight * cropRect.height;
+
+        const sourceX = Math.max(0, Math.round((overlayX + offsetX) / scale));
+        const sourceY = Math.max(0, Math.round((overlayY + offsetY) / scale));
+        const sourceCropWidth = Math.min(sourceWidth - sourceX, Math.round(overlayWidth / scale));
+        const sourceCropHeight = Math.min(sourceHeight - sourceY, Math.round(overlayHeight / scale));
+
+        canvas.width = Math.max(1, sourceCropWidth);
+        canvas.height = Math.max(1, sourceCropHeight);
+        ctx.drawImage(
+            video,
+            sourceX,
+            sourceY,
+            sourceCropWidth,
+            sourceCropHeight,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+        return canvas;
     };
 
     // Load face-api models on mount
@@ -68,25 +149,6 @@ const AuthStep = () => {
             if (countdownRef.current) clearInterval(countdownRef.current);
         };
     }, []);
-
-    const startVideo = () => {
-        navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })
-            .then((stream) => {
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                }
-            })
-            .catch((err) => {
-                console.error(err);
-                setErrorMsg("카메라 접근을 허용해주세요.");
-            });
-    };
-
-    const stopVideo = () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-        }
-    };
 
     const handleVideoPlay = () => {
         if (!isModelLoaded) return;
@@ -170,18 +232,8 @@ const AuthStep = () => {
         setAuthStatus('capturing');
 
         try {
-            // 1. Canvas에 현재 비디오 프레임 그리기
-            const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth;
-            canvas.height = videoRef.current.videoHeight;
-            const ctx = canvas.getContext('2d');
-
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(videoRef.current, 0, 0);
-
-            // 2. Base64 이미지 추출
-            const base64Image = canvas.toDataURL('image/jpeg', 0.9);
+            const canvas = captureVideoFrame();
+            const base64Image = canvas.toDataURL('image/jpeg', 0.95);
             setFaceImgData(base64Image); // 얼굴 이미지 상태 저장
 
             // 3. 신분증 촬영 단계로 넘어감
@@ -199,16 +251,10 @@ const AuthStep = () => {
     const captureIdCard = async () => {
         setAuthStatus('capturing');
         try {
-            const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth;
-            canvas.height = videoRef.current.videoHeight;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(videoRef.current, 0, 0);
-
-            const idCardBase64 = canvas.toDataURL('image/jpeg', 0.9);
+            const canvas = captureVideoFrame({
+                cropRect: { x: 0.25, y: 0.30, width: 0.50, height: 0.40 }
+            });
+            const idCardBase64 = canvas.toDataURL('image/png');
             
             setCaptureStep('submitting');
             await submitAuth(faceImgData, idCardBase64);
@@ -222,62 +268,55 @@ const AuthStep = () => {
     const submitAuth = async (faceBase64, idCardBase64) => {
         setAuthStatus('submitting');
         try {
-            // 4. FormData 생성 및 API 호출
-            const formData = new FormData();
-            formData.append('patientId', 'pat_Zk3mQ9'); // 임시 환자 ID (케이스 정보를 통해 받아와야함)
-            formData.append('faceImage', base64ToBlob(faceBase64), 'face.jpg');
-            formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.jpg');
-            
-            // 임시 세션 ID
-            const sessionId = "ses_L6pQr1"; 
-            
-            try {
-                // 실제 백엔드 API 호출. (API 문서 10.2 참조)
-                const response = await apiClient.post(`/sessions/${sessionId}/participants/patient/token`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' } // axios가 내부적으로 boundary를 자동 세팅합니다.
-                });
-                
-                // 성공 시 응답값(JWT 토큰 및 URL)을 localStorage 등에 임시 보관
-                if (response.data && response.data.patientToken) {
-                    localStorage.setItem('webrtc_patient_token', response.data.patientToken);
-                    if (response.data.room && response.data.room.livekitUrl) {
-                        localStorage.setItem('webrtc_livekit_url', response.data.room.livekitUrl);
-                    }
-                }
-                
-                setAuthStatus('success');
-                setFailCount(0);
-                failCountRef.current = 0;
-                stopVideo();
-                setTimeout(() => {
-                    navigate('/robot/measure-intro');
-                }, 2000);
-            } catch (apiError) {
-                console.warn('API 실패. 데모를 위해 강제 성공 처리합니다.', apiError);
-                // 데모 목적으로 API가 실패하더라도 2초 후 성공으로 간주하여 다음 화면으로 넘김 (추후 제거)
-                setAuthStatus('success');
-                stopVideo();
-                setTimeout(() => {
-                    navigate('/robot/measure-intro');
-                }, 2000);
+            const missionId = localStorage.getItem('current_mission_id');
+            const terminalToken = localStorage.getItem('robot_mission_terminal_token');
+            console.log("🚀 [인증 시작] 대상 미션 ID:", missionId);
+
+            if (!missionId) {
+                handleAuthFail('선택된 미션이 없습니다. 진료 시작 화면으로 돌아가 다시 진행해주세요.');
+                return;
             }
+
+            if (!terminalToken) {
+                handleAuthFail('차량 단말 인증 정보가 없습니다. 진료 시작 화면으로 돌아가 다시 진행해주세요.');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('faceImage', base64ToBlob(faceBase64), 'face.jpg');
+            formData.append('idCardImage', base64ToBlob(idCardBase64), 'idcard.png');
+
+            await apiClient.post(`/missions/${missionId}/identity-check`, formData, {
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    'Authorization': `Bearer ${terminalToken}`
+                } 
+            });
+            
+            setAuthStatus('success');
+            failCountRef.current = 0;
+            stopVideo();
+            setTimeout(() => {
+                navigate('/robot/measure-intro');
+            }, 2000);
         } catch (err) {
             console.error("Auth Error:", err);
-            handleAuthFail();
+            handleAuthFail(extractApiErrorMessage(err, '본인 인증에 실패했습니다. 다시 시도해주세요.'));
         }
     };
 
-    const handleAuthFail = () => {
+    const handleAuthFail = (message = '인증에 실패하여 다시 시도해주세요') => {
         setAuthStatus('fail');
         failCountRef.current += 1;
-        setFailCount(failCountRef.current);
+        setCaptureStep('face');
+        setFaceImgData(null);
 
         if (failCountRef.current >= 5) {
             setErrorMsg("진료 예약했던 번호로 문의해주세요.");
             // 5회 이상 실패 시 무한 루프를 막거나 완전히 종료하려면 여기서 리셋 타이머를 안 줄 수도 있습니다.
             // 일단은 에러 유지 상태로 둠
         } else {
-            setErrorMsg("인증에 실패하여 다시 시도해주세요");
+            setErrorMsg(message);
             setTimeout(() => {
                 setAuthStatus('idle');
                 setErrorMsg('');
@@ -285,16 +324,16 @@ const AuthStep = () => {
         }
     };
     return (
-        <div className="min-h-screen bg-[#061A40] flex flex-col items-center justify-center relative overflow-hidden text-white font-sans">
+        <div className="min-h-screen bg-dark flex flex-col items-center justify-center relative overflow-hidden text-white font-sans">
             {/* Background Decorations */}
-            <div className="absolute top-1/4 left-0 w-96 h-96 bg-[#0353A4] rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
-            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-[#B9D6F2] rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
+            <div className="absolute top-1/4 left-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-40"></div>
+            <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
             <main className="z-10 flex flex-col items-center max-w-5xl w-full p-8">
 
                 {/* Header Info */}
                 <div className="text-center mb-8 animate-fade-in-up">
-                    <h1 className="text-4xl font-extrabold text-[#B9D6F2] tracking-tight mb-3 flex items-center justify-center gap-3">
+                    <h1 className="text-4xl font-extrabold text-secondary tracking-tight mb-3 flex items-center justify-center gap-3">
                         <ScanFace className="w-10 h-10" />
                         본인 인증
                     </h1>
@@ -316,12 +355,12 @@ const AuthStep = () => {
                 </div>
 
                 {/* Camera View Box */}
-                <div className="relative w-full max-w-3xl aspect-[16/10] bg-[#001D3D] rounded-3xl border border-white/20 shadow-2xl overflow-hidden backdrop-blur-md">
+                <div className="relative w-full max-w-3xl aspect-[16/10] bg-dark rounded-3xl border border-white/20 shadow-2xl overflow-hidden backdrop-blur-md">
 
                     {!isModelLoaded ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-[#061A40]/80">
-                            <div className="w-12 h-12 border-4 border-[#0353A4] border-t-transparent rounded-full animate-spin mb-4"></div>
-                            <span className="text-[#B9D6F2] font-bold text-lg animate-pulse">인식 모델을 불러오는 중입니다...</span>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-dark/80">
+                            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <span className="text-secondary font-bold text-lg animate-pulse">인식 모델을 불러오는 중입니다...</span>
                         </div>
                     ) : (
                         <video
@@ -388,7 +427,7 @@ const AuthStep = () => {
                         <div className="absolute bottom-8 left-0 right-0 z-20 flex justify-center animate-fade-in-up">
                             <button 
                                 onClick={captureIdCard}
-                                className="bg-[#B9D6F2] hover:bg-white text-[#061A40] font-bold text-xl px-10 py-4 rounded-full shadow-[0_0_20px_rgba(185,214,242,0.4)] transition-all flex items-center gap-2"
+                                className="bg-secondary hover:bg-white text-dark font-bold text-xl px-10 py-4 rounded-full shadow-[0_0_20px_rgba(185,214,242,0.4)] transition-all flex items-center gap-2"
                             >
                                 <ScanFace className="w-6 h-6" />
                                 신분증 촬영하기
@@ -398,7 +437,7 @@ const AuthStep = () => {
 
                     {/* Countdown UI */}
                     {countdown !== null && authStatus === 'idle' && (
-                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#061A40]/30 backdrop-blur-sm animate-fade-in">
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-dark/30 backdrop-blur-sm animate-fade-in">
                             <div className="text-8xl font-black text-white drop-shadow-[0_0_20px_rgba(50,215,75,0.8)] animate-bounce-custom">
                                 {countdown}
                             </div>
@@ -408,18 +447,18 @@ const AuthStep = () => {
                     {/* Capturing / Submitting States */}
                     {(authStatus === 'capturing' || authStatus === 'submitting') && (
                         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/90 animate-flash">
-                            <div className="w-16 h-16 border-4 border-[#0353A4] border-t-transparent rounded-full animate-spin mb-4"></div>
-                            <span className="text-3xl font-bold text-[#061A40]">
+                            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <span className="text-3xl font-bold text-dark">
                                 {authStatus === 'capturing' ? '촬영 중...' : '신원 검증 중입니다...'}
                             </span>
                         </div>
                     )}
 
                     {authStatus === 'success' && (
-                        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#061A40]/90 backdrop-blur-md animate-fade-in">
+                        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-dark/90 backdrop-blur-md animate-fade-in">
                             <CheckCircle2 className="w-24 h-24 text-green-400 mb-4 animate-scale-up" />
                             <h2 className="text-3xl font-bold text-white mb-2">본인 인증 완료</h2>
-                            <p className="text-[#B9D6F2] text-lg font-medium">화상 진료실로 이동합니다...</p>
+                            <p className="text-secondary text-lg font-medium">건강정보 측정 단계로 넘어갑니다...</p>
                         </div>
                     )}
                 </div>

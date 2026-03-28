@@ -17,14 +17,16 @@ export default function FeaturePhone() {
     endCall,
     handleDigit,
     submitDialBuffer,
+    clearDialBuffer,
   } = useIntakeFlow();
 
   const isActive = phase !== 'IDLE' && phase !== 'SESSION_END';
-  const dialDisabled = !isActive || isLoading;
+  const dialDisabled = isLoading;
 
   // 전송 버튼: 번호 입력 모드에서 표시
   const showSend =
     phase === 'IDENTIFY_BY_INPUT' || phase === 'EXISTING_IDENTIFY';
+  const showDialBuffer = phase === 'IDLE' || phase === 'SESSION_END' || showSend;
 
   return (
     <div className="feature-phone">
@@ -40,7 +42,7 @@ export default function FeaturePhone() {
         {/* 화면 영역: 상태바 + 대화 */}
         <div className="phone-screen">
           <StatusBar phase={phase} isActive={isActive} />
-          <DialBufferDisplay buffer={dialBuffer} visible={showSend} />
+          <DialBufferDisplay buffer={dialBuffer} visible={showDialBuffer} />
           <ChatDisplay />
         </div>
 
@@ -50,6 +52,7 @@ export default function FeaturePhone() {
           onCall={startCall}
           onHangUp={endCall}
           onSend={submitDialBuffer}
+          onClear={clearDialBuffer}
           dialBuffer={dialBuffer}
           showSend={showSend}
         />

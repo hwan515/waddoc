@@ -5,6 +5,7 @@ import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
 import CalendarView from '../../components/patient/CalendarView';
 import ListView from '../../components/patient/ListView';
+import { parsePrescriptionNote } from '../../utils/prescriptionNote';
 
 const PatientPortal = () => {
     const [activeTab, setActiveTab] = useState('list');
@@ -30,8 +31,6 @@ const PatientPortal = () => {
                     const summariesRes = await apiClient.get(`/guardians/patients/${primaryPatient.patientId}/summaries`);
                     const summaries = summariesRes.data.summaries || [];
                     
-                    console.log("[Portal] 진료 기록(summaries) API 응답 확인:", summariesRes.data);
-
                     setUser({
                         ...primaryPatient,
                         stats: {
@@ -41,18 +40,22 @@ const PatientPortal = () => {
                     });
 
                     // 리스트 뷰 & 캘린더 뷰 포맷으로 파싱
-                    const mappedRecords = summaries.map((s, index) => ({
-                        id: s.caseId || index,
-                        date: s.consultationDate || '',
-                        time: '-', // API 명세상 시간은 제공되지 않으므로 임시 대시
-                        doctorName: s.doctorName,
-                        department: s.departmentName,
-                        status: '완료', // summaries API는 완료된 것만 내려줌
-                        hasPrescription: s.isPrescriptionIssued,
-                        hasNote: !!s.summaryNote,
-                        summaryNote: s.summaryNote,
-                        prescriptionNote: s.prescriptionNote
-                    }));
+                    const mappedRecords = summaries.map((s, index) => {
+                        const parsedPrescription = parsePrescriptionNote(s.prescriptionNote);
+
+                        return {
+                            id: s.caseId || index,
+                            date: s.consultationDate || '',
+                            doctorName: s.doctorName,
+                            department: s.departmentName,
+                            status: '완료', // summaries API는 완료된 것만 내려줌
+                            hasPrescription: Boolean(s.isPrescriptionIssued || parsedPrescription.hasData),
+                            hasNote: !!s.summaryNote,
+                            summaryNote: s.summaryNote,
+                            prescriptionNote: s.prescriptionNote,
+                            prescription: parsedPrescription,
+                        };
+                    });
 
                     const mappedEvents = summaries.map((s, index) => ({
                         id: s.caseId || index,
@@ -65,7 +68,11 @@ const PatientPortal = () => {
                     setMedicalRecords(mappedRecords);
                     setCalendarEvents(mappedEvents);
                 } else {
-                    setUser({ ...user, name: '연결된 환자 없음', stats: { totalVisits: 0, nextReservation: '없음' } });
+                    setUser((currentUser) => ({
+                        ...currentUser,
+                        name: '연결된 환자 없음',
+                        stats: { totalVisits: 0, nextReservation: '없음' },
+                    }));
                 }
             } catch (error) {
                 console.error("Failed to fetch guardian patient data:", error);
@@ -94,18 +101,16 @@ const PatientPortal = () => {
             <header className="bg-white border-b border-slate-200 shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
                 <div className="flex items-center gap-8">
                     {/* Logo */}
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-                        <div className="bg-[#0353A4]/10 p-1.5 rounded-lg">
-                            <Activity className="w-6 h-6 text-[#0353A4]" strokeWidth={2.5} />
-                        </div>
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/patient/portal')}>
+                        <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-10 w-10" />
                         <span className="font-bold text-xl text-slate-800 tracking-tight">
-                            Waddoc<span className="text-[#0353A4]"> 왔닥</span>
+                            Waddoc<span className="text-primary"> 왔닥</span>
                         </span>
                     </div>
 
                     {/* Patient Name */}
-                    <div className="flex items-center gap-2 px-4 py-1.5 bg-[#F0F4F8] rounded-full">
-                        <User className="w-4 h-4 text-[#0353A4]" />
+                    <div className="flex items-center gap-2 rounded-full bg-slate-100 px-4 py-1.5">
+                        <User className="w-4 h-4 text-primary" />
                         <span className="font-semibold text-slate-700">
                             {user.name === '불러오는 중...' || user.name === '연결된 환자 없음' ? user.name : `${user.name} 환자님`}
                         </span>
@@ -115,14 +120,14 @@ const PatientPortal = () => {
                     <nav className="flex items-center gap-2">
                         <button
                             onClick={() => setActiveTab('list')}
-                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all ${activeTab === 'list' ? 'bg-[#0353A4] text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
+                            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'list' ? 'bg-primary text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
                         >
                             <List className="w-4 h-4" />
                             리스트보기
                         </button>
                         <button
                             onClick={() => setActiveTab('calendar')}
-                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-all ${activeTab === 'calendar' ? 'bg-[#0353A4] text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
+                            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${activeTab === 'calendar' ? 'bg-primary text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}
                         >
                             <CalendarIcon className="w-4 h-4" />
                             달력보기
@@ -133,7 +138,7 @@ const PatientPortal = () => {
                 <div className="flex items-center gap-4 border-l border-slate-200 pl-4">
                     <button
                         onClick={() => navigate('/patient/mypage')}
-                        className="text-sm font-medium text-slate-600 hover:text-[#0353A4] transition-colors"
+                        className="text-sm font-medium text-slate-600 transition-colors hover:text-primary"
                     >
                         마이페이지
                     </button>
@@ -149,7 +154,7 @@ const PatientPortal = () => {
             <main className="flex-1 w-full max-w-7xl mx-auto p-4 md:p-6 flex flex-col h-full animate-fade-in-up">
                 <div className="bg-white border border-slate-200 shadow-sm rounded-3xl flex-1 flex flex-col overflow-hidden relative">
                     {/* Background acccent line */}
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0353A4]/20 via-[#B9D6F2] to-[#B9D6F2]/30 z-10"></div>
+                    <div className="absolute top-0 left-0 z-10 h-1 w-full bg-linear-to-r from-primary/20 via-secondary to-secondary/30"></div>
 
                     {activeTab === 'calendar' ? (
                         <CalendarView records={calendarEvents} patientName={user.name} />

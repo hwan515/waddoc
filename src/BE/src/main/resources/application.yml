@@ -1,6 +1,19 @@
 server:
   port: 8080
 
+management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
@@ -24,6 +37,46 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.waddoc.domain.dispatch.event,com.waddoc.domain.notification.event,com.waddoc.domain.notification.dto,com.waddoc.domain.mission.event
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+
 app:
   public-id:
     length: 8
+  demo-mode:
+    enabled: ${APP_DEMO_MODE_ENABLED:false}
+
+dispatch:
+  outbox-relay-interval-ms: 1000
+  default-vehicle-id: ${DISPATCH_DEFAULT_VEHICLE_ID:veh_GIMCHEON_01}
+  waypoint-mapping-resource: ${DISPATCH_WAYPOINT_MAPPING_RESOURCE:classpath:waypoint_address.json}
+
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:ws://localhost:9001}
+  client-id: ${MQTT_CLIENT_ID:spring-waddoc}
+
+monitoring:
+  access:
+    cookie-name: monitoring_access
+    cookie-path: /grafana/
+    cookie-max-age: 28800
+springdoc:
+  api-docs:
+    path: /swagger/spring/openapi.json
+  swagger-ui:
+    path: /swagger/spring
+    url: /swagger/spring/openapi.json
+    disable-swagger-default-url: true

@@ -3,8 +3,10 @@ package com.waddoc.domain.notification.dto;
 import com.waddoc.domain.booking.entity.Booking;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.patient.entity.PatientGender;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,6 +15,8 @@ import java.time.ZoneId;
 
 @Getter
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class NewBookingNotificationPayload {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -26,6 +30,8 @@ public class NewBookingNotificationPayload {
     private String patientId;
     private String patientName;
     private PatientGender patientGender;
+    private String patientBirthDate;
+    private String patientPhone;
     private LocalDate appointmentDate;
     private LocalTime startTime;
     private String location;
@@ -42,6 +48,8 @@ public class NewBookingNotificationPayload {
                 .patientId(booking.getPatient().getPublicId())
                 .patientName(booking.getPatient().getName())
                 .patientGender(booking.getPatient().getGender())
+                .patientBirthDate(booking.getPatient().getBirthDate().toString())
+                .patientPhone(booking.getPatient().getPhone())
                 .appointmentDate(booking.getAppointmentDate())
                 .startTime(booking.getStartTime())
                 .location(booking.getPatient().getAddress())

@@ -1,17 +1,23 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Activity, ShieldCheck } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
 import apiClient from '../../../utils/api';
 
 const EMRLogin = () => {
     const navigate = useNavigate();
+    const authenticatedRole = useAuthStore((state) => state.user?.role);
 
     const [formData, setFormData] = useState({
         id: '',
         password: '',
-        role: 'doctor'
     });
+
+    useEffect(() => {
+        if (authenticatedRole === 'DOCTOR') {
+            navigate('/emr/dashboard', { replace: true });
+        }
+    }, [authenticatedRole, navigate]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -31,12 +37,27 @@ const EMRLogin = () => {
             });
 
             const { accessToken, user } = response.data;
-            if (user?.role === 'DOCTOR') {
-                useAuthStore.getState().setAuth(accessToken, user);
-                navigate('/emr/dashboard');
-            } else {
-                alert('의사 전용 계정이 아닙니다.');
+            if (user?.role !== 'DOCTOR') {
+                useAuthStore.getState().logout();
+                try {
+                    await apiClient.post(
+                        '/auth/logout',
+                        {},
+                        {
+                            headers: {
+                                Authorization: `Bearer ${accessToken}`,
+                            },
+                        }
+                    );
+                } catch (logoutError) {
+                    console.error('Doctor-only logout cleanup failed:', logoutError);
+                }
+                alert('EMR 로그인은 의사 계정으로만 사용할 수 있습니다.');
+                return;
             }
+
+            useAuthStore.getState().setAuth(accessToken, user);
+            navigate('/emr/dashboard', { replace: true });
         } catch (error) {
             console.error('Login Failed:', error);
             alert('로그인에 실패했습니다. 사번과 비밀번호를 다시 확인해주세요.');
@@ -49,10 +70,10 @@ const EMRLogin = () => {
 
                 {/* 헤더 */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0353A4] mb-4 shadow-lg shadow-blue-900/20">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4 shadow-lg shadow-primary/20">
                         <Activity className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">EMR(Mock)</h1>
+                    <h1 className="text-2xl font-bold text-slate-800 tracking-tight">EMR</h1>
                 </div>
 
                 {/* 로그인 카드 */}
@@ -67,7 +88,7 @@ const EMRLogin = () => {
                                 required
                                 value={formData.id}
                                 onChange={handleChange}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#0353A4] focus:border-[#0353A4] transition-all bg-slate-50 focus:bg-white"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-primary focus:border-primary transition-all bg-slate-50 focus:bg-white"
                                 placeholder="사번을 입력하세요 (예: D10023)"
                             />
                         </div>
@@ -75,7 +96,7 @@ const EMRLogin = () => {
                         <div>
                             <div className="flex items-center justify-between mb-2">
                                 <label className="block text-sm font-semibold text-slate-700">비밀번호</label>
-                                <a href="#" className="text-sm font-semibold text-[#0353A4] hover:underline">비밀번호 찾기</a>
+                                <a href="#" className="text-sm font-semibold text-primary hover:underline">비밀번호 찾기</a>
                             </div>
                             <input
                                 name="password"
@@ -83,27 +104,30 @@ const EMRLogin = () => {
                                 required
                                 value={formData.password}
                                 onChange={handleChange}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#0353A4] focus:border-[#0353A4] transition-all bg-slate-50 focus:bg-white"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-primary focus:border-primary transition-all bg-slate-50 focus:bg-white"
                                 placeholder="비밀번호를 입력하세요"
                             />
                         </div>
 
-                        <div className="flex items-center gap-2 text-sm text-slate-600 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-                            <ShieldCheck className="w-4 h-4 text-[#0353A4]" />
+                        <div className="flex items-center gap-2 text-[13px] text-slate-600 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                            <ShieldCheck className="w-4 h-4 text-primary" />
                             <span>의료법에 의거, 비인가자의 접근은 처벌받을 수 있습니다.</span>
                         </div>
 
                         <button
                             type="submit"
-                            className="w-full py-3.5 bg-[#0353A4] hover:bg-blue-800 text-white font-bold rounded-xl transition-colors shadow-md shadow-blue-900/20"
+                            className="w-full py-3.5 bg-primary hover:bg-accent-1 text-white font-bold rounded-xl transition-colors shadow-md shadow-primary/20"
                         >
                             로그인
                         </button>
                     </form>
                 </div>
 
-                <div className="text-center mt-8 text-sm text-slate-400 font-medium whitespace-pre-line">
-                    ⓒ 2026 MediCloud Healthcare Solutions. All Rights Reserved.
+                <div className="text-center mt-8 space-y-3 text-sm text-slate-400 font-medium whitespace-pre-line">
+                    <Link to="/" className="inline-flex items-center justify-center text-sm font-semibold text-primary hover:text-accent-1">
+                        메인페이지로 돌아가기
+                    </Link>
+                    <div>ⓒ 2026 MediCloud Healthcare Solutions. All Rights Reserved.</div>
                 </div>
             </div>
         </div>

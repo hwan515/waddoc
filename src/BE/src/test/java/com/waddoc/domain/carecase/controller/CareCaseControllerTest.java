@@ -7,6 +7,7 @@ import com.waddoc.domain.consultation.dto.CreateConsultationSessionResponse;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.service.ConsultationSessionCommandService;
 import com.waddoc.domain.carecase.service.CareCaseQueryService;
+import com.waddoc.domain.vital.dto.VitalMeasurementResponse;
 import com.waddoc.global.error.GlobalExceptionHandler;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -51,11 +53,19 @@ class CareCaseControllerTest {
                 .thenReturn(CaseDetailResponse.builder()
                         .caseId("case_test123")
                         .status(CaseStatus.PREPARING)
+                        .vitals(VitalMeasurementResponse.builder()
+                                .temperature(new BigDecimal("36.7"))
+                                .heartRate(72)
+                                .spO2(98)
+                                .build())
                         .build());
 
         mockMvc.perform(get("/api/v1/cases/{caseId}", "case_test123"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.caseId").value("case_test123"));
+                .andExpect(jsonPath("$.caseId").value("case_test123"))
+                .andExpect(jsonPath("$.vitals.temperature").value(36.7))
+                .andExpect(jsonPath("$.vitals.heartRate").value(72))
+                .andExpect(jsonPath("$.vitals.spO2").value(98));
     }
 
     @Test

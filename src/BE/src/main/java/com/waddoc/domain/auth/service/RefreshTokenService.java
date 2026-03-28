@@ -12,6 +12,9 @@ import java.util.HexFormat;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * 리프레시 토큰을 Redis에 저장하고 사용자별 인덱스를 함께 관리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenService {

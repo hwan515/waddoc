@@ -37,6 +37,7 @@ export const useSSE = () => {
                     },
                     
                     onmessage(event) {
+                        console.log("🔥 [SSE Raw Message]", event.event, event.data);
                         if (event.event === 'connected') {
                             setIsConnected(true);
                         } else if (event.event === 'ping') {

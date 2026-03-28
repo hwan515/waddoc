@@ -12,6 +12,9 @@ import java.time.ZoneId;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 본인 확인 성공 결과를 짧은 TTL로 캐시에 저장해 같은 미션에서 재사용한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

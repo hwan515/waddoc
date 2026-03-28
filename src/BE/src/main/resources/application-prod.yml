@@ -16,11 +16,13 @@ jwt:
   refresh-token-expiry: 604800
   mission-terminal-token-expiry: ${MISSION_TERMINAL_TOKEN_EXPIRY:1800}
 
+robot-terminal:
+  registry: ${ROBOT_TERMINAL_REGISTRY:}
+
 ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
   idv-url: ${AI_IDV_URL}
   idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:5000}
-  triage-url: ${AI_TRIAGE_URL}
 
 file:
   storage-root: ${FILE_STORAGE_ROOT:/data/uploads}
@@ -45,3 +47,10 @@ server:
     session:
       cookie:
         secure: true
+
+monitoring:
+  access:
+    cookie-secret: ${MONITORING_COOKIE_SECRET}
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:ws://mosquitto:9001}

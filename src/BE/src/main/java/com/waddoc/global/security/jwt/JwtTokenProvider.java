@@ -2,6 +2,7 @@ package com.waddoc.global.security.jwt;
 
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.global.security.AuthenticatedUser;
+import com.waddoc.global.security.DeviceTerminalPrincipal;
 import com.waddoc.global.security.MissionTerminalPrincipal;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -25,12 +26,17 @@ import java.util.List;
 @Getter
 public class JwtTokenProvider {
 
+    private static final long DEVICE_TERMINAL_TOKEN_EXPIRY_SECONDS = 1800L;
     private static final String ROLE_CLAIM = "role";
     private static final String TOKEN_TYPE_CLAIM = "tokenType";
     private static final String MISSION_ID_CLAIM = "missionId";
     private static final String CASE_ID_CLAIM = "caseId";
+    private static final String TERMINAL_ID_CLAIM = "terminalId";
+    private static final String VEHICLE_ID_CLAIM = "vehicleId";
+    private static final String REGION_CODE_CLAIM = "regionCode";
     private static final String SCOPES_CLAIM = "scopes";
     private static final String MISSION_TERMINAL_TOKEN_TYPE = "MISSION_TERMINAL";
+    private static final String DEVICE_TERMINAL_TOKEN_TYPE = "DEVICE_TERMINAL";
 
     @Value("${jwt.secret}")
     private String secret;
@@ -93,6 +99,27 @@ public class JwtTokenProvider {
                 .compact();
     }
 
+    public String createDeviceTerminalToken(String terminalId, String vehicleId, String regionCode, List<String> scopes) {
+        Instant now = Instant.now();
+        Instant expiry = now.plusSeconds(DEVICE_TERMINAL_TOKEN_EXPIRY_SECONDS);
+
+        io.jsonwebtoken.JwtBuilder builder = Jwts.builder()
+                .subject("device-terminal:" + terminalId)
+                .claim(TOKEN_TYPE_CLAIM, DEVICE_TERMINAL_TOKEN_TYPE)
+                .claim(TERMINAL_ID_CLAIM, terminalId)
+                .claim(SCOPES_CLAIM, scopes)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(expiry))
+                .signWith(secretKey);
+        if (vehicleId != null && !vehicleId.isBlank()) {
+            builder.claim(VEHICLE_ID_CLAIM, vehicleId);
+        }
+        if (regionCode != null && !regionCode.isBlank()) {
+            builder.claim(REGION_CODE_CLAIM, regionCode);
+        }
+        return builder.compact();
+    }
+
     public boolean validateToken(String token) {
         try {
             parseClaims(token);
@@ -125,6 +152,13 @@ public class JwtTokenProvider {
                     missionTerminalPrincipal.getAuthorities()
             );
         }
+        if (principal instanceof DeviceTerminalPrincipal deviceTerminalPrincipal) {
+            return new UsernamePasswordAuthenticationToken(
+                    deviceTerminalPrincipal,
+                    token,
+                    deviceTerminalPrincipal.getAuthorities()
+            );
+        }
 
         AuthenticatedUser authenticatedUser = (AuthenticatedUser) principal;
         return new UsernamePasswordAuthenticationToken(
@@ -146,6 +180,10 @@ public class JwtTokenProvider {
         return missionTerminalTokenExpiry;
     }
 
+    public long getDeviceTerminalTokenExpiry() {
+        return DEVICE_TERMINAL_TOKEN_EXPIRY_SECONDS;
+    }
+
     private Object buildPrincipal(Claims claims) {
         String tokenType = claims.get(TOKEN_TYPE_CLAIM, String.class);
         if (MISSION_TERMINAL_TOKEN_TYPE.equals(tokenType)) {
@@ -153,6 +191,15 @@ public class JwtTokenProvider {
                     claims.getSubject(),
                     claims.get(MISSION_ID_CLAIM, String.class),
                     claims.get(CASE_ID_CLAIM, String.class),
+                    getScopes(claims)
+            );
+        }
+        if (DEVICE_TERMINAL_TOKEN_TYPE.equals(tokenType)) {
+            return new DeviceTerminalPrincipal(
+                    claims.getSubject(),
+                    claims.get(TERMINAL_ID_CLAIM, String.class),
+                    claims.get(VEHICLE_ID_CLAIM, String.class),
+                    claims.get(REGION_CODE_CLAIM, String.class),
                     getScopes(claims)
             );
         }

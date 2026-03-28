@@ -18,5 +18,8 @@ FROM nginx:alpine
 RUN rm /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY public/runtime-config.js /usr/share/nginx/html/runtime-config.js
+COPY docker-entrypoint.d/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]

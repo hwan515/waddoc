@@ -28,6 +28,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 진료 세션의 상태 조회, 토큰 발급, 요약 저장, LiveKit webhook 수신을 담당한다.
+ */
 @RestController
 @RequestMapping("/api/v1/sessions")
 @RequiredArgsConstructor

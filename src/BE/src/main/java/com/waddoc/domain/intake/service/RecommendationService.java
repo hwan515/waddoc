@@ -28,6 +28,9 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 문진 결과를 바탕으로 진료과를 정하고 예약 가능한 슬롯을 추천한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class RecommendationService {
@@ -293,13 +296,23 @@ public class RecommendationService {
         String doctorName = first.getDoctor().getUser().getName();
         int month = first.getSlotDate().getMonthValue();
         int day = first.getSlotDate().getDayOfMonth();
-        int hour = first.getStartTime().getHour();
-        String amPm = hour < 12 ? "오전" : "오후";
-        int displayHour = hour <= 12 ? hour : hour - 12;
 
         return String.format(
-                "%s %s 선생님, %d월 %d일 %s %d시 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.",
-                selection.departmentName, doctorName, month, day, amPm, displayHour);
+                "%s %s 선생님, %d월 %d일 %s 진료가 가능합니다. 예약은 1번, 다른 시간은 2번, 다시 듣기는 0번입니다.",
+                selection.departmentName, doctorName, month, day, formatTimeForTts(first.getStartTime()));
+    }
+
+    private String formatTimeForTts(LocalTime time) {
+        int hour = time.getHour();
+        String amPm = hour < 12 ? "오전" : "오후";
+        int displayHour = hour == 0 ? 12 : (hour <= 12 ? hour : hour - 12);
+        int minute = time.getMinute();
+
+        // 추천 음성도 예약 음성과 동일한 기준으로 읽어야 시간 오해가 생기지 않는다.
+        if (minute == 0) {
+            return String.format("%s %d시", amPm, displayHour);
+        }
+        return String.format("%s %d시 %d분", amPm, displayHour, minute);
     }
 
     /** MVP Mock 증상 분류 결과 내부 구조체 */

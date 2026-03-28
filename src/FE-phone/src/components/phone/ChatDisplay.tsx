@@ -33,7 +33,7 @@ export default function ChatDisplay() {
       {messages.length === 0 && (
         <div className="chat-empty">
           <p>&#128222; 왔닥 전화 상담</p>
-          <p className="chat-empty-sub">통화 버튼을 눌러 시작하세요</p>
+          <p className="chat-empty-sub">환자 전화번호를 입력한 뒤 통화 버튼을 눌러 시작하세요</p>
         </div>
       )}
       {messages.map((msg) => (

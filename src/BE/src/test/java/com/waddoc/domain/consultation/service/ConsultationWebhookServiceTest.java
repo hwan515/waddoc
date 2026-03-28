@@ -9,11 +9,16 @@ import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.intake.entity.IntakeChannel;
 import com.waddoc.domain.intake.entity.IntakeSession;
+import com.waddoc.domain.mission.entity.Mission;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.monitoring.LiveKitMonitoringMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.livekit.server.WebhookReceiver;
 import livekit.LivekitModels;
 import livekit.LivekitWebhook;
@@ -21,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -42,8 +48,13 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ConsultationWebhookServiceTest {
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     @Mock
     private ConsultationSessionRepository consultationSessionRepository;
+
+    @Mock
+    private MissionRepository missionRepository;
 
     @Mock
     private AuditLogService auditLogService;
@@ -60,13 +71,18 @@ class ConsultationWebhookServiceTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Spy
+    private LiveKitMonitoringMetrics liveKitMonitoringMetrics = new LiveKitMonitoringMetrics(meterRegistry);
+
     @InjectMocks
     private ConsultationWebhookService consultationWebhookService;
 
     @Test
     void handleWebhook_marksDoctorAndPatientConnectedAndStartsSession() {
         ConsultationSession session = buildSession();
+        Mission mission = buildMission(session.getCareCase(), MissionPhase.VERIFYING);
         when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
+        when(missionRepository.findByCareCase(session.getCareCase())).thenReturn(Optional.of(mission));
         stubIdempotencyCheck();
 
         String doctorJoinedBody = participantEventBody("participant_joined", "room_ses_test123", "doc_usr_doctor");
@@ -89,6 +105,7 @@ class ConsultationWebhookServiceTest {
         assertThat(session.getPatientConnectionState()).isEqualTo(ConnectionState.CONNECTED);
         assertThat(session.getStatus()).isEqualTo(ConsultationSessionStatus.IN_PROGRESS);
         assertThat(session.getStartedAt()).isNotNull();
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.CONSULTING);
     }
 
     @Test
@@ -106,6 +123,11 @@ class ConsultationWebhookServiceTest {
         consultationWebhookService.handleWebhook(body, "signed-header");
 
         assertThat(session.getDoctorConnectionState()).isEqualTo(ConnectionState.DISCONNECTED);
+        assertThat(meterRegistry.get("waddoc.livekit.webhook.events")
+                .tag("event", "participant_left")
+                .tag("result", "success")
+                .counter()
+                .count()).isEqualTo(1.0);
         verify(disconnectTimerService).schedule("ses_test123", "DOCTOR");
     }
 
@@ -140,6 +162,35 @@ class ConsultationWebhookServiceTest {
     }
 
     @Test
+    void handleWebhook_keepsReadySessionWhenRoomFinishedBeforeConsultationStarts() {
+        ConsultationSession session = buildSession();
+        session.connectDoctor();
+
+        when(consultationSessionRepository.findWithParticipantsByRoomId("room_ses_test123")).thenReturn(Optional.of(session));
+        stubIdempotencyCheck();
+
+        String body = """
+                {
+                  "event": "room_finished",
+                  "room": {
+                    "name": "room_ses_test123"
+                  }
+                }
+                """;
+        when(webhookReceiver.receive(body, "signed-header"))
+                .thenReturn(buildRoomFinishedEvent("room_ses_test123"));
+
+        consultationWebhookService.handleWebhook(body, "signed-header");
+
+        assertThat(session.getStatus()).isEqualTo(ConsultationSessionStatus.READY);
+        assertThat(session.getEndedAt()).isNull();
+        assertThat(session.getDurationMinutes()).isNull();
+        verify(disconnectTimerService).cancel("ses_test123", "DOCTOR");
+        verify(disconnectTimerService).cancel("ses_test123", "PATIENT");
+        verify(disconnectTimerService, never()).schedule(anyString(), anyString());
+    }
+
+    @Test
     void handleWebhook_rejectsInvalidSignature() {
         when(webhookReceiver.receive("{}", "invalid-token")).thenThrow(new IllegalArgumentException("invalid signature"));
 
@@ -147,6 +198,12 @@ class ConsultationWebhookServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.LIVEKIT_WEBHOOK_INVALID_SIGNATURE);
+
+        assertThat(meterRegistry.get("waddoc.livekit.webhook.events")
+                .tag("event", "invalid_signature")
+                .tag("result", "fail")
+                .counter()
+                .count()).isEqualTo(1.0);
     }
 
     private void stubIdempotencyCheck() {
@@ -210,6 +267,17 @@ class ConsultationWebhookServiceTest {
                 .build();
         setField(session, "publicId", "ses_test123");
         return session;
+    }
+
+    private Mission buildMission(com.waddoc.domain.carecase.entity.CareCase careCase, MissionPhase phase) {
+        Mission mission = Mission.builder()
+                .careCase(careCase)
+                .vehicleId("VEH-01")
+                .destination(careCase.getPatient().getAddress())
+                .build();
+        setField(mission, "publicId", "ms_test123");
+        mission.updatePhase(phase);
+        return mission;
     }
 
     private String participantEventBody(String event, String roomName, String identity) {

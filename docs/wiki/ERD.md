@@ -32,6 +32,7 @@ erDiagram
         varchar name
         date birth_date "원본 생년월일 (YYYY-MM-DD)"
         char birth_date6 "조회용 6자리 (YYMMDD)"
+        enum gender "MALE | FEMALE | UNKNOWN"
         varchar region_code "지역 코드 (ex: ULLEUNG)"
         varchar address
         varchar phone UK "환자 휴대전화 번호 (01012345678)"
@@ -86,8 +87,14 @@ erDiagram
         varchar completion_reason "BOOKING_CREATED | NO_INPUT_TIMEOUT | USER_HANGUP | EXISTING_BOOKING_CHECKED"
         timestamp created_at
         timestamp ended_at
+        timestamp last_activity_at "무활동 타임아웃 추적용"
         varchar selected_department "선택된 진료과 코드"
         varchar selected_department_name "선택된 진료과 한글명"
+        varchar selection_reason "선택 사유"
+        enum selection_confidence_level "HIGH | MEDIUM | LOW"
+        boolean selection_is_emergency "응급 여부"
+        jsonb offered_slot_ids_json "안내된 슬롯 ID 스냅샷"
+        timestamp selection_updated_at "진료과 선택 갱신 시각"
     }
 
     %% ============ 예약 ============
@@ -122,17 +129,63 @@ erDiagram
         timestamp updated_at
     }
 
+    VEHICLE {
+        bigint vehicle_id PK
+        varchar public_id UK "외부 노출 ID (veh_xxxx)"
+        varchar code UK "차량 코드"
+        varchar region_code "권역 코드"
+        varchar display_name "차량 표시명"
+        boolean is_active "활성 여부"
+        enum operational_status "OPERATIONAL | OUT_OF_SERVICE | MAINTENANCE"
+        timestamp status_changed_at
+        varchar status_reason
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    DISPATCH_OUTBOX {
+        bigint outbox_id PK
+        bigint case_id FK
+        varchar region_code "권역 코드"
+        text destination "목적지 주소"
+        enum status "PENDING | PUBLISHED | RETRY_PENDING | COMPLETED"
+        timestamp created_at
+    }
+
     %% ============ 미션 (차량 출동) ============
     MISSION {
         bigint mission_id PK
         varchar public_id UK "외부 노출 ID (ms_xxxx)"
         bigint case_id FK
-        varchar vehicle_id "차량 ID"
+        varchar vehicle_id "차량 public_id (논리 참조)"
         text destination "목적지 주소"
+        int target_waypoint_number "ROS/FastAPI 출동 대상 waypoint 번호 (nullable)"
+        timestamp dispatched_at
+        timestamp estimated_arrival_time
         enum phase "CREATED | DISPATCHED | EN_ROUTE | ARRIVED | VERIFYING | CONSULTING | RETURNING | COMPLETED | FAILED | INCIDENT(임시)"
+        enum previous_phase "이전 단계"
         decimal latitude "현재 위도"
         decimal longitude "현재 경도"
+        varchar last_telemetry_source_event_id "최근 telemetry sourceEventId"
+        bigint last_telemetry_seq_no "최근 telemetry seqNo"
+        timestamp last_telemetry_at "최근 telemetry timestamp"
         timestamp completed_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    VITAL_MEASUREMENT {
+        bigint vital_measurement_id PK
+        bigint case_id FK UK
+        decimal temperature "체온"
+        int blood_pressure_sys "수축기 혈압"
+        int blood_pressure_dia "이완기 혈압"
+        int heart_rate "심박수"
+        int spo2 "산소포화도"
+        jsonb ecg_waveform_json "측정 시점 ECG 샘플 파형"
+        int ecg_sampling_hz "ECG 샘플링 주파수"
+        int ecg_duration_seconds "ECG 샘플 길이(초)"
+        timestamp measured_at "마지막 측정 시각"
         timestamp created_at
         timestamp updated_at
     }
@@ -186,8 +239,11 @@ erDiagram
 
     BOOKING ||--|| CARE_CASE : "creates case 1:1"
 
+    CARE_CASE ||--o{ DISPATCH_OUTBOX : "enqueues dispatch"
     CARE_CASE ||--o| MISSION : "has mission"
+    CARE_CASE ||--o| VITAL_MEASUREMENT : "stores latest vitals"
     CARE_CASE ||--o| CONSULTATION_SESSION : "has session"
+    VEHICLE ||--o{ MISSION : "serves (logical)"
 
     CONSULTATION_SESSION ||--o| CONSULTATION_SUMMARY : "produces summary"
 ```
@@ -230,7 +286,10 @@ erDiagram
 |--------|------|
 | `BOOKING` | 예약 정보. 상태: `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
 | `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED` |
-| `MISSION` | 차량 출동. 현재 위치(latitude/longitude)와 단계(phase)를 직접 관리. 단계: `CREATED → DISPATCHED → EN_ROUTE → ARRIVED → … → COMPLETED` |
+| `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
+| `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
+| `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리한다. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조하고, `target_waypoint_number`는 ROS/FastAPI로 전달할 waypoint 번호를 저장한다 |
+| `VITAL_MEASUREMENT` | 진료 케이스별 최신 생체데이터 1건. 로봇 측정 단계마다 같은 `case_id` row를 partial upsert 하며, 체온/혈압/심박수/SpO2와 측정 시점 ECG sample, `measured_at`, `created_at`, `updated_at`을 함께 관리 |
 
 ### 2.6 화상진료 세션 도메인
 
@@ -248,6 +307,8 @@ erDiagram
 | `BOOKING.status` | `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
 | `CARE_CASE.status` | `CREATED → PREPARING → IN_PROGRESS → COMPLETED \| FAILED \| CANCELLED` |
 | `MISSION.phase` | `CREATED → DISPATCHED → EN_ROUTE → ARRIVED → VERIFYING → CONSULTING → RETURNING → COMPLETED \| FAILED` ※ `INCIDENT`는 임시 상태 (복구 후 이전 단계 복귀) |
+| `VEHICLE.operational_status` | `OPERATIONAL \| OUT_OF_SERVICE \| MAINTENANCE` |
+| `DISPATCH_OUTBOX.status` | `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
 | `CONSULTATION_SESSION.status` | `CREATED → READY → IN_PROGRESS → COMPLETED \| FAILED \| ABANDONED` |
 | `CONNECTION_STATE` | `CONNECTED \| RECONNECTING \| DISCONNECTED` |
 | `INTAKE_SESSION.status` | `STARTED → IN_PROGRESS → COMPLETED \| ABANDONED \| FAILED` |
@@ -261,6 +322,8 @@ erDiagram
 > **이중 ID 전략**: 내부 PK는 `bigint` 자동 증가. 외부 API에는 `public_id`(접두사 + nanoid, 예: `pat_V1StGXR8`)를 노출한다. PK 추론을 방지하고 API 가독성을 높인다.
 >
 > **PATIENT.phone 정책**: 전화번호는 전역 unique 제약을 적용한다. 1번호=1환자 원칙이며, 가족 공용번호 사용은 허용하지 않는다. 보호자 회원가입 및 전화 예약 식별은 이 컬럼을 기준으로 환자를 찾는다.
+>
+> **추가 인증 주체**: `USER.role` 외에 JWT `tokenType` claim으로 `MISSION_TERMINAL`(미션 터미널 — 차량 태블릿)과 `DEVICE_TERMINAL`(디바이스 터미널 — 부트스트랩 인증)을 구분한다. 이들은 DB 엔티티가 아니라 JWT 기반 임시 인증 주체다.
 
 ---
 
@@ -274,11 +337,15 @@ USER    ←1:N→ USER                      (의사/보호자 계정 승인)
 
 PATIENT → INTAKE_SESSION (과 선택·슬롯 스냅샷 포함)    (기본 전화 예약 흐름)
 
-PATIENT → BOOKING → CARE_CASE → MISSION                     (진료 라이프사이클)
+PATIENT → BOOKING → CARE_CASE → DISPATCH_OUTBOX → MISSION   (예약 확정 → created mission + 출동 트리거)
+                               → VITAL_MEASUREMENT          (로봇 측정 최신값 저장)
                                → CONSULTATION_SESSION → CONSULTATION_SUMMARY
 
+VEHICLE → MISSION                                           (권역 차량 배정)
 USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정 흐름)
 ```
+
+> 데모 모드에서는 예약 생성 시 `MISSION(CREATED)`까지 먼저 생성하고, 관리자의 데모 출동 API가 `DISPATCH_OUTBOX`와 `target_waypoint_number`를 사용해 실제 출동 또는 더미 완료를 제어한다.
 
 > `PATIENT_CONSENT`를 포함한 동의 도메인 ERD는 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
 
@@ -293,5 +360,10 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `PATIENT_GUARDIAN_LINK` | `UNIQUE (patient_id, guardian_user_id)` | 동일 보호자-환자 조합의 중복 가입 이력 방지 |
 | `BOOKING` | `UNIQUE (slot_id)` WHERE `status != 'CANCELLED'` | 동일 슬롯 이중 예약 방지 (부분 unique) |
 | `CARE_CASE` | `UNIQUE (booking_id)` | 예약-케이스 1:1 보장 |
+| `VITAL_MEASUREMENT` | `UNIQUE (case_id)` | 케이스별 최신 생체데이터 1건 보장 |
+| `VEHICLE` | `UNIQUE (public_id)`, `UNIQUE (code)` | 외부 노출 ID와 운영 코드 유일성 보장 |
+| `VEHICLE` | `UNIQUE (region_code)` WHERE `is_active = true` | 동일 권역의 활성 차량 1대 보장 |
+| `DISPATCH_OUTBOX` | `INDEX (status, created_at)` WHERE `status = 'PENDING'` | 최초 배차 relay 스캔 최적화 |
+| `DISPATCH_OUTBOX` | `INDEX (region_code, status, created_at)` WHERE `status = 'RETRY_PENDING'` | 권역별 재배차 스캔 최적화 |
 | `CONSULTATION_SUMMARY` | `UNIQUE (session_id)` | 세션당 요약 1건 보장 |
 | 모든 테이블 `public_id` | `UNIQUE` | 외부 노출 ID 유일성 보장 |

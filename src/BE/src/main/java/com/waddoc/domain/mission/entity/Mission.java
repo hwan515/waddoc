@@ -43,6 +43,9 @@ public class Mission extends BaseTimeEntity {
     @Column(name = "estimated_arrival_time")
     private LocalDateTime estimatedArrivalTime;
 
+    @Column(name = "target_waypoint_number")
+    private Integer targetWaypointNumber;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private MissionPhase phase;
@@ -75,7 +78,8 @@ public class Mission extends BaseTimeEntity {
             String vehicleId,
             String destination,
             LocalDateTime dispatchedAt,
-            LocalDateTime estimatedArrivalTime
+            LocalDateTime estimatedArrivalTime,
+            Integer targetWaypointNumber
     ) {
         this.publicId = PublicIdGenerator.generate("ms_");
         this.careCase = careCase;
@@ -83,12 +87,30 @@ public class Mission extends BaseTimeEntity {
         this.destination = destination;
         this.dispatchedAt = dispatchedAt;
         this.estimatedArrivalTime = estimatedArrivalTime;
+        this.targetWaypointNumber = targetWaypointNumber;
         this.phase = MissionPhase.CREATED;
     }
 
     public void assignSchedule(LocalDateTime dispatchedAt, LocalDateTime estimatedArrivalTime) {
         this.dispatchedAt = dispatchedAt;
         this.estimatedArrivalTime = estimatedArrivalTime;
+    }
+
+    public void assignVehicle(String vehicleId) {
+        if (vehicleId == null || vehicleId.isBlank()) {
+            return;
+        }
+        if (this.vehicleId != null && !this.vehicleId.isBlank() && !Objects.equals(this.vehicleId, vehicleId)) {
+            throw new IllegalStateException("Mission already assigned to a different vehicle.");
+        }
+        this.vehicleId = vehicleId;
+    }
+
+    public void assignDispatchTarget(String destination, Integer targetWaypointNumber) {
+        if (destination != null && !destination.isBlank()) {
+            this.destination = destination;
+        }
+        this.targetWaypointNumber = targetWaypointNumber;
     }
 
     public void updatePhase(MissionPhase phase) {

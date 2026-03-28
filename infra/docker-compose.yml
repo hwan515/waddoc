@@ -5,10 +5,11 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/dev.conf.template:/etc/nginx/nginx.conf:ro
     depends_on:
       - spring-api
       - frontend
+      - frontend-phone
       - livekit
     networks:
       - waddoc-net
@@ -18,6 +19,19 @@ services:
     build: ../src/FE
     expose:
       - "3000"
+    environment:
+      - VITE_DEMO_MODE_ENABLED=${APP_DEMO_MODE_ENABLED:-true}
+      - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
+      - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
+      - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-false}
+    networks:
+      - waddoc-net
+
+  # === Frontend (Phone) ===
+  frontend-phone:
+    build: ../src/FE-phone
+    expose:
+      - "3001"
     networks:
       - waddoc-net
 
@@ -30,17 +44,27 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - AI_IDV_URL=https://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
-      - AI_TRIAGE_URL=https://${DEV_GPU_SERVER_HOST}/triage/api/v1/recommend
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
+      - LIVEKIT_HOST=http://livekit:7880
+      - AI_IDV_URL=http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify
+      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-20000}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
+      - APP_DEMO_MODE_ENABLED=${APP_DEMO_MODE_ENABLED:-true}
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD:-Passw0rd!}
+      - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
+      - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-wss://www.waddoc.site/mqtt}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-spring-waddoc-dev}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
       - postgres
       - redis
+      - kafka
     networks:
       - waddoc-net
 
@@ -70,16 +94,48 @@ services:
     networks:
       - waddoc-net
 
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - waddoc-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    depends_on:
+      - zookeeper
+    networks:
+      - waddoc-net
+
   # === WebRTC ===
   livekit:
     image: livekit/livekit-server:latest
+    entrypoint: [ "/bin/sh", "/etc/entrypoint.sh" ]
     ports:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
       - "3478:3478/udp"
+    volumes:
+      - ./livekit/livekit.local.yaml:/etc/livekit.yaml.tpl:ro
+      - ./livekit/entrypoint.sh:/etc/entrypoint.sh:ro
     environment:
-      LIVEKIT_KEYS: "devkey: devsecret"
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
+      LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://spring-api:8080/api/v1/sessions/webhook/livekit}"
     networks:
       - waddoc-net
 

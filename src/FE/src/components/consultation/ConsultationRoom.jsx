@@ -1,23 +1,31 @@
 import { useState, useEffect } from 'react';
 import {
-    Mic, MicOff, Video, VideoOff, Settings, LogOut,
+    Mic, MicOff, Video, VideoOff,
     Eye, EyeOff
 } from 'lucide-react';
 import { useTracks, useLocalParticipant, VideoTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import {
+    MEDICINE_CATALOG,
+    MEDICINE_CATALOG_BY_CODE,
+} from '../../constants/medicineCatalog';
+import {
+    createConsultationSummaryPayload,
+    hasSummaryNote,
+} from '../../utils/consultationSummary';
+import EcgWaveform from './EcgWaveform';
 
 const ConsultationRoom = ({
     details,
     vitals,
-    ecgData,
     micEnabled,
     setMicEnabled,
     videoEnabled,
     setVideoEnabled,
     onEndCall,
-    localVideoRef,
-    remoteVideoRef,
-    localStream
+    isSavingSummary = false,
+    summarySaveStatus = { type: 'idle', message: '' },
+    role = 'DOCTOR'
 }) => {
     // 1. 상태 변수 설정
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -27,19 +35,13 @@ const ConsultationRoom = ({
     const [showVitals, setShowVitals] = useState(true);
     const [showLocalVideo, setShowLocalVideo] = useState(true);
 
-    // 처방전 관련 Mock Data 및 상태
+    // 처방전 관련 상태
     const [searchQuery, setSearchQuery] = useState('');
-    const mockMedicines = [
-        { code: 'M001', name: '타이레놀정 500mg', type: '해열진통제', dosage: '1회 1정 / 1일 3회 / 3일분' },
-        { code: 'M002', name: '이부프로펜정 200mg', type: '소염진통제', dosage: '1회 1정 / 1일 3회 / 3일분' },
-        { code: 'M003', name: '아목시실린 캡슐 250mg', type: '항생제', dosage: '1회 1캡슐 / 1일 3회 / 5일분' },
-        { code: 'M004', name: '알마겔현탁액 15ml', type: '제산제', dosage: '1회 1포 / 1일 3회 / 식전 복용' },
-        { code: 'M005', name: '뮤코펙트정 30mg', type: '진해거담제', dosage: '1회 1정 / 1일 3회 / 3일분' },
-        { code: 'M006', name: '코푸시럽 20ml', type: '진해거담제', dosage: '1회 1포 / 1일 3회 / 3일분' },
-    ];
-    
     const [selectedMeds, setSelectedMeds] = useState([]);
+    const [prescribedMeds, setPrescribedMeds] = useState([]);
     const [consultationNote, setConsultationNote] = useState('');
+    const [needsFollowUp, setNeedsFollowUp] = useState(false);
+    const [validationMessage, setValidationMessage] = useState('');
 
     // 진료 시간 타이머 & 상단 시계
     useEffect(() => {
@@ -73,9 +75,90 @@ const ConsultationRoom = ({
         );
     };
 
-    const filteredMeds = mockMedicines.filter(m => 
-        m.name.includes(searchQuery) || m.code.includes(searchQuery)
-    );
+    const buildSummaryPayload = (prescriptionCodes = prescribedMeds) => createConsultationSummaryPayload({
+        summaryNote: consultationNote,
+        prescriptionCodes,
+        needsFollowUp,
+    });
+
+    const handleAddPrescription = () => {
+        if (selectedMeds.length === 0) {
+            return;
+        }
+
+        const nextPrescribedMeds = [...new Set([...prescribedMeds, ...selectedMeds])];
+        setValidationMessage('');
+        setPrescribedMeds(nextPrescribedMeds);
+        setSelectedMeds([]);
+    };
+
+    const handleRemovePrescription = (medCode) => {
+        const nextPrescribedMeds = prescribedMeds.filter((code) => code !== medCode);
+        setValidationMessage('');
+        setPrescribedMeds(nextPrescribedMeds);
+        setSelectedMeds((prev) => prev.filter((code) => code !== medCode));
+    };
+
+    const handleClearPrescription = () => {
+        if (prescribedMeds.length === 0) {
+            return;
+        }
+
+        setValidationMessage('');
+        setPrescribedMeds([]);
+        setSelectedMeds([]);
+    };
+
+    const handleResetConsultationNote = () => {
+        setConsultationNote('');
+        setNeedsFollowUp(false);
+        setValidationMessage('');
+    };
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filteredMeds = MEDICINE_CATALOG.filter((medicine) => {
+        if (!normalizedQuery) {
+            return true;
+        }
+
+        return [
+            medicine.code,
+            medicine.name,
+            medicine.category,
+            medicine.dosage,
+        ].some((value) => value.toLowerCase().includes(normalizedQuery));
+    });
+
+    const hasValue = (value) => value !== null && value !== undefined && value !== '';
+    const measuredAtText = vitals?.measuredAt
+        ? new Date(vitals.measuredAt).toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+        })
+        : '미측정';
+    const waveform = Array.isArray(vitals?.ecgWaveform) ? vitals.ecgWaveform : [];
+    const prescribedMedicineItems = prescribedMeds
+        .map((code) => MEDICINE_CATALOG_BY_CODE[code])
+        .filter(Boolean);
+    const feedbackType = validationMessage ? 'error' : summarySaveStatus?.type;
+    const feedbackMessage = validationMessage || summarySaveStatus?.message || '';
+
+    const handleEndCallClick = async () => {
+        if (role === 'DOCTOR') {
+            if (!hasSummaryNote(consultationNote)) {
+                setValidationMessage('진료 기록을 입력한 후 진료를 종료하세요.');
+                return;
+            }
+
+            setValidationMessage('');
+            await onEndCall(buildSummaryPayload());
+        } else {
+            onEndCall();
+        }
+    };
 
     return (
         <div className="flex flex-col h-screen bg-[#F0F0F0] font-sans text-sm select-none">
@@ -114,7 +197,7 @@ const ConsultationRoom = ({
                     <div className="text-slate-600 bg-white px-2 py-0.5 border border-slate-300 shadow-inner text-xs">
                         {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
-                    <button onClick={onEndCall} className="px-4 py-1 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
+                    <button onClick={handleEndCallClick} className="px-4 py-1 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
                         <span className="text-red-700 font-bold text-xs">진료완료</span>
                     </button>
                 </div>
@@ -159,35 +242,63 @@ const ConsultationRoom = ({
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full bg-slate-800 text-slate-400">
                                 <div className="w-12 h-12 border-4 border-slate-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                <span className="font-bold">상대방 영상을 대기 중입니다...</span>
+                                <span className="font-bold">환자 접속 대기 중입니다...</span>
                             </div>
                         )}
                     </div>
 
                     {/* 우측 상단 오버레이: 생체 정보 (Vitals) */}
                     {showVitals && (
-                        <div className="absolute top-10 right-2 w-64 bg-white/90 backdrop-blur-md border 2 border-slate-400 shadow-xl z-20 flex flex-col text-xs">
+                        <div className="absolute top-10 right-2 w-[26rem] max-h-[calc(100%-4rem)] overflow-y-auto bg-white/90 backdrop-blur-md border-2 border-slate-400 shadow-xl z-20 flex flex-col text-xs">
                             <div className="bg-[#4472C4] text-white px-2 py-1 font-bold text-center border-b border-slate-400">
-                                📈 실시간 환자 생체정보
+                                📈 환자 생체정보
                             </div>
                             <div className="p-2 space-y-2">
+                                <div className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-700">
+                                    측정 시각: <span className="font-bold">{measuredAtText}</span>
+                                </div>
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                     <span className="font-bold text-slate-700">체온 (Temp)</span>
-                                    <span className="font-extrabold text-blue-700">{vitals.temperature} <span className="text-[10px] text-slate-500 font-normal">°C</span></span>
+                                    {hasValue(vitals?.temperature) ? (
+                                        <span className="font-extrabold text-blue-700">{vitals.temperature} <span className="text-[10px] text-slate-500 font-normal">°C</span></span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                     <span className="font-bold text-slate-700">혈압 (BP)</span>
-                                    <span className="font-extrabold text-slate-800">{vitals.bloodPressureSys}/{vitals.bloodPressureDia}</span>
+                                    {hasValue(vitals?.bloodPressureSys) && hasValue(vitals?.bloodPressureDia) ? (
+                                        <span className="font-extrabold text-slate-800">{vitals.bloodPressureSys}/{vitals.bloodPressureDia}</span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center border-b border-slate-200 pb-1">
                                     <span className="font-bold text-slate-700">심박수 (HR)</span>
-                                    <span className="font-extrabold text-red-600 flex items-center gap-1">
-                                        {vitals.heartRate} <span className="text-[10px] text-slate-500 font-normal">bpm</span>
-                                    </span>
+                                    {hasValue(vitals?.heartRate) ? (
+                                        <span className="font-extrabold text-red-600 flex items-center gap-1">
+                                            {vitals.heartRate} <span className="text-[10px] text-slate-500 font-normal">bpm</span>
+                                        </span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="font-bold text-slate-700">산소포화도 (SpO2)</span>
-                                    <span className="font-extrabold text-green-700">{vitals.spO2} <span className="text-[10px] text-slate-500 font-normal">%</span></span>
+                                    {hasValue(vitals?.spO2) ? (
+                                        <span className="font-extrabold text-green-700">{vitals.spO2} <span className="text-[10px] text-slate-500 font-normal">%</span></span>
+                                    ) : (
+                                        <span className="font-bold text-slate-400">미측정</span>
+                                    )}
+                                </div>
+                                <div className="border-t border-slate-200 pt-2">
+                                    <div className="mb-2 text-[11px] font-bold text-slate-700">측정 시점 ECG</div>
+                                    <EcgWaveform
+                                        waveform={waveform}
+                                        samplingHz={vitals?.ecgSamplingHz ?? 25}
+                                        durationSeconds={vitals?.ecgDurationSeconds ?? 8}
+                                        compact
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -216,15 +327,16 @@ const ConsultationRoom = ({
                     
                     {/* 우측 상단: 처방전 약 선택 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white overflow-hidden">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center shrink-0">
-                            <span className="font-bold text-slate-800 text-sm">💊 약품 검색 및 처방</span>
+                                            <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center shrink-0">
+                            <span className="font-bold text-slate-800 text-sm">💊 약품 처방</span>
                             <div className="flex items-center space-x-1">
-                                <span className="text-[11px] font-bold text-slate-600">명칭 검색:</span>
+                                <span className="text-[11px] font-bold text-slate-600">검색:</span>
                                 <input 
                                     type="text" 
                                     value={searchQuery}
                                     onChange={handleSearchChange}
-                                    className="border border-slate-400 h-5 px-1 w-32 text-xs focus:outline-none focus:bg-[#FFFFCC]"
+                                    placeholder="약품명 / 코드"
+                                    className="border border-slate-400 bg-white text-slate-800 placeholder:text-slate-400 h-5 px-1 w-32 text-xs focus:outline-none focus:bg-[#FFFFCC]"
                                 />
                             </div>
                         </div>
@@ -237,13 +349,20 @@ const ConsultationRoom = ({
                         </div>
 
                         <div className="flex-1 overflow-y-auto bg-white">
-                            {filteredMeds.map((med, idx) => {
+                            {filteredMeds.map((med) => {
                                 const isChecked = selectedMeds.includes(med.code);
+                                const isPrescribed = prescribedMeds.includes(med.code);
                                 return (
                                     <div 
                                         key={med.code} 
                                         onClick={() => handleMedToggle(med.code)}
-                                        className={`flex text-[11px] border-b border-slate-200 cursor-pointer ${isChecked ? 'bg-[#D9E1F2] font-semibold text-blue-900' : 'hover:bg-slate-50'}`}
+                                        className={`flex text-[11px] border-b border-slate-200 cursor-pointer ${
+                                            isChecked
+                                                ? 'bg-[#D9E1F2] font-semibold text-blue-900'
+                                                : isPrescribed
+                                                    ? 'bg-emerald-50 text-emerald-900'
+                                                    : 'hover:bg-slate-50'
+                                        }`}
                                     >
                                         <div className="w-8 py-1 flex items-center justify-center border-r border-slate-200">
                                             <input 
@@ -254,36 +373,121 @@ const ConsultationRoom = ({
                                             />
                                         </div>
                                         <div className="w-16 py-1 text-center border-r border-slate-200 text-slate-500">{med.code}</div>
-                                        <div className="w-32 py-1 px-2 text-left border-r border-slate-200 truncate text-slate-800" title={med.name}>{med.name}</div>
+                                        <div className="w-32 py-1 px-2 text-left border-r border-slate-200 truncate text-slate-800" title={med.name}>
+                                            <div className="flex items-center gap-1">
+                                                <span className="truncate">{med.name}</span>
+                                                {isPrescribed ? (
+                                                    <span className="shrink-0 rounded bg-emerald-100 px-1 py-[1px] text-[10px] font-bold text-emerald-700">
+                                                        처방
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        </div>
                                         <div className="flex-1 py-1 px-2 text-left truncate text-slate-600">{med.dosage}</div>
                                     </div>
                                 );
                             })}
                         </div>
+
+                        <div className="border-t border-slate-200 bg-slate-50 px-2 py-2 text-[11px] text-slate-700">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="font-bold text-slate-800">처방 내역</div>
+                                <button
+                                    onClick={handleClearPrescription}
+                                    disabled={prescribedMedicineItems.length === 0 || isSavingSummary}
+                                    className="px-2 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-300 bg-white disabled:cursor-not-allowed disabled:text-slate-300"
+                                >
+                                    전체 비우기
+                                </button>
+                            </div>
+                            {prescribedMedicineItems.length > 0 ? (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                    {prescribedMedicineItems.map((medicine) => (
+                                        <div
+                                            key={medicine.code}
+                                            className="flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800"
+                                            title={`${medicine.category} / ${medicine.dosage}`}
+                                        >
+                                            <span>{medicine.name}</span>
+                                            <button
+                                                onClick={() => handleRemovePrescription(medicine.code)}
+                                                className="rounded border border-emerald-400 bg-white px-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50"
+                                                aria-label={`${medicine.name} 삭제`}
+                                                disabled={isSavingSummary}
+                                            >
+                                                삭제
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="mt-1 text-slate-500">아직 추가된 처방 내역이 없습니다.</div>
+                            )}
+                        </div>
                         
                         <div className="bg-[#F0F0F0] border-t border-slate-300 p-1 flex justify-between items-center shrink-0">
-                            <span className="text-xs font-bold text-slate-700 pl-1">선택된 약품: {selectedMeds.length}개</span>
-                            <button className="px-3 py-0.5 bg-blue-100 border border-blue-400 text-xs text-blue-800 font-bold active:bg-blue-200">
-                                내역에 추가 (Mock)
+                            <span className="text-xs font-bold text-slate-700 pl-1">
+                                선택 {selectedMeds.length}개 | 처방 {prescribedMeds.length}개
+                            </span>
+                            <button
+                                onClick={handleAddPrescription}
+                                disabled={selectedMeds.length === 0 || isSavingSummary}
+                                className="px-3 py-0.5 bg-blue-100 border border-blue-400 text-xs text-blue-800 font-bold active:bg-blue-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+                            >
+                                처방 내역 추가
                             </button>
                         </div>
+                        {feedbackMessage ? (
+                            <div
+                                className={`border-t px-2 py-1 text-[11px] font-medium ${
+                                    feedbackType === 'error'
+                                        ? 'border-red-200 bg-red-50 text-red-700'
+                                        : feedbackType === 'success'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : 'border-blue-200 bg-blue-50 text-blue-700'
+                                }`}
+                            >
+                                {feedbackMessage}
+                            </div>
+                        ) : null}
                     </div>
 
                     {/* 우측 하단: 진료 내역 입력란 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white">
-                        <div className="bg-gradient-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex justify-between">
-                            <span className="font-bold text-slate-800 text-sm">📝 진료 기록 (경과 기록지)</span>
-                            <div className="space-x-1">
-                                <button className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100">초기화</button>
-                                <button className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100">임시저장</button>
+                                <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex items-center justify-between gap-2">
+                            <div>
+                                <span className="font-bold text-slate-800 text-sm">📝 진료 기록 (경과 기록지)</span>
+                                <div className="text-[11px] font-medium text-slate-500">작성 내용은 진료 종료 시 저장됩니다.</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={needsFollowUp}
+                                        onChange={(e) => setNeedsFollowUp(e.target.checked)}
+                                        className="h-3.5 w-3.5 accent-amber-600"
+                                    />
+                                    재진 필요
+                                </label>
+                                <button
+                                    onClick={handleResetConsultationNote}
+                                    className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100"
+                                >
+                                    초기화
+                                </button>
                             </div>
                         </div>
-                        <div className="flex-1 p-1 bg-[#E0E0E0]">
+                        <div className="flex-1 p-2 bg-[#EAE6D0]">
                             <textarea 
                                 value={consultationNote}
-                                onChange={(e) => setConsultationNote(e.target.value)}
-                                className="w-full h-full p-2 text-xs border border-slate-400 focus:outline-none focus:border-blue-500 resize-none font-mono"
-                                placeholder="환자 증상 및 처방 기록을 입력하세요..."
+                                onChange={(e) => {
+                                    setConsultationNote(e.target.value);
+                                    if (validationMessage) {
+                                        setValidationMessage('');
+                                    }
+                                }}
+                                className="h-full w-full resize-none rounded-md border border-amber-300 bg-[#FFFDF5] p-3 font-mono text-sm leading-6 text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                placeholder="환자 증상, 진단 소견, 처방 이유를 자세히 기록하세요."
                             ></textarea>
                         </div>
                     </div>

@@ -19,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * 보호자가 조회할 수 있는 환자 목록과 진료 요약을 읽어 오는 서비스다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)

@@ -1,11 +1,11 @@
 # ROS
-/build
-/install
-/log
+**/build/
+**/install/
+**/log/
 .idea/
-.vscode
+.vscode/
 .claude
-.pem
+*.pem
 .env
 
 # Python
@@ -22,6 +22,7 @@ __pycache__/
 infra/.env
 infra/certs/
 local-storage/
+.gradle-local/
 
 # Unity
 [Ll]ibrary/

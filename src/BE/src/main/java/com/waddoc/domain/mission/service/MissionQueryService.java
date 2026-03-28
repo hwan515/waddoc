@@ -15,9 +15,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 관리자 화면에서 필요한 미션 목록과 상세 조회 응답을 조립한다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -58,17 +60,13 @@ public class MissionQueryService {
             return missionRepository.findAllForAdminDashboardByPhase(phase);
         }
 
-        LocalDateTime fromDateTime = date.atStartOfDay();
-        LocalDateTime toDateTime = date.plusDays(1).atStartOfDay();
-
         if (phase == null) {
-            return missionRepository.findAllForAdminDashboardByDateRange(fromDateTime, toDateTime);
+            return missionRepository.findAllForAdminDashboardByAppointmentDate(date);
         }
 
-        return missionRepository.findAllForAdminDashboardByPhaseAndDateRange(
+        return missionRepository.findAllForAdminDashboardByPhaseAndAppointmentDate(
                 phase,
-                fromDateTime,
-                toDateTime
+                date
         );
     }
 }

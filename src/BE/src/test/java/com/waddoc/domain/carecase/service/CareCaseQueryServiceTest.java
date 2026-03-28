@@ -17,6 +17,8 @@ import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
+import com.waddoc.domain.vital.entity.VitalMeasurement;
+import com.waddoc.domain.vital.repository.VitalMeasurementRepository;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -48,29 +51,45 @@ class CareCaseQueryServiceTest {
     private ConsultationSessionRepository consultationSessionRepository;
 
     @Mock
+    private VitalMeasurementRepository vitalMeasurementRepository;
+
+    @Mock
     private AccessControlService accessControlService;
 
     @InjectMocks
     private CareCaseQueryService careCaseQueryService;
 
     @Test
-    void getCaseDetailReturnsMissionAndSessionMetadata() {
+    void getCaseDetailReturnsMissionSessionAndVitalsMetadata() {
         CareCase careCase = buildCareCase();
         Mission mission = Mission.builder()
                 .careCase(careCase)
                 .vehicleId("VEH-01")
-                .destination("울릉군")
+                .destination("Ulleung")
                 .build();
         ConsultationSession session = ConsultationSession.builder()
                 .careCase(careCase)
                 .roomId("room-1")
                 .livekitUrl("wss://livekit.test")
                 .build();
+        VitalMeasurement vitalMeasurement = VitalMeasurement.create(careCase);
+        vitalMeasurement.applyMeasurements(
+                new BigDecimal("36.7"),
+                128,
+                82,
+                72,
+                98,
+                List.of(new BigDecimal("0.12"), new BigDecimal("0.18")),
+                25,
+                8,
+                LocalDateTime.of(2026, 3, 10, 10, 0)
+        );
         setField(careCase, "createdAt", LocalDateTime.of(2026, 3, 10, 10, 5));
 
         when(careCaseRepository.findWithDetailsByPublicId(careCase.getPublicId())).thenReturn(Optional.of(careCase));
         when(missionRepository.findByCareCase(careCase)).thenReturn(Optional.of(mission));
         when(consultationSessionRepository.findByCareCase(careCase)).thenReturn(Optional.of(session));
+        when(vitalMeasurementRepository.findByCareCase(careCase)).thenReturn(Optional.of(vitalMeasurement));
 
         CaseDetailResponse response = careCaseQueryService.getCaseDetail(
                 careCase.getPublicId(),
@@ -80,8 +99,14 @@ class CareCaseQueryServiceTest {
         assertThat(response.getCaseId()).isEqualTo(careCase.getPublicId());
         assertThat(response.getMissionId()).isEqualTo(mission.getPublicId());
         assertThat(response.getSessionId()).isEqualTo(session.getPublicId());
-        assertThat(response.getPatient().getName()).isEqualTo("홍길동");
-        assertThat(response.getIntakeSummary().getDepartmentName()).isEqualTo("내과");
+        assertThat(response.getPatient().getName()).isEqualTo("Hong Gil-dong");
+        assertThat(response.getIntakeSummary().getDepartmentName()).isEqualTo("Internal Medicine");
+        assertThat(response.getVitals()).isNotNull();
+        assertThat(response.getVitals().getTemperature()).isEqualByComparingTo("36.7");
+        assertThat(response.getVitals().getBloodPressureSys()).isEqualTo(128);
+        assertThat(response.getVitals().getBloodPressureDia()).isEqualTo(82);
+        assertThat(response.getVitals().getHeartRate()).isEqualTo(72);
+        assertThat(response.getVitals().getSpO2()).isEqualTo(98);
         verify(accessControlService).assertAssignedDoctorOrAdmin(
                 new AuthenticatedUser("usr_doctor", Role.DOCTOR),
                 careCase
@@ -95,7 +120,7 @@ class CareCaseQueryServiceTest {
         Mission mission = Mission.builder()
                 .careCase(careCase)
                 .vehicleId("VEH-01")
-                .destination("울릉군")
+                .destination("Ulleung")
                 .build();
         mission.updatePhase(MissionPhase.VERIFYING);
 
@@ -111,7 +136,7 @@ class CareCaseQueryServiceTest {
         assertThat(response.getTotalCount()).isEqualTo(1);
         assertThat(response.getCases()).hasSize(1);
         assertThat(response.getCases().get(0).getMissionPhase()).isEqualTo(MissionPhase.VERIFYING);
-        assertThat(response.getCases().get(0).getDepartmentName()).isEqualTo("내과");
+        assertThat(response.getCases().get(0).getDepartmentName()).isEqualTo("Internal Medicine");
         verify(accessControlService).getDoctorProfileOrThrow(new AuthenticatedUser("usr_doctor", Role.DOCTOR));
     }
 
@@ -119,19 +144,19 @@ class CareCaseQueryServiceTest {
         User doctorUser = User.builder()
                 .username("doctor_kim")
                 .passwordHash("encoded-password")
-                .name("김의사")
+                .name("Doctor Kim")
                 .role(Role.DOCTOR)
                 .build();
         DoctorProfile doctorProfile = DoctorProfile.builder()
                 .user(doctorUser)
                 .department("INTERNAL_MEDICINE")
-                .departmentName("내과")
+                .departmentName("Internal Medicine")
                 .build();
         Patient patient = Patient.builder()
-                .name("홍길동")
+                .name("Hong Gil-dong")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
-                .address("울릉군")
+                .address("Ulleung")
                 .phone("01012345678")
                 .build();
         IntakeSession intakeSession = IntakeSession.builder()
@@ -141,10 +166,10 @@ class CareCaseQueryServiceTest {
                 .build();
         intakeSession.recordSelection(
                 "INTERNAL_MEDICINE",
-                "내과",
+                "Internal Medicine",
                 ConfidenceLevel.HIGH,
                 false,
-                "환자가 내과를 직접 선택했습니다.",
+                "Patient selected the department directly.",
                 List.of("slot_001")
         );
         Booking booking = Booking.builder()

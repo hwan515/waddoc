@@ -19,6 +19,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 전화번호나 인적 정보를 기준으로 환자를 식별하고 결과를 감사 로그에 남긴다.
+ */
 @Service
 @RequiredArgsConstructor
 public class PatientIdentifyService {

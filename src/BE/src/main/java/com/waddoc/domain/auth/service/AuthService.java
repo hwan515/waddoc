@@ -25,6 +25,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 보호자 회원가입과 로그인, 리프레시 토큰 수명주기를 한곳에서 관리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -40,6 +43,9 @@ public class AuthService {
     private final RefreshTokenService refreshTokenService;
     private final LoginEligibilityService loginEligibilityService;
 
+    /**
+     * 보호자 계정을 만들고 환자와의 연결 요청을 함께 생성한다.
+     */
     @Transactional
     public GuardianSignupResponse signupGuardian(GuardianSignupRequest request) {
         Patient patient = patientRepository.findByPhone(request.getPatientPhone())
@@ -72,6 +78,9 @@ public class AuthService {
         return GuardianSignupResponse.of(link);
     }
 
+    /**
+     * 비밀번호와 역할별 로그인 조건을 통과한 사용자에게 access/refresh 토큰을 발급한다.
+     */
     public LoginResponse login(LoginRequest request, HttpServletResponse response) {
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
@@ -104,6 +113,10 @@ public class AuthService {
         return buildLoginResponse(user, accessToken);
     }
 
+    /**
+     * 전달된 refresh token이 아직 유효한지 검증한 뒤 새 토큰 쌍으로 교체한다.
+     * 토큰 재사용이나 사용자 상태 변경이 감지되면 기존 토큰을 즉시 폐기한다.
+     */
     public TokenRefreshResponse refresh(String refreshToken, HttpServletResponse response) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new BusinessException(ErrorCode.AUTH_REFRESH_EXPIRED);
@@ -155,6 +168,9 @@ public class AuthService {
                 .build();
     }
 
+    /**
+     * Redis에 저장된 refresh token과 브라우저 쿠키를 함께 정리한다.
+     */
     public void logout(AuthenticatedUser authenticatedUser, String refreshToken, HttpServletResponse response) {
         if (authenticatedUser == null) {
             throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);

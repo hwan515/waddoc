@@ -30,6 +30,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.kafka:spring-kafka")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // Database / Migration
     implementation("org.flywaydb:flyway-core")
@@ -46,6 +50,10 @@ dependencies {
 
     // LiveKit
     implementation("io.livekit:livekit-server:0.6.1")
+
+    // MQTT (spring-integration-mqtt uses Eclipse Paho v3)
+    implementation("org.springframework.integration:spring-integration-mqtt:6.3.6")
+    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
 
     // MapStruct
     implementation("org.mapstruct:mapstruct:1.5.5.Final")

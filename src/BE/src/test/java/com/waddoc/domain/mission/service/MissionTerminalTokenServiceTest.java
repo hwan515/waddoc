@@ -5,6 +5,7 @@ import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.mission.dto.IssueMissionTerminalTokenResponse;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
@@ -49,6 +50,9 @@ class MissionTerminalTokenServiceTest {
         AuthenticatedUser doctor = new AuthenticatedUser("usr_doctor", Role.DOCTOR);
         CareCase careCase = mock(CareCase.class);
         when(careCase.getPublicId()).thenReturn("case_test123");
+        Patient patient = mock(Patient.class);
+        when(patient.getName()).thenReturn("홍길동");
+        when(careCase.getPatient()).thenReturn(patient);
 
         Mission mission = Mission.builder()
                 .careCase(careCase)
@@ -61,7 +65,12 @@ class MissionTerminalTokenServiceTest {
         when(jwtTokenProvider.createMissionTerminalToken(
                 eq("ms_test123"),
                 eq("case_test123"),
-                eq(List.of(MissionTerminalScopes.IDENTITY_CHECK, MissionTerminalScopes.ISSUE_PATIENT_TOKEN))
+                eq(List.of(
+                        MissionTerminalScopes.IDENTITY_CHECK,
+                        MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                        MissionTerminalScopes.SESSION_STATUS_READ,
+                        MissionTerminalScopes.VITALS_WRITE
+                ))
         )).thenReturn("mission-terminal-token");
         when(jwtTokenProvider.getMissionTerminalTokenExpiry()).thenReturn(1800L);
 
@@ -73,7 +82,9 @@ class MissionTerminalTokenServiceTest {
         assertThat(response.getExpiresIn()).isEqualTo(1800L);
         assertThat(response.getScopes()).containsExactly(
                 MissionTerminalScopes.IDENTITY_CHECK,
-                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN,
+                MissionTerminalScopes.SESSION_STATUS_READ,
+                MissionTerminalScopes.VITALS_WRITE
         );
         verify(accessControlService).assertAssignedDoctorOrAdmin(doctor, careCase);
         verify(auditLogService).log(any(), any(), any(), any(), any(), any(), any());

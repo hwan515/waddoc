@@ -20,6 +20,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.GuardianLinkStatus;
 import com.waddoc.domain.patient.entity.Patient;
+import com.waddoc.domain.patient.entity.PatientGender;
 import com.waddoc.domain.patient.entity.PatientGuardianLink;
 import com.waddoc.domain.patient.repository.PatientGuardianLinkRepository;
 import com.waddoc.domain.patient.repository.PatientRepository;
@@ -215,6 +216,7 @@ class AdminServiceTest {
                                 .regionCode("ULLEUNG")
                                 .address("Ulleung")
                                 .phone("01012345678")
+                                .gender(PatientGender.MALE)
                                 .build();
 
                 when(patientRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20)))
@@ -225,6 +227,7 @@ class AdminServiceTest {
                 assertThat(response.getTotalCount()).isEqualTo(1);
                 assertThat(response.getPatients()).hasSize(1);
                 assertThat(response.getPatients().get(0).getName()).isEqualTo("Hong");
+                assertThat(response.getPatients().get(0).getGender()).isEqualTo(PatientGender.MALE);
                 verify(accessControlService).assertAdmin(admin);
         }
 

@@ -24,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.EnumSet;
 import java.util.Map;
 
+/**
+ * 본인 확인이 끝난 환자에게만 진료방 입장 토큰을 발급한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -46,14 +49,36 @@ public class ConsultationPatientTokenService {
     ) {
         ConsultationSession session = consultationSessionRepository.findWithParticipantsByPublicId(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+        Mission mission = missionRepository.findByCareCase(session.getCareCase())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_READY));
 
+        return issuePatientToken(session, mission, authentication);
+    }
+
+    @Transactional(readOnly = true)
+    public IssuePatientTokenResponse issuePatientTokenByMission(
+            String missionId,
+            Authentication authentication
+    ) {
+        // FE가 sessionId를 직접 들고 다니지 않도록 mission 기준으로 세션을 해석한다.
+        Mission mission = missionRepository.findWithDetailsByPublicId(missionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
+        ConsultationSession session = consultationSessionRepository.findByCareCase(mission.getCareCase())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        return issuePatientToken(session, mission, authentication);
+    }
+
+    private IssuePatientTokenResponse issuePatientToken(
+            ConsultationSession session,
+            Mission mission,
+            Authentication authentication
+    ) {
         if (isTerminal(session.getStatus())) {
             throw new BusinessException(ErrorCode.SESSION_STATE_INVALID);
         }
 
         Patient patient = session.getCareCase().getPatient();
-        Mission mission = missionRepository.findByCareCase(session.getCareCase())
-                .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_READY));
         if (!READY_MISSION_PHASES.contains(mission.getPhase())) {
             throw new BusinessException(ErrorCode.MISSION_NOT_READY);
         }
@@ -63,6 +88,7 @@ public class ConsultationPatientTokenService {
                 MissionTerminalScopes.ISSUE_PATIENT_TOKEN
         );
 
+        // 얼굴/신분증 확인 성공 캐시가 없으면 진료방 입장을 막는다.
         if (missionIdentityCheckCacheService.findVerified(mission.getPublicId(), patient.getPublicId()).isEmpty()) {
             throw new BusinessException(ErrorCode.IDENTITY_CHECK_NOT_CONFIRMED);
         }

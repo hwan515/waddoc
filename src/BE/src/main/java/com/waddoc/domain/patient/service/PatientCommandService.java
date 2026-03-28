@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+/**
+ * 환자 생성과 기준 이미지 연결 같은 쓰기 작업을 처리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class PatientCommandService {

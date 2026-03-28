@@ -39,6 +39,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 관리자 화면에 필요한 목록 조회와 보호자 연결 승인 업무를 처리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class AdminService {

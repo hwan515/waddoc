@@ -7,7 +7,7 @@
 - 차량 UX: `탑승 대기 -> 진료 시작 -> 얼굴 촬영 -> 신분증 촬영 -> 본인인증 결과 -> 활력징후 -> 진료실 입장`
 - GPU 서버: FastAPI 기반 AI 추론 서버
 - 호출 경계: 차량 FE는 GPU 서버를 직접 호출하지 않고, 반드시 Spring Boot를 경유
-- 기준 이미지: 환자 등록 시 저장된 `PATIENT.reference_image_path` 사용
+- 기준 이미지: 환자 등록 시 저장된 `PATIENT.reference_image_path`를 우선 사용하되, 없으면 no-reference 경로로 처리
 - 보안 원칙: 주민등록번호 원문과 촬영 원본은 최소 보관
 
 이 초안은 기존 문서와 충돌하는 구간을 먼저 정리하는 용도다. 개별 문서 반영 전까지는 아래 규칙을 우선 기준으로 본다.
@@ -16,10 +16,10 @@
 
 ### 2.1 일치하는 내용
 
-- 차량 태블릿은 운영 단말이며 관리자 인증 상태에서 요청한다.
-- Spring Boot가 환자 기준 이미지를 조회하고 GPU 서버로 multipart 요청을 보낸다.
+- 차량 태블릿은 운영 단말이며 `MISSION_TERMINAL` 또는 관리자 권한으로 요청한다.
+- Spring Boot가 환자 기준 이미지를 조회하고 GPU 서버로 multipart 요청을 보낸다. 기준 이미지가 없으면 `referenceImage` 없이 호출한다.
 - GPU 서버 응답에는 얼굴 점수, 신분증 얼굴 점수, OCR 결과, reason codes가 포함된다.
-- Spring Boot는 OCR 이름, 주소, 생년월일을 환자 정보와 다시 대조한다.
+- Spring Boot는 OCR 이름, 주소, 주민등록번호 기반 생년월일을 환자 정보와 다시 대조한다.
 - FE는 GPU 서버를 직접 호출하지 않는다.
 
 ### 2.2 수정이 필요한 내용
@@ -30,7 +30,20 @@
   이번 수정안에서는 `동의`를 본인확인 선행 조건에서 제외하고 후속 확장 범위로 분리한다.
 - `활력징후` 단계는 Project 문서에는 존재하지만, MVP 문서에는 별도 저장 도메인이 제외돼 있다.
   따라서 MVP 범위에서는 활력징후 단계를 UX에는 포함하되, 측정값 영속 저장은 선택 또는 더미 fallback으로 제한한다.
-- AI 문서는 현재 STT/triage 중심이며 IDV FastAPI API가 정의돼 있지 않다.
+- AI 문서는 현재 STT 중심이며 IDV FastAPI API가 정의돼 있지 않다.
+
+### 2.3 최근 구현 반영 사항
+
+- `S14P21A603-430`: 기준 이미지 없는 본인확인 경로 반영 완료
+  - FastAPI `/idv/api/v1/verify`에서 `referenceImage` optional 처리
+  - 기준 이미지가 없으면 `live face ↔ id card face + OCR` 경로로 `matched` 계산
+  - Spring Boot는 OCR 이름, 생년월일 6자리, 주소 중 하나 이상 일치하면 최종 통과 판정
+  - FastAPI 응답 요약 로그를 백엔드에 남김
+- `S14P21A603-431`: 차량 본인확인 신분증 촬영 품질 개선 반영 완료
+  - FE가 전체 프레임 대신 신분증 가이드 영역만 crop해 업로드
+  - `object-cover` 기준 source 좌표 보정 적용
+  - 신분증 이미지를 PNG로 업로드
+  - 업로드 이미지는 좌우 반전 없이 원본 방향 유지
 
 ## 3. 목표 플로우
 
@@ -43,8 +56,8 @@
 5. 차량 태블릿은 얼굴 촬영
 6. 차량 태블릿은 신분증 촬영
 7. 차량 태블릿은 Spring Boot에 본인확인 요청
-8. Spring Boot는 기준 이미지 조회 후 FastAPI `/idv/api/v1/verify` 호출
-9. Spring Boot는 AI 결과와 환자 원본 정보 재검증 후 본인확인 결과 반환
+8. Spring Boot는 기준 이미지가 있으면 함께, 없으면 `referenceImage` 없이 FastAPI `/idv/api/v1/verify` 호출
+9. Spring Boot는 AI 결과와 환자 원본 정보를 재검증한 뒤 본인확인 결과 반환
 10. 성공 시 차량 태블릿은 활력징후 단계로 이동
 11. 활력징후 단계 완료 후, 의사 세션이 준비되면 환자 토큰 발급 요청
 12. 환자 토큰 발급 성공 시 진료실 입장
@@ -78,7 +91,7 @@
 
 ### `POST /api/v1/missions/{missionId}/identity-check`
 
-- Auth: `Bearer Token (ADMIN)`
+- Auth: `Bearer Token (MISSION_TERMINAL | ADMIN)`
 - Content-Type: `multipart/form-data`
 - 목적: 얼굴 촬영 + 신분증 촬영 결과를 사용해 본인확인만 수행
 - 전제 조건:
@@ -95,9 +108,10 @@ Spring 내부 처리:
 1. `missionId -> case -> patient`로 대상 환자 조회
 2. `MISSION.phase`를 `VERIFYING`으로 전환
 3. `PATIENT.reference_image_path` 조회
-4. `referenceImage + faceImage + idCardImage`를 FastAPI `/idv/api/v1/verify`로 전달
+4. 기준 이미지가 있으면 `referenceImage + faceImage + idCardImage`, 없으면 `faceImage + idCardImage`만 FastAPI `/idv/api/v1/verify`로 전달
 5. OCR 이름, 주소, 주민등록번호 기반 생년월일을 환자 정보와 재검증
-6. 성공 시 Redis 등 휘발성 저장소에 `verified` 상태를 TTL 기반으로 저장
+6. AI 응답 `matched=true`이고 OCR 이름, 생년월일 6자리, 주소 중 하나 이상이 환자 정보와 일치하면 성공 처리
+7. 성공 시 Redis 등 휘발성 저장소에 `verified` 상태를 TTL 기반으로 저장
 
 Response `200 OK` 예시:
 
@@ -205,7 +219,7 @@ Request parts:
 - `verificationId`
 - `patientId`
 - `verificationMode=FACE_AND_IDCARD`
-- `referenceImage`
+- `referenceImage` (optional)
 - `faceImage`
 - `idCardImage`
 
@@ -226,14 +240,16 @@ Response fields:
 - `qualityChecks.ocrConfidence`
 - `modelVersion`
 
-FastAPI 서비스 계층 분리:
+현재 구현 파일:
 
-- `face_match_service`
-- `idcard_ocr_service`
-- `idcard_face_match_service`
-- `idv_orchestrator_service`
+- `app/api/v1/routes/idv.py`
+- `app/services/idv_service.py`
+- `app/services/idv_model_registry.py`
+- `app/services/idv_ocr_parser.py`
+- `app/services/idv_quality_service.py`
+- `app/services/idv_similarity.py`
 
-`idv_orchestrator_service`는 세 모델의 결과를 취합해 하나의 응답 DTO로 정리한다.
+`idv_service.py`가 얼굴 검출, embedding, OCR, 품질 검사, 최종 응답 조립을 오케스트레이션한다.
 
 ## 5.2 Spring과 FastAPI의 책임 경계
 
@@ -243,16 +259,43 @@ FastAPI 책임:
 - 신분증 OCR
 - 신분증 얼굴 추출 및 라이브 얼굴 비교
 - 품질 검사와 score 산출
+- 기준 이미지가 없을 때 no-reference 경로로 `matched` 계산
 
 Spring 책임:
 
-- 관리자 권한 검증
+- 관리자 또는 미션 단말 권한 검증
 - 미션/세션/환자 정합성 검증
 - 기준 이미지 조회
 - FastAPI 호출
 - OCR 이름/주소/생년월일 재검증
+- OCR 이름, 생년월일 6자리, 주소 중 하나 이상 일치 여부 판정
+- FastAPI 응답 요약 로그 기록
 - verified 상태 캐시
 - 환자 토큰 발급
+
+## 5.3 FE 캡처 입력 정책
+
+현재 차량 FE 입력 정책:
+
+- 얼굴 촬영:
+  - 전체 비디오 프레임을 원본 방향으로 업로드
+  - 좌우 반전은 미리보기 CSS에만 적용
+- 신분증 촬영:
+  - 전체 프레임 업로드 금지
+  - 화면 가이드 박스 기준 영역만 crop 후 업로드
+  - `object-cover`로 인한 잘림을 보정한 실제 source 좌표 사용
+  - 신분증 이미지는 PNG 업로드
+
+현재 crop 기준:
+
+- `x=0.25`
+- `y=0.30`
+- `width=0.50`
+- `height=0.40`
+
+구현 위치:
+
+- FE: `src/FE/src/pages/Robot/AuthStep.jsx`
 
 ## 6. 활력징후 단계 정리
 
@@ -344,6 +387,7 @@ MVP 기준:
 
 - `PIN/QR/신분증` 대체 서술을 실제 MVP 기준인 얼굴 + 신분증 + 기준 이미지 비교로 정리
 - 실패 시 운영자 개입 경로를 구체화
+- 기준 이미지 없는 경우 `live face + id card face + OCR` 경로도 함께 명시
 
 ### `docs/wiki/Infrastructure_Setup.md`
 
@@ -358,7 +402,7 @@ MVP 기준:
 ### `src/AI/docs/architecture.md`
 
 - AI Server 책임에 IDV API 추가
-- STT/triage 외에 IDV orchestration 경로 추가
+- STT 외에 IDV orchestration 경로 추가
 
 ## 10. 구현 순서
 
@@ -366,9 +410,10 @@ MVP 기준:
 2. Spring 신규 `mission identity-check` API 추가
 3. FastAPI `/idv/api/v1/verify` 추가
 4. 차량 FE를 2-step 캡처 흐름으로 교체
-5. 환자 토큰 발급 API를 verified 상태 기반으로 단순화
-6. 활력징후 화면 연결
-7. 운영 검증 및 장애 케이스 테스트
+5. 신분증 crop 및 PNG 업로드 반영
+6. 환자 토큰 발급 API를 verified 상태 기반으로 단순화
+7. 활력징후 화면 연결
+8. 운영 검증 및 장애 케이스 테스트
 
 ## 11. 검증 시나리오
 

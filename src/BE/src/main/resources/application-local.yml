@@ -23,11 +23,13 @@ jwt:
   refresh-token-expiry: 604800
   mission-terminal-token-expiry: ${MISSION_TERMINAL_TOKEN_EXPIRY:1800}
 
+robot-terminal:
+  registry: ${ROBOT_TERMINAL_REGISTRY:robot-terminal-01|change-me|veh_GIMCHEON_01|GIMCHEON}
+
 ai:
   file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
-  idv-url: ${AI_IDV_URL:https://localhost/idv/api/v1/verify}
-  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:5000}
-  triage-url: ${AI_TRIAGE_URL:https://localhost/triage/api/v1/recommend}
+  idv-url: ${AI_IDV_URL:http://70.12.130.107:8010/idv/api/v1/verify}
+  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:20000}
 
 file:
   storage-root: ${FILE_STORAGE_ROOT:./local-storage/uploads}
@@ -37,7 +39,7 @@ sms:
   sender-number: "01000000000"
 
 livekit:
-  host: ${LIVEKIT_HOST:http://livekit:7880}
+  host: ${LIVEKIT_HOST:http://localhost:7880}
   api-key: devkey
   api-secret: devsecret
   url: ${LIVEKIT_URL:ws://localhost:7880}
@@ -45,7 +47,16 @@ livekit:
 telemetry:
   api-key: ${TELEMETRY_API_KEY:telemetry-dev-key}
 
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:wss://www.waddoc.site/mqtt}
+  client-id: ${MQTT_CLIENT_ID:spring-waddoc-local}
+
+monitoring:
+  access:
+    cookie-secret: waddoc-dev-monitoring-cookie-secret-must-be-at-least-32
 app:
+  demo-mode:
+    enabled: true
   seed:
     enabled: ${APP_SEED_ENABLED:true}
     default-password: "${APP_SEED_DEFAULT_PASSWORD:Passw0rd!}"

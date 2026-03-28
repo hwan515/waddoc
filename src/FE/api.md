@@ -53,7 +53,7 @@
 6. [미션(차량 출동) API](#6-미션차량-출동-api-apiv1missions)
 7. [동의 API (P1 별도 문서)](#7-동의-api-p1)
 8. [실시간 알림 API](#8-실시간-알림-api-apiv1doctorsmenotifications)
-9. [화상진료 세션 API](#9-화상진료-세션-api-apiv1sessions)
+9. [화상진료 세션 API](#9-화상진료-세션-api)
 10. [보호자 API](#10-보호자-api-apiv1guardians)
 11. [관리자 API](#11-관리자-api-apiv1admin)
 12. [상태 Enum 정의](#12-상태-enum-정의)
@@ -1019,13 +1019,86 @@
 
 ---
 
-## 10. 진료 진입/화상진료 세션 API (`/api/v1/missions`, `/api/v1/sessions`)
+## 8. 실시간 알림 API (`/api/v1/doctors/me/notifications`)
+
+> 의사 EMR 화면에서 신규 예약 알림을 실시간으로 수신하기 위한 **Server-Sent Events (SSE)** API다.
+>
+> 단방향 서버 push 전용이며, 의사 로그인 후 대시보드 진입 시 연결한다.
+>
+> 동일 의사의 다중 탭 연결을 허용한다.
+
+### 8.1 의사 알림 스트림 구독
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/doctors/me/notifications/stream` |
+| Auth | Bearer Token (DOCTOR) |
+| Accept | `text/event-stream` |
+| Response Content-Type | `text/event-stream` |
+
+> 브라우저 기본 `EventSource`는 `Authorization` 헤더를 추가할 수 없으므로, 프론트엔드는 `fetch` 기반 SSE 클라이언트를 사용한다.
+>
+> 서버는 연결 성공 시 즉시 `connected` 이벤트를 1회 전송하고, 이후 신규 예약 발생 시 `notification` 이벤트를 같은 스트림으로 전달한다.
+>
+> 서버 스트림 timeout은 1시간이고, `retry: 3000`을 내려 클라이언트 재연결 기준값을 안내한다.
+
+**연결 직후 이벤트 예시**
+```text
+id: 0d4f4a38-2e8a-4e2d-a7c1-32cf7c6d53f0
+event: connected
+retry: 3000
+data: {"connectedAt":"2026-03-19T17:20:00+09:00"}
+```
+
+**신규 예약 알림 이벤트 예시**
+```text
+id: 73a8f5a7-8df7-4f08-b52e-0d0cb3e0a2f5
+event: notification
+data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientId":"pat_Zk3mQ9","patientName":"박순자","patientGender":"FEMALE","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
+```
+
+> `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
+>
+> `notification` 이벤트는 예약과 케이스 생성 트랜잭션이 정상 커밋된 뒤 발행된다. 활성 SSE 연결이 없더라도 예약 생성 자체는 실패하지 않는다.
+
+**`notification` payload**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `type` | string | O | 현재는 `NEW_BOOKING` |
+| `bookingId` | string | O | 예약 ID (`bk_...`) |
+| `caseId` | string | O | 생성된 케이스 ID (`case_...`) |
+| `doctorId` | string | O | 담당 의사 ID (`doc_...`) |
+| `doctorName` | string | O | 담당 의사명 |
+| `departmentName` | string | O | 진료과명 |
+| `patientId` | string | O | 환자 ID (`pat_...`) |
+| `patientName` | string | O | 환자명 |
+| `patientGender` | string | O | 환자 성별 (`MALE` | `FEMALE` | `UNKNOWN`) |
+| `appointmentDate` | string | O | 예약 날짜 (`YYYY-MM-DD`) |
+| `startTime` | string | O | 예약 시작 시간 (`HH:mm:ss`) |
+| `location` | string | O | 환자 주소 |
+| `createdAt` | string | O | 알림 생성 시각 (`OffsetDateTime`) |
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 401 | `AUTH_UNAUTHORIZED` | Bearer Token 누락 또는 인증 실패 |
+| 403 | `AUTH_FORBIDDEN` | DOCTOR 권한이 아님 |
+| 403 | `AUTH_DOCTOR_PROFILE_REQUIRED` | 의사 프로필이 연결되지 않은 계정 |
+
+---
+
+<a id="9-화상진료-세션-api"></a>
+## 9. 진료 진입/화상진료 세션 API (`/api/v1/missions`, `/api/v1/sessions`)
 
 > 차량 도착 후 환자 본인 확인부터 LiveKit 기반 1:1 WebRTC 화상진료 세션 입장까지의 진입 흐름을 관리한다.
 >
 > **토큰 발급 정책**: 의사와 환자의 토큰은 **별도 엔드포인트**에서 발급한다.
-> - 의사: 세션 생성 시 (10.1) 자신의 토큰만 발급
-> - 환자: 미션이 진료 준비 단계에 도달한 뒤 차량 태블릿에서 **본인 확인** 요청 (10.2), 이후 **활력징후 단계 완료 후, 의사 세션이 준비되면** **환자 토큰 발급** 요청 (10.3)
+> - 의사: 세션 생성 시 (9.1) 자신의 토큰만 발급
+> - 차량 단말: 미션에 바인딩된 제한 토큰 발급 (9.2)
+> - 환자: 차량 단말이 `MISSION_TERMINAL` 토큰으로 **본인 확인** 요청 (9.3), 이후 **활력징후 단계 완료 후, 의사 세션이 준비되면** **환자 토큰 발급** 요청 (9.4)
 
 ### 9.1 진료 세션 생성 — 의사 토큰 발급
 
@@ -1079,28 +1152,221 @@
 
 ---
 
-### 10.2 환자 본인 확인 (차량 태블릿 — 관리자 인증)
+### 9.2 차량 단말 bootstrap 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/bootstrap-token` |
+| Auth | 없음 |
+
+> 차량 태블릿은 관리자/의사 브라우저 로그인에 의존하지 않고, 환경변수로 주입된 단말 credential로 `DEVICE_TERMINAL` 토큰을 먼저 발급받는다.
+> 서버는 `ROBOT_TERMINAL_REGISTRY`에 등록된 엔트리와 `terminalId`, `terminalKey`를 대조해 `vehicleId`, `regionCode` 바인딩 정보를 함께 토큰에 싣는다.
+> 이 토큰은 현재 미션 조회, 후보 조회, mission claim에 사용할 수 있다.
+
+**Request Body**
+```json
+{
+  "terminalId": "robot-terminal-01",
+  "terminalKey": "<BOOTSTRAP_SECRET>"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "terminalId": "robot-terminal-01",
+  "vehicleId": "veh_GIMCHEON_01",
+  "regionCode": "GIMCHEON",
+  "deviceTerminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "terminal:read-current-mission",
+    "terminal:check-in-candidates",
+    "terminal:claim-mission"
+  ]
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 401 | `AUTH_INVALID_CREDENTIALS` | 단말 bootstrap credential 불일치 |
+| 503 | `AUTH_TERMINAL_BOOTSTRAP_DISABLED` | 서버에 차량 단말 bootstrap credential 미설정 |
+
+---
+
+### 9.2a 차량 현재 미션 자동 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/terminal/current-mission` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 `DEVICE_TERMINAL` 토큰에 바인딩된 `vehicleId` 기준으로 오늘(`Asia/Seoul`) 예약 미션 중 현재 진입해야 할 미션 1건을 자동 선택한다.
+> 선택 우선순위는 `ARRIVED > VERIFYING > CONSULTING > EN_ROUTE > DISPATCHED`, 이후 `appointmentTime ASC`, `missionId ASC` 이다.
+> 메인 환자 플로우는 이 API를 사용하며, `생년월일/전화번호` 입력은 더 이상 메인 진입에서 사용하지 않는다.
+
+**Response** `200 OK`
+```json
+{
+  "hasMission": true,
+  "missionId": "ms_F2gHn6",
+  "patientName": "홍길동",
+  "appointmentDate": "2026-03-27",
+  "appointmentTime": "14:30",
+  "phase": "ARRIVED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59
+}
+```
+
+미션이 없으면:
+```json
+{
+  "hasMission": false
+}
+```
+
+---
+
+### 9.2b 차량 현재 미션 claim 및 미션 단말 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/current-mission/claim` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 현재 자동 선택된 미션 1건을 claim하고, 해당 미션 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급받는다.
+> 실제 메인 화면에서는 `phase == ARRIVED` 일 때만 이 API를 호출한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "patientName": "홍길동",
+  "terminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "mission:identity-check",
+    "session:issue-patient-token",
+    "session:status:read",
+    "vitals:write"
+  ]
+}
+```
+
+---
+
+### 9.2c 차량 진료 대상 후보 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/check-in/candidates` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 환자가 입력한 `전화번호 뒤 4자리 + 생년월일 6자리`를 기준으로 차량 진료 가능한 mission 후보를 조회한다.
+> 서버는 `DEVICE_TERMINAL` 토큰에 바인딩된 `regionCode`와 이미 배정된 `vehicleId`를 함께 확인해, 현재 단말이 접근 가능한 mission만 반환한다.
+> 응답에는 마스킹된 이름과 예약 시간만 포함한다.
+
+**Request Body**
+```json
+{
+  "phoneLast4": "3720",
+  "birthDate6": "580315"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "candidates": [
+    {
+      "missionId": "ms_F2gHn6",
+      "patientMaskedName": "홍*동",
+      "appointmentDate": "2026-03-20",
+      "appointmentTime": "14:30",
+      "doctorMaskedName": "이*종",
+      "missionPhase": "ARRIVED"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+---
+
+### 9.2d 차량 mission claim 및 미션 단말 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/missions/{missionId}/claim` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 선택한 mission과 환자 입력값을 서버에 다시 전달해 claim을 요청한다.
+> 서버는 같은 날짜/환자 정보/mission phase를 재검증한 뒤, 단말의 `vehicleId`/`regionCode`와 mission을 다시 대조한다.
+> 즉시 진료처럼 `mission.vehicleId`가 아직 비어 있으면 첫 claim 시점에 현재 단말의 `vehicleId`로 고정한 뒤, 해당 mission 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급한다.
+
+**Request Body**
+```json
+{
+  "phoneLast4": "3720",
+  "birthDate6": "580315"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "patientName": "홍길동",
+  "terminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "mission:identity-check",
+    "session:issue-patient-token"
+  ]
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+| 403 | `TERMINAL_MISSION_CLAIM_FORBIDDEN` | 입력한 접수 정보로 해당 미션을 시작할 수 없음 |
+
+---
+
+### 9.3 환자 본인 확인 (차량 태블릿 — 미션 단말 토큰)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/missions/{missionId}/identity-check` |
-| Auth | Bearer Token (ADMIN) |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
 
-> 차량 태블릿은 **운영 단말**로 정의하며, 관리자 계정으로 로그인되어 있다.
+> 차량 태블릿은 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로만 호출한다.
 > `진료 시작` 버튼은 환자 세션 생성이 아니라, 미션 단계 전환과 본인 확인/현장 진료 준비 시작을 의미한다.
-> 서버는 `patientId` 기준으로 `PATIENT.reference_image_path`를 조회한 뒤 파일 스토리지에서 기존 기준 이미지를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
+> 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 확인하고, 기준 이미지가 있으면 함께, 없으면 `referenceImage` 없이 차량에서 촬영한 `faceImage`, `idCardImage`만 GPU 서버로 전송한다.
 > GPU 서버 내부 응답 필수 필드: `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`
-> Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
+> Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. `matched=true`이고 OCR 이름, 생년월일 6자리, 주소 중 하나 이상이 환자 정보와 일치하면 최종 통과로 판정한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
 > 검증 성공 시 서버는 별도 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 차량 태블릿은 활력징후 단계로 이동한다.
+> FE는 얼굴 이미지를 원본 방향 전체 프레임으로 업로드하고, 신분증 이미지는 가이드 영역만 crop한 PNG로 업로드한다.
 
 **Request Body** (`multipart/form-data`)
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
-| `patientId` | string | O | 케이스 환자 ID |
 | `faceImage` | file | O | 차량에서 촬영한 환자 얼굴 이미지 |
-| `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지 |
+| `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지. FE는 가이드 영역 crop 결과를 PNG로 업로드 |
 
 **Response** `200 OK`
 ```json
@@ -1125,6 +1391,7 @@
 }
 ```
 
+> `identityCheck.faceSimilarityScore`는 기준 이미지가 없는 경로에서는 `null`일 수 있다.
 > `identityCheck.ocr.rrnMasked`는 GPU 서버가 반환한 주민등록번호 원문을 백엔드에서 마스킹한 값이다. 원문은 영속 저장하지 않는다.
 
 **본인 확인 실패 응답 예시** `403 Forbidden`
@@ -1147,29 +1414,20 @@
 | 404 | `MISSION_NOT_FOUND` | 미션 없음 |
 | 403 | `MISSION_NOT_READY` | 미션이 본인 확인 가능한 준비 상태가 아님 |
 | 403 | `IDENTITY_CHECK_FAILED` | GPU 본인 확인 실패 |
-| 403 | `PATIENT_MISMATCH` | 미션의 케이스 환자 ID와 불일치 |
-| 409 | `REFERENCE_IMAGE_MISSING` | 환자 기준 이미지가 등록되지 않음 |
 | 502 | `AI_IDV_REQUEST_FAILED` | 본인 확인 AI 서버 호출 실패 |
 
 ---
 
-### 10.3 환자 토큰 발급 (차량 태블릿 — 관리자 인증)
+### 9.4 환자 토큰 발급 (차량 태블릿 — 미션 단말 토큰)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/sessions/{sessionId}/participants/patient/token` |
-| Auth | Bearer Token (ADMIN) |
+| Path | `/api/v1/missions/{missionId}/participants/patient/token` |
+| Auth | Bearer Token (MISSION_TERMINAL) |
 
 > 차량 태블릿은 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청한다.
-> 이 API는 이미 성공한 본인 확인 상태를 검증한 뒤, 환자용 LiveKit 토큰만 발급한다.
-
-**Request Body**
-```json
-{
-  "patientId": "pat_T7nLp4"
-}
-```
+> 이 API는 `missionId -> case -> consultationSession -> patient` 순서로 대상 세션을 서버에서 해석하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
 
 **Response** `200 OK`
 ```json
@@ -1190,12 +1448,59 @@
 |--------|-----------|------|
 | 403 | `MISSION_NOT_READY` | 미션이 환자 참가 가능한 준비 상태가 아님 |
 | 404 | `SESSION_NOT_FOUND` | 세션 없음 |
-| 403 | `PATIENT_MISMATCH` | 세션의 케이스 환자 ID와 불일치 |
 | 403 | `IDENTITY_CHECK_NOT_CONFIRMED` | 최근 본인 확인 성공 상태가 없거나 만료됨 |
 
 ---
 
-### 10.4 세션 토큰 재발급
+### 9.4a 진료 세션 상태 조회 (차량 태블릿 — 미션 단말 토큰)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/missions/{missionId}/consultation-status` |
+| Auth | Bearer Token (MISSION_TERMINAL) |
+
+> 차량 태블릿은 현재 미션에 연결된 진료 세션의 종료 여부를 polling 용도로 조회한다.
+> 이 API는 `missionId -> consultationSession`을 서버에서 해석하고, 요청에 사용한 미션 단말 토큰이 같은 미션 범위인지 확인한 뒤 세션 상태 스냅샷을 반환한다.
+
+**Response** `200 OK`
+```json
+{
+  "sessionId": "ses_L6pQr1",
+  "caseId": "case_T7nLp4",
+  "status": "COMPLETED",
+  "room": {
+    "roomId": "room_ses_L6pQr1",
+    "livekitUrl": "wss://<DOMAIN>/livekit"
+  },
+  "doctor": {
+    "doctorId": "doc_P5wMn4",
+    "name": "김의사",
+    "connectionState": "DISCONNECTED",
+    "joinedAt": "2026-03-11T10:00:30+09:00"
+  },
+  "patient": {
+    "patientId": "pat_Zk3mQ9",
+    "name": "홍길동",
+    "connectionState": "DISCONNECTED",
+    "joinedAt": "2026-03-11T10:01:00+09:00"
+  },
+  "reconnectCount": 0,
+  "startedAt": "2026-03-11T10:01:00+09:00"
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `AUTH_FORBIDDEN` | 다른 미션 범위 토큰 또는 scope 부족 |
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+| 404 | `SESSION_NOT_FOUND` | 연결된 진료 세션 없음 |
+
+---
+
+### 9.5 세션 토큰 재발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1240,7 +1545,7 @@
 
 ---
 
-### 10.5 세션 상태 조회
+### 9.6 세션 상태 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1277,7 +1582,7 @@
 
 ---
 
-### 10.6 진료 종료 및 요약 기록
+### 9.7 진료 종료 및 요약 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1285,15 +1590,32 @@
 | Path | `/api/v1/sessions/{sessionId}/summary` |
 | Auth | Bearer Token (DOCTOR) |
 
+> 이 API는 의사 화면에서 **`진료 완료` 버튼을 눌렀을 때만** 호출한다.
+> 진료 중 작성한 경과 기록지, 재진 여부, 처방 내역은 프론트 로컬 상태로만 유지되며 서버에 중간 저장하지 않는다.
+> `PUT` 의미를 유지하기 위해 클라이언트는 진료 종료 시점의 최신 진료 요약 상태를 전체 필드로 전송한다.
+
 **Request Body**
 ```json
 {
   "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장. 증상 지속 시 재진료 필요.",
   "isPrescriptionIssued": true,
-  "prescriptionNote": "타이레놀 500mg",
+  "prescriptionNote": "[\"M001\",\"M005\"]",
   "needsFollowUp": true
 }
 ```
+
+**Field Rules**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `summaryNote` | string | O | 진료 종료 시 저장하는 경과 기록지 |
+| `isPrescriptionIssued` | boolean | O | 최종 처방 내역에 약품 코드가 1개 이상 있으면 `true`, 없으면 `false` |
+| `prescriptionNote` | string | O | 약품 코드 배열의 JSON 문자열. 예: `"[\"M001\",\"M005\"]"` |
+| `needsFollowUp` | boolean | O | 재진 필요 여부 |
+
+> `prescriptionNote`는 현재 문자열 필드를 재사용하므로, **약품 코드 리스트를 JSON 문자열로 직렬화한 값**을 저장한다.
+> 처방이 없을 경우 `prescriptionNote`는 `"[]"`를 권장한다.
+> 하위 호환을 위해 기존 자유 텍스트 처방 문자열도 조회 API에서 그대로 반환될 수 있다.
 
 **Response** `200 OK`
 ```json
@@ -1304,7 +1626,7 @@
   "summary": {
     "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
     "isPrescriptionIssued": true,
-    "prescriptionNote": "타이레놀 500mg",
+    "prescriptionNote": "[\"M001\",\"M005\"]",
     "needsFollowUp": true
   },
   "endedAt": "2026-03-11T10:25:00+09:00",
@@ -1314,7 +1636,7 @@
 
 ---
 
-### 10.7 LiveKit Webhook 수신 (서버 간)
+### 9.8 LiveKit Webhook 수신 (서버 간)
 
 | 항목 | 값 |
 |------|-----|
@@ -1387,13 +1709,19 @@
       "doctorName": "김의사",
       "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
       "isPrescriptionIssued": true,
-      "prescriptionNote": "타이레놀 500mg",
+      "prescriptionNote": "[\"M001\",\"M005\"]",
       "needsFollowUp": true
     }
   ],
   "totalCount": 1
 }
 ```
+
+> `prescriptionNote`는 다음 두 형식 중 하나로 조회될 수 있다.
+> 1. 최신 형식: 약품 코드 배열의 JSON 문자열. 예: `"[\"M001\",\"M005\"]"`
+> 2. 과거 형식: 자유 텍스트 처방 문자열
+> 클라이언트는 먼저 `prescriptionNote`를 JSON 배열(`string[]`)로 파싱 시도하고, 성공하면 공통 `MEDICINE_CATALOG` 기준으로 약품명, 분류, 용법/용량을 매핑해 렌더링한다.
+> JSON 파싱에 실패하면 과거 자유 텍스트 처방으로 간주하고 문자열을 그대로 표시한다.
 
 **Errors**
 

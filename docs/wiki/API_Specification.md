@@ -53,7 +53,7 @@
 6. [미션(차량 출동) API](#6-미션차량-출동-api-apiv1missions)
 7. [동의 API (P1 별도 문서)](#7-동의-api-p1)
 8. [실시간 알림 API](#8-실시간-알림-api-apiv1doctorsmenotifications)
-9. [화상진료 세션 API](#9-화상진료-세션-api-apiv1sessions)
+9. [화상진료 세션 API](#9-화상진료-세션-api)
 10. [보호자 API](#10-보호자-api-apiv1guardians)
 11. [관리자 API](#11-관리자-api-apiv1admin)
 12. [상태 Enum 정의](#12-상태-enum-정의)
@@ -615,6 +615,13 @@
 ```
 
 > 예약 생성 성공 후 시스템은 환자의 기본 휴대전화 번호로 예약 확정 SMS를 비동기 발송한다. SMS 발송 실패는 예약 생성을 롤백하지 않으며, 운영 로그와 재시도 정책으로 후속 처리한다.
+>
+> 추가로 서버는 같은 트랜잭션 문맥에서 다음 리소스를 함께 준비한다.
+> - `CARE_CASE` 생성
+> - `MISSION` 생성 (`phase=CREATED`, `vehicleId=veh_GIMCHEON_01`)
+> - `DISPATCH_OUTBOX` 생성
+>
+> 주소가 waypoint 매핑 대상이면 `MISSION.targetWaypointNumber`에 저장하고, 운영/데모 환경에서 이후 출동 트리거에 사용한다.
 
 **Errors**
 
@@ -787,7 +794,11 @@
   "patient": {
     "patientId": "pat_Zk3mQ9",
     "name": "홍길동",
-    "birthDate6": "580315"
+    "birthDate6": "580315",
+    "birthDate": "1958-03-15",
+    "gender": "MALE",
+    "phone": "01012345678",
+    "address": "경북 울릉군 울릉읍 ..."
   },
   "doctor": {
     "doctorId": "doc_P5wMn4",
@@ -802,9 +813,46 @@
   },
   "missionId": "ms_F2gHn6",
   "sessionId": null,
+  "vitals": {
+    "caseId": "case_T7nLp4",
+    "temperature": 36.7,
+    "bloodPressureSys": 128,
+    "bloodPressureDia": 82,
+    "heartRate": 72,
+    "spO2": 98,
+    "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
+    "ecgSamplingHz": 25,
+    "ecgDurationSeconds": 8,
+    "measuredAt": "2026-03-23T14:23:10+09:00",
+    "createdAt": "2026-03-23T14:15:00",
+    "updatedAt": "2026-03-23T14:23:10"
+  },
   "createdAt": "2026-03-10T10:05:00+09:00"
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `patient.patientId` | string | 환자 공개 ID |
+| `patient.name` | string | 환자 이름 |
+| `patient.birthDate6` | string | 생년월일 6자리 |
+| `patient.birthDate` | string | 생년월일 (`YYYY-MM-DD`) |
+| `patient.gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `patient.phone` | string | 환자 전화번호 |
+| `patient.address` | string | 환자 주소 |
+| `vitals` | object \| null | 현재 케이스 기준 최신 생체데이터. 아직 측정 전이면 `null` |
+| `vitals.caseId` | string | 생체데이터가 연결된 케이스 공개 ID |
+| `vitals.temperature` | number \| null | 체온 |
+| `vitals.bloodPressureSys` | integer \| null | 수축기 혈압 |
+| `vitals.bloodPressureDia` | integer \| null | 이완기 혈압 |
+| `vitals.heartRate` | integer \| null | 심박수 |
+| `vitals.spO2` | integer \| null | 산소포화도 |
+| `vitals.ecgWaveform` | number[] \| null | 측정 시점 ECG sample waveform. 실시간 스트림 아님 |
+| `vitals.ecgSamplingHz` | integer \| null | ECG 샘플링 주파수 |
+| `vitals.ecgDurationSeconds` | integer \| null | ECG 샘플 길이(초) |
+| `vitals.measuredAt` | string \| null | 마지막 측정 시각 (`OffsetDateTime`, KST) |
+| `vitals.createdAt` | string \| null | 해당 케이스 생체데이터 row 생성 시각 |
+| `vitals.updatedAt` | string \| null | 마지막 partial upsert 시각 |
 
 ---
 
@@ -830,7 +878,9 @@
     {
       "caseId": "case_T7nLp4",
       "status": "PREPARING",
+      "patientId": "pat_Zk3mQ9",
       "patientName": "홍길동",
+      "patientGender": "MALE",
       "departmentName": "내과",
       "appointmentDate": "2026-03-11",
       "startTime": "10:00",
@@ -840,6 +890,19 @@
   "totalCount": 1
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `cases[].caseId` | string | 케이스 공개 ID |
+| `cases[].status` | string | 케이스 상태 |
+| `cases[].patientId` | string | 환자 공개 ID |
+| `cases[].patientName` | string | 환자 이름 |
+| `cases[].patientGender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `cases[].departmentName` | string | 진료과명 |
+| `cases[].appointmentDate` | string | 예약 날짜 (`YYYY-MM-DD`) |
+| `cases[].startTime` | string | 예약 시작 시간 |
+| `cases[].missionPhase` | string | 연결된 미션 단계 |
+| `totalCount` | int | 조회된 케이스 수 |
 
 ---
 
@@ -871,7 +934,7 @@
       "caseId": "case_T7nLp4",
       "patientName": "홍길동",
       "phase": "DISPATCHED",
-      "vehicleId": "v-001",
+      "vehicleId": "veh_00000001",
       "destination": "경북 울릉군 울릉읍...",
       "dispatchedAt": "2026-03-11T08:30:00+09:00",
       "estimatedArrivalTime": "2026-03-11T09:45:00+09:00"
@@ -897,7 +960,7 @@
   "missionId": "ms_F2gHn6",
   "caseId": "case_T7nLp4",
   "phase": "EN_ROUTE",
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "patientName": "홍길동",
   "destination": "경북 울릉군 울릉읍...",
   "dispatchedAt": "2026-03-11T08:30:00+09:00",
@@ -921,11 +984,13 @@
 | Path | `/api/v1/missions` |
 | Auth | Bearer Token (ADMIN) |
 
+> 이 API는 관리자 수동 생성/보정용이다. 일반 예약 확정 흐름에서는 `dispatch_outbox`와 Kafka 소비를 통해 미션이 자동 생성된다.
+
 **Request Body**
 ```json
 {
   "caseId": "case_T7nLp4",
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "destination": "경북 울릉군 울릉읍...",
   "scheduledTime": "2026-03-11T08:30:00+09:00"
 }
@@ -937,7 +1002,7 @@
   "missionId": "ms_F2gHn6",
   "caseId": "case_T7nLp4",
   "phase": "CREATED",
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "createdAt": "2026-03-10T14:00:00+09:00"
 }
 ```
@@ -989,7 +1054,7 @@
   "source": "ROS2",
   "sourceEventId": "ros2_msg_abc123",
   "seqNo": 42,
-  "vehicleId": "v-001",
+  "vehicleId": "veh_00000001",
   "phase": "EN_ROUTE",
   "latitude": 37.4845,
   "longitude": 130.9057,
@@ -1000,7 +1065,9 @@
 }
 ```
 
-> 서버는 수신한 payload로 `MISSION.phase`, `MISSION.latitude`, `MISSION.longitude`를 직접 갱신한다. 별도 이벤트 리소스는 생성하지 않는다.
+> HTTP 진입점은 API Key 검증 후 `mission.telemetry` Kafka 토픽에 메시지를 적재하고 즉시 `202 Accepted`를 반환한다.
+>
+> 실제 `MISSION.phase`, `MISSION.latitude`, `MISSION.longitude` 갱신은 `MissionTelemetryConsumer`가 비동기로 처리한다. 별도 이벤트 리소스는 생성하지 않는다.
 >
 > **관리자 PATCH와의 충돌 방지 규칙**:
 > - `seqNo` 또는 `timestamp` 기준으로 마지막 반영값보다 오래된 이벤트는 무시한다.
@@ -1055,12 +1122,14 @@ data: {"connectedAt":"2026-03-19T17:20:00+09:00"}
 ```text
 id: 73a8f5a7-8df7-4f08-b52e-0d0cb3e0a2f5
 event: notification
-data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientId":"pat_Zk3mQ9","patientName":"박순자","patientGender":"FEMALE","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
+data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doctorId":"doc_P5wMn4","doctorName":"김도현","departmentName":"내과","patientId":"pat_Zk3mQ9","patientName":"박순자","patientGender":"FEMALE","patientBirthDate":"1958-03-15","patientPhone":"01012345678","appointmentDate":"2026-03-24","startTime":"14:30:00","location":"경북 김천시 증산면 장전1길 69","createdAt":"2026-03-19T17:25:10+09:00"}
 ```
 
 > `location`은 현재 구조상 환자 주소(`PATIENT.address`)를 사용한다.
 >
 > `notification` 이벤트는 예약과 케이스 생성 트랜잭션이 정상 커밋된 뒤 발행된다. 활성 SSE 연결이 없더라도 예약 생성 자체는 실패하지 않는다.
+>
+> 내부적으로는 `doctor.notifications` Kafka 토픽을 통해 전달되며, 활성 SSE 연결이 없는 의사는 이벤트를 소비하더라도 push를 생략한다.
 
 **`notification` payload**
 
@@ -1075,6 +1144,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | `patientId` | string | O | 환자 ID (`pat_...`) |
 | `patientName` | string | O | 환자명 |
 | `patientGender` | string | O | 환자 성별 (`MALE` | `FEMALE` | `UNKNOWN`) |
+| `patientBirthDate` | string | O | 환자 생년월일 (`YYYY-MM-DD`) |
+| `patientPhone` | string | O | 환자 전화번호 |
 | `appointmentDate` | string | O | 예약 날짜 (`YYYY-MM-DD`) |
 | `startTime` | string | O | 예약 시작 시간 (`HH:mm:ss`) |
 | `location` | string | O | 환자 주소 |
@@ -1090,6 +1161,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
+<a id="9-화상진료-세션-api"></a>
 ## 9. 진료 진입/화상진료 세션 API (`/api/v1/missions`, `/api/v1/sessions`)
 
 > 차량 도착 후 환자 본인 확인부터 LiveKit 기반 1:1 WebRTC 화상진료 세션 입장까지의 진입 흐름을 관리한다.
@@ -1151,19 +1223,109 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.2 차량 단말 토큰 발급
+### 9.2 차량 단말 bootstrap 토큰 발급
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/missions/{missionId}/terminal/token` |
-| Auth | Bearer Token (DOCTOR, ADMIN) |
+| Path | `/api/v1/terminal/bootstrap-token` |
+| Auth | 없음 |
 
-> 차량 태블릿은 관리자 JWT를 직접 보관하지 않고, **해당 미션 범위로 제한된 단말 토큰**만 사용한다.
-> 서버는 요청자가 해당 케이스를 조회·진료할 수 있는 의사 또는 관리자임을 확인한 뒤, `missionId`에 바인딩된 짧은 TTL의 `MISSION_TERMINAL` 토큰을 발급한다.
-> 이 토큰은 **본인 확인**과 **환자 WebRTC 토큰 발급**에만 사용할 수 있으며 다른 관리자 API에는 사용할 수 없다.
+> 차량 태블릿은 관리자/의사 브라우저 로그인에 의존하지 않고, 환경변수로 주입된 단말 credential로 `DEVICE_TERMINAL` 토큰을 먼저 발급받는다.
+> 서버는 `ROBOT_TERMINAL_REGISTRY`에 등록된 엔트리와 `terminalId`, `terminalKey`를 대조해 `vehicleId`, `regionCode` 바인딩 정보를 함께 토큰에 싣는다.
+> 이 토큰은 후보 조회와 mission claim에만 사용할 수 있다.
 
-**Request Body**: 없음
+**Request Body**
+```json
+{
+  "terminalId": "robot-terminal-01",
+  "terminalKey": "<BOOTSTRAP_SECRET>"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "terminalId": "robot-terminal-01",
+  "vehicleId": "veh_GIMCHEON_01",
+  "regionCode": "GIMCHEON",
+  "deviceTerminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "terminal:check-in-candidates",
+    "terminal:claim-mission"
+  ]
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 401 | `AUTH_INVALID_CREDENTIALS` | 단말 bootstrap credential 불일치 |
+| 503 | `AUTH_TERMINAL_BOOTSTRAP_DISABLED` | 서버에 차량 단말 bootstrap credential 미설정 |
+
+---
+
+### 9.2a 차량 진료 대상 후보 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/check-in/candidates` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 환자가 입력한 `전화번호 뒤 4자리 + 생년월일 6자리`를 기준으로 차량 진료 가능한 mission 후보를 조회한다.
+> 서버는 `DEVICE_TERMINAL` 토큰에 바인딩된 `regionCode`와 이미 배정된 `vehicleId`를 함께 확인해, 현재 단말이 접근 가능한 mission만 반환한다.
+> 응답에는 마스킹된 이름과 예약 시간만 포함한다.
+
+**Request Body**
+```json
+{
+  "phoneLast4": "3720",
+  "birthDate6": "580315"
+}
+```
+
+**Response** `200 OK`
+```json
+{
+  "candidates": [
+    {
+      "missionId": "ms_F2gHn6",
+      "patientMaskedName": "홍*동",
+      "appointmentDate": "2026-03-20",
+      "appointmentTime": "14:30",
+      "doctorMaskedName": "이*종",
+      "missionPhase": "ARRIVED"
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+---
+
+### 9.2b 차량 mission claim 및 미션 단말 토큰 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/missions/{missionId}/claim` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 태블릿은 선택한 mission과 환자 입력값을 서버에 다시 전달해 claim을 요청한다.
+> 서버는 같은 날짜/환자 정보/mission phase를 재검증한 뒤, 단말의 `vehicleId`/`regionCode`와 mission을 다시 대조한다.
+> 즉시 진료처럼 `mission.vehicleId`가 아직 비어 있으면 첫 claim 시점에 현재 단말의 `vehicleId`로 고정한 뒤, 해당 mission 범위로 제한된 `MISSION_TERMINAL` 토큰을 발급한다.
+> claim 성공 후 차량 태블릿은 `current_mission_id`와 `terminalToken`을 저장해, 이후 본인 확인/활력징후 저장/환자 참가 토큰 발급까지 같은 토큰을 재사용한다.
+
+**Request Body**
+```json
+{
+  "phoneLast4": "3720",
+  "birthDate6": "580315"
+}
+```
 
 **Response** `200 OK`
 ```json
@@ -1174,7 +1336,8 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
   "expiresIn": 1800,
   "scopes": [
     "mission:identity-check",
-    "session:issue-patient-token"
+    "session:issue-patient-token",
+    "mission:vitals-write"
   ]
 }
 ```
@@ -1184,7 +1347,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 404 | `MISSION_NOT_FOUND` | 미션 없음 |
-| 403 | `AUTH_FORBIDDEN` | 해당 미션/케이스에 접근 권한이 없는 사용자 |
+| 403 | `TERMINAL_MISSION_CLAIM_FORBIDDEN` | 입력한 접수 정보로 해당 미션을 시작할 수 없음 |
 
 ---
 
@@ -1194,26 +1357,28 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 |------|-----|
 | Method | `POST` |
 | Path | `/api/v1/missions/{missionId}/identity-check` |
-| Auth | Bearer Token (MISSION_TERMINAL) |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
 
-> 차량 태블릿은 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로만 호출한다.
+> 차량 태블릿 플로우에서는 `missionId`에 바인딩된 `MISSION_TERMINAL` 토큰으로 호출하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
 > `진료 시작` 버튼은 환자 세션 생성이 아니라, 미션 단계 전환과 본인 확인/현장 진료 준비 시작을 의미한다.
-> 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 읽어, 차량에서 촬영한 `faceImage`, `idCardImage`와 함께 GPU 서버로 전송한다.
+> 서버는 `missionId -> case -> patient`로 대상 환자를 조회한 뒤 `PATIENT.reference_image_path`를 확인하고, 기준 이미지가 있으면 함께, 없으면 `referenceImage` 없이 차량에서 촬영한 `faceImage`, `idCardImage`만 GPU 서버로 전송한다.
 > GPU 서버 내부 응답 필수 필드: `matched`, `faceSimilarityScore`, `idCardFaceSimilarityScore`, `reasonCodes`, `ocr.name`, `ocr.rrn`, `ocr.address`
-> Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
+> Spring Boot는 `ocr.rrn`에서 생년월일을 추출해 `PATIENT.birthDate6`와 비교하고, `ocr.name`, `ocr.address`도 함께 검증한다. `matched=true`이고 OCR 이름, 생년월일 6자리, 주소 중 하나 이상이 환자 정보와 일치하면 최종 통과로 판정한다. 주민등록번호 원문은 외부 API 응답에 그대로 노출하지 않는다.
 > 검증 성공 시 서버는 별도 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 차량 태블릿은 활력징후 단계로 이동한다.
+> FE는 얼굴 이미지를 원본 방향 전체 프레임으로 업로드하고, 신분증 이미지는 가이드 영역만 crop한 PNG로 업로드한다.
+> 이후 차량 태블릿은 같은 `MISSION_TERMINAL` 토큰으로 `PUT /api/v1/missions/{missionId}/vitals`를 단계별 반복 호출한다.
 
 **Request Body** (`multipart/form-data`)
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | `faceImage` | file | O | 차량에서 촬영한 환자 얼굴 이미지 |
-| `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지 |
+| `idCardImage` | file | O | 차량에서 촬영한 신분증 이미지. FE는 가이드 영역 crop 결과를 PNG로 업로드 |
 
 **Response** `200 OK`
 ```json
 {
-  "missionId": "mis_K9pQr1",
+  "missionId": "ms_K9pQr1",
   "patientId": "pat_T7nLp4",
   "status": "VERIFIED",
   "verifiedAt": "2026-03-11T09:58:00+09:00",
@@ -1233,6 +1398,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 }
 ```
 
+> `identityCheck.faceSimilarityScore`는 기준 이미지가 없는 경로에서는 `null`일 수 있다.
 > `identityCheck.ocr.rrnMasked`는 GPU 서버가 반환한 주민등록번호 원문을 백엔드에서 마스킹한 값이다. 원문은 영속 저장하지 않는다.
 
 **본인 확인 실패 응답 예시** `403 Forbidden`
@@ -1255,21 +1421,84 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 404 | `MISSION_NOT_FOUND` | 미션 없음 |
 | 403 | `MISSION_NOT_READY` | 미션이 본인 확인 가능한 준비 상태가 아님 |
 | 403 | `IDENTITY_CHECK_FAILED` | GPU 본인 확인 실패 |
-| 409 | `REFERENCE_IMAGE_MISSING` | 환자 기준 이미지가 등록되지 않음 |
 | 502 | `AI_IDV_REQUEST_FAILED` | 본인 확인 AI 서버 호출 실패 |
 
 ---
 
-### 9.4 환자 토큰 발급 (차량 태블릿 — 미션 단말 토큰)
+### 9.4 활력징후 저장 (차량 태블릿 — 미션 단말 토큰)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `PUT` |
+| Path | `/api/v1/missions/{missionId}/vitals` |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
+
+> 차량 태블릿 플로우에서는 mission claim에서 발급받은 같은 `MISSION_TERMINAL` 토큰으로 체온/혈압/심박수/SpO2/ECG sample을 단계별 저장하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
+> 서버는 `missionId -> case -> vital_measurement` 순서로 대상을 해석하며, 첫 저장이면 row를 생성하고 이후에는 같은 `case_id` row를 partial upsert 한다.
+> 허용 미션 phase는 `ARRIVED`, `VERIFYING`, `CONSULTING` 이다.
+> `measuredAt`은 선택 입력이며, 생략하면 서버 현재 시각(KST)을 사용한다.
+> `ecgWaveform`은 측정 시점 sample waveform이며 실시간 스트림이 아니다.
+
+**Request Body**
+```json
+{
+  "temperature": 36.7,
+  "bloodPressureSys": 128,
+  "bloodPressureDia": 82,
+  "heartRate": 72,
+  "spO2": 98,
+  "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
+  "ecgSamplingHz": 25,
+  "ecgDurationSeconds": 8,
+  "measuredAt": "2026-03-23T14:23:10"
+}
+```
+
+> 각 측정 단계에서는 필요한 필드만 보내도 된다. 예를 들어 체온 단계에서는 `{ "temperature": 36.7 }`, ECG 단계에서는 waveform 관련 필드만 보내는 식으로 같은 endpoint를 반복 호출한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "vitals": {
+    "caseId": "case_T7nLp4",
+    "temperature": 36.7,
+    "bloodPressureSys": 128,
+    "bloodPressureDia": 82,
+    "heartRate": 72,
+    "spO2": 98,
+    "ecgWaveform": [0.12, 0.18, 0.11, -0.05, 0.45, 1.10],
+    "ecgSamplingHz": 25,
+    "ecgDurationSeconds": 8,
+    "measuredAt": "2026-03-23T14:23:10+09:00",
+    "createdAt": "2026-03-23T14:15:00",
+    "updatedAt": "2026-03-23T14:23:10"
+  }
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 400 | `INVALID_INPUT` | 빈 body이거나 저장 가능한 측정 필드가 없음 |
+| 403 | `AUTH_FORBIDDEN` | 미션 범위가 맞지 않거나 `mission:vitals-write` scope가 없음 |
+| 403 | `MISSION_NOT_READY` | 미션이 활력징후 저장 가능한 준비 상태가 아님 |
+| 404 | `MISSION_NOT_FOUND` | 미션 없음 |
+
+---
+
+### 9.5 환자 토큰 발급 (차량 태블릿 — 미션 단말 토큰)
 
 | 항목 | 값 |
 |------|-----|
 | Method | `POST` |
-| Path | `/api/v1/sessions/{sessionId}/participants/patient/token` |
-| Auth | Bearer Token (MISSION_TERMINAL) |
+| Path | `/api/v1/missions/{missionId}/participants/patient/token` |
+| Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
 
-> 차량 태블릿은 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청한다.
-> 이 API는 `sessionId -> case -> mission -> patient`로 대상 환자를 결정하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
+> 차량 태블릿 플로우에서는 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
+> 이 API는 `missionId -> case -> consultationSession -> patient` 순서로 대상 세션을 서버에서 해석하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
 
 **Response** `200 OK`
 ```json
@@ -1294,7 +1523,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.5 세션 토큰 재발급
+### 9.6 세션 토큰 재발급
 
 | 항목 | 값 |
 |------|-----|
@@ -1339,7 +1568,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.6 세션 상태 조회
+### 9.7 세션 상태 조회
 
 | 항목 | 값 |
 |------|-----|
@@ -1376,7 +1605,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.7 진료 종료 및 요약 기록
+### 9.8 진료 요약 저장 및 진료 종료 기록
 
 | 항목 | 값 |
 |------|-----|
@@ -1384,15 +1613,32 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Path | `/api/v1/sessions/{sessionId}/summary` |
 | Auth | Bearer Token (DOCTOR) |
 
+> 이 API는 의사 화면에서 **`진료 완료` 버튼을 눌렀을 때만** 호출한다.
+> 진료 중 작성한 경과 기록지, 재진 여부, 처방 내역은 프론트 로컬 상태로만 유지되며 서버에 중간 저장하지 않는다.
+> `PUT` 의미를 유지하기 위해 클라이언트는 진료 종료 시점의 최신 진료 요약 상태를 전체 필드로 전송한다.
+
 **Request Body**
 ```json
 {
   "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장. 증상 지속 시 재진료 필요.",
   "isPrescriptionIssued": true,
-  "prescriptionNote": "타이레놀 500mg",
+  "prescriptionNote": "[\"M001\",\"M005\"]",
   "needsFollowUp": true
 }
 ```
+
+**Field Rules**
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| `summaryNote` | string | O | 진료 종료 시 저장하는 경과 기록지 |
+| `isPrescriptionIssued` | boolean | O | 최종 처방 내역에 약품 코드가 1개 이상 있으면 `true`, 없으면 `false` |
+| `prescriptionNote` | string | O | 약품 코드 배열의 JSON 문자열. 예: `"[\"M001\",\"M005\"]"` |
+| `needsFollowUp` | boolean | O | 재진 필요 여부 |
+
+> `prescriptionNote`는 현재 문자열 필드를 재사용하므로, **약품 코드 리스트를 JSON 문자열로 직렬화한 값**을 저장한다.
+> 처방이 없을 경우 `prescriptionNote`는 `"[]"`를 권장한다.
+> 하위 호환을 위해 기존 자유 텍스트 처방 문자열도 조회 API에서 그대로 반환될 수 있다.
 
 **Response** `200 OK`
 ```json
@@ -1403,7 +1649,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
   "summary": {
     "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
     "isPrescriptionIssued": true,
-    "prescriptionNote": "타이레놀 500mg",
+    "prescriptionNote": "[\"M001\",\"M005\"]",
     "needsFollowUp": true
   },
   "endedAt": "2026-03-11T10:25:00+09:00",
@@ -1413,7 +1659,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-### 9.8 LiveKit Webhook 수신 (서버 간)
+### 9.9 LiveKit Webhook 수신 (서버 간)
 
 | 항목 | 값 |
 |------|-----|
@@ -1457,12 +1703,25 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
       "phone": "01012345678",
       "regionCode": "ULLEUNG",
       "address": "경북 울릉군 울릉읍 ...",
+      "gender": "MALE",
       "relation": "자녀",
       "approvedAt": "2026-01-15"
     }
   ]
 }
 ```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `patients[].patientId` | string | 환자 공개 ID |
+| `patients[].name` | string | 환자 이름 |
+| `patients[].birthDate6` | string | 생년월일 6자리 |
+| `patients[].phone` | string | 전화번호 |
+| `patients[].regionCode` | string | 지역 코드 |
+| `patients[].address` | string | 주소 |
+| `patients[].gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `patients[].relation` | string | 보호자와 환자의 관계 |
+| `patients[].approvedAt` | date | 연결 승인 일자 |
 
 ---
 
@@ -1486,13 +1745,20 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
       "doctorName": "김의사",
       "summaryNote": "편두통 소견. 충분한 수분 섭취 및 휴식 권장.",
       "isPrescriptionIssued": true,
-      "prescriptionNote": "타이레놀 500mg",
+      "prescriptionNote": "[\"M001\",\"M005\"]",
       "needsFollowUp": true
     }
   ],
   "totalCount": 1
 }
 ```
+
+> `prescriptionNote`는 다음 두 형식 중 하나로 조회될 수 있다.
+> 1. 최신 형식: 약품 코드 배열의 JSON 문자열. 예: `"[\"M001\",\"M005\"]"`
+> 2. 레거시 형식: 자유 텍스트 처방 문자열
+>
+> 클라이언트는 먼저 `prescriptionNote`를 JSON 배열(`string[]`)로 파싱 시도하고, 성공하면 공통 `MEDICINE_CATALOG` 기준으로 약품명, 분류, 용법/용량을 매핑해 렌더링한다.
+> JSON 파싱에 실패하면 레거시 자유 텍스트 처방전으로 간주하고 원문을 그대로 표시한다.
 
 **Errors**
 
@@ -1504,6 +1770,53 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ## 11. 관리자 API (`/api/v1/admin`)
 
+> 운영 monitoring 접근 제어용 내부 API를 포함한다.
+> `/actuator/health`, `/actuator/prometheus`는 Spring 앱 내부 경로로만 사용하며 public nginx 경로를 제공하지 않는다.
+
+### 11.0 Monitoring 세션 발급
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/monitoring/session` |
+| Auth | Bearer Token (ADMIN) |
+
+**Response** `204 No Content`
+- `Set-Cookie`: `monitoring_access=...; HttpOnly; Secure; SameSite=Lax; Path=/grafana/; Max-Age=28800`
+
+---
+
+### 11.0.1 Monitoring 세션 제거
+
+| 항목 | 값 |
+|------|-----|
+| Method | `DELETE` |
+| Path | `/api/v1/admin/monitoring/session` |
+| Auth | 불필요 |
+
+**Response** `204 No Content`
+- `monitoring_access` 쿠키 삭제 (`Max-Age=0`)
+
+---
+
+### 11.0.2 Monitoring 접근 검증
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/admin/monitoring/authorize` |
+| Auth | 불필요 (`monitoring_access` 쿠키 검증) |
+
+**Response** `204 No Content`
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 401 | `AUTH_UNAUTHORIZED` | monitoring 쿠키가 없거나 유효하지 않음 |
+| 403 | `AUTH_FORBIDDEN` | monitoring 쿠키는 있으나 ADMIN 권한이 아님 |
+
+---
 ### 11.1 예약 전체 목록 조회
 
 | 항목 | 값 |
@@ -1585,6 +1898,39 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | `phone` | string | X | 전화번호 검색 |
 | `page` | int | X | 페이지 |
 | `size` | int | X | 페이지 크기 |
+
+**Response** `200 OK`
+```json
+{
+  "patients": [
+    {
+      "patientId": "pat_Zk3mQ9",
+      "name": "홍길동",
+      "birthDate6": "580315",
+      "phone": "01012345678",
+      "regionCode": "ULLEUNG",
+      "address": "경북 울릉군 울릉읍 ...",
+      "gender": "MALE"
+    }
+  ],
+  "totalCount": 1,
+  "page": 0,
+  "size": 20
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `patients[].patientId` | string | 환자 공개 ID |
+| `patients[].name` | string | 환자 이름 |
+| `patients[].birthDate6` | string | 생년월일 6자리 |
+| `patients[].phone` | string | 전화번호 |
+| `patients[].regionCode` | string | 지역 코드 |
+| `patients[].address` | string | 주소 |
+| `patients[].gender` | string | 환자 성별 (`MALE`, `FEMALE`, `UNKNOWN`) |
+| `totalCount` | int | 전체 환자 수 |
+| `page` | int | 현재 페이지 |
+| `size` | int | 페이지 크기 |
 
 ---
 
@@ -1696,6 +2042,174 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
+### 11.8 차량 상세 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/admin/vehicles/{vehicleId}` |
+| Auth | Bearer Token (ADMIN) |
+
+**Response** `200 OK`
+```json
+{
+  "vehicleId": "veh_00000001",
+  "code": "GIMCHEON-01",
+  "regionCode": "GIMCHEON_JEUNGSAN",
+  "displayName": "김천증산 1호차",
+  "active": true,
+  "operationalStatus": "OPERATIONAL",
+  "statusChangedAt": "2026-03-20T09:00:00+09:00",
+  "statusReason": null,
+  "createdAt": "2026-03-20T08:00:00+09:00",
+  "updatedAt": "2026-03-20T09:00:00+09:00"
+}
+```
+
+---
+
+### 11.9 차량 운영 상태 변경
+
+| 항목 | 값 |
+|------|-----|
+| Method | `PATCH` |
+| Path | `/api/v1/admin/vehicles/{vehicleId}` |
+| Auth | Bearer Token (ADMIN) |
+
+**Request Body**
+```json
+{
+  "operationalStatus": "OUT_OF_SERVICE",
+  "statusReason": "배터리 점검"
+}
+```
+
+**유효한 `operationalStatus` 값**: `OPERATIONAL` | `OUT_OF_SERVICE` | `MAINTENANCE`
+
+**Response** `200 OK`
+```json
+{
+  "vehicleId": "veh_00000001",
+  "code": "GIMCHEON-01",
+  "regionCode": "GIMCHEON_JEUNGSAN",
+  "displayName": "김천증산 1호차",
+  "active": true,
+  "operationalStatus": "OUT_OF_SERVICE",
+  "statusChangedAt": "2026-03-20T10:15:00+09:00",
+  "statusReason": "배터리 점검",
+  "createdAt": "2026-03-20T08:00:00+09:00",
+  "updatedAt": "2026-03-20T10:15:00+09:00"
+}
+```
+
+> `OUT_OF_SERVICE` 또는 `MAINTENANCE` 상태의 차량은 신규 배차 대상에서 제외된다.
+>
+> 차량 상태가 다시 `OPERATIONAL`로 전환되면 같은 권역(`regionCode`)의 `RETRY_PENDING` 배차를 Kafka 재평가 흐름으로 다시 깨운다.
+
+**Errors** (`11.8`, `11.9` 공통)
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 404 | `VEHICLE_NOT_FOUND` | 차량을 찾을 수 없음 |
+
+---
+
+### 11.10 데모 미션 출동
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/demo/missions/{missionId}/dispatch` |
+| Auth | Bearer Token (ADMIN) |
+
+> 데모 모드에서만 사용할 수 있는 관리자 제어 API다.
+> - `MISSION.targetWaypointNumber`가 있으면 Spring이 FastAPI `POST /api/cmd/waypoint/{target}`를 호출한다.
+> - 호출 성공 후 mission은 `DISPATCHED`로 전이된다.
+> - waypoint 매핑이 없는 주소는 로봇 호출 없이 더미 완료 mission으로 처리된다.
+> - 처리 완료 후 연결된 `DISPATCH_OUTBOX`는 `COMPLETED`로 정리한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_demo_01",
+  "phase": "DISPATCHED",
+  "previousPhase": "CREATED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59,
+  "waypointCommandSent": true,
+  "dummyCompleted": false
+}
+```
+
+**Errors**
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `DEMO_MODE_DISABLED` | 데모 모드가 비활성화되어 있음 |
+| 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없음 |
+| 400 | `MISSION_PHASE_TRANSITION_INVALID` | `CREATED` 상태가 아닌 미션에 출동 요청 |
+| 502 | `ROBOT_COMMAND_REQUEST_FAILED` | waypoint 명령 API 호출 실패 |
+
+---
+
+### 11.11 데모 미션 도착 처리
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/demo/missions/{missionId}/arrive` |
+| Auth | Bearer Token (ADMIN) |
+
+> 데모 모드에서 `DISPATCHED` 또는 `EN_ROUTE` 상태의 mission을 `ARRIVED`까지 전이시킨다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_demo_01",
+  "phase": "ARRIVED",
+  "previousPhase": "DISPATCHED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59,
+  "waypointCommandSent": false,
+  "dummyCompleted": false
+}
+```
+
+---
+
+### 11.12 데모 미션 종료 처리
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/admin/demo/missions/{missionId}/complete` |
+| Auth | Bearer Token (ADMIN) |
+
+> 데모 모드에서 진행 중 mission을 `COMPLETED`까지 전이시킨다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_demo_01",
+  "phase": "COMPLETED",
+  "previousPhase": "ARRIVED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59,
+  "waypointCommandSent": false,
+  "dummyCompleted": false
+}
+```
+
+**Errors** (`11.10`, `11.11`, `11.12` 공통)
+
+| Status | errorCode | 설명 |
+|--------|-----------|------|
+| 403 | `DEMO_MODE_DISABLED` | 데모 모드가 비활성화되어 있음 |
+| 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없음 |
+| 400 | `MISSION_PHASE_TRANSITION_INVALID` | 현재 상태에서 허용되지 않는 데모 전이 |
+
+---
+
 ## 12. 상태 Enum 정의
 
 > **`doctorId` 참조 규칙**: API의 `doctorId`는 `DOCTOR_PROFILE.public_id` 값을 의미한다. 내부 저장은 `doctor_profile_id`(`bigint` PK)를 사용한다. 사용자 식별이 필요할 때는 별도로 `userId`를 사용한다.
@@ -1734,8 +2248,13 @@ STARTED → IN_PROGRESS → COMPLETED | ABANDONED | FAILED
 ```
 
 ### INTAKE_SESSION.completionReason
-```
+``` 
 BOOKING_CREATED | NO_INPUT_TIMEOUT | USER_HANGUP | EXISTING_BOOKING_CHECKED
+```
+
+### VEHICLE.operationalStatus
+```
+OPERATIONAL | OUT_OF_SERVICE | MAINTENANCE
 ```
 
 ### INTAKE_SESSION.selectionConfidenceLevel

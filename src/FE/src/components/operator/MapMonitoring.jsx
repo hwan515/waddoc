@@ -1,123 +1,202 @@
-import { Map as MapIcon, Navigation, Truck, Video } from 'lucide-react';
+import { Navigation, Truck, Video, AlertOctagon, AlertTriangle } from 'lucide-react';
+import MinimapPanel from './MinimapPanel';
+import apiClient from '../../utils/api';
 
-const MapMonitoring = ({ vehicles, selectedVehicleId, setSelectedVehicleId }) => {
-    // 상태에 따른 배지 색상 결정 헬퍼 함수
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case '운행 중': return 'bg-blue-100 text-blue-700 border-blue-200';
-            case '대기 중': return 'bg-green-100 text-green-700 border-green-200';
-            case '진료 중': return 'bg-purple-100 text-purple-700 border-purple-200';
-            case '점검 중': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-            case '장애': return 'bg-red-100 text-red-700 border-red-200';
-            default: return 'bg-slate-100 text-slate-700 border-slate-200';
+const formatSpeed = (value) => {
+    if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
+    return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
+};
+
+const formatCoordinate = (value) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) return '-';
+    return value.toFixed(4);
+};
+
+const getStatusBadge = (status) => {
+    switch (status) {
+        case '대기':
+        case '대기 중':
+            return 'bg-green-100 text-green-700 border-green-200';
+        case '출발':
+        case '출동':
+        case '주행 중':
+        case '이동 중':
+            return 'bg-blue-100 text-blue-700 border-blue-200';
+        case '도착':
+        case '도착 완료':
+            return 'bg-amber-100 text-amber-700 border-amber-200';
+        case '진료 중':
+        case '본인 확인':
+            return 'bg-purple-100 text-purple-700 border-purple-200';
+        case '복귀 중':
+        case '종료/복귀':
+            return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        case '긴급 정지':
+        case '긴급정지':
+        case '이슈 발생':
+            return 'bg-red-100 text-red-700 border-red-200';
+        case '추후 서비스 예정':
+            return 'bg-slate-100 text-slate-500 border-slate-200';
+        default:
+            return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+};
+
+const MapMonitoring = ({
+    vehicles,
+    selectedVehicle,
+    selectedVehicleId,
+    setSelectedVehicleId,
+    minimapVehiclePose,
+    minimapPathPoints,
+    minimapFullPathPoints,
+    vehicleState = '대기',
+    vehicleSpeed = 0,
+    vehicleLocation = null,
+    minimapRouteAlert = null,
+    updateIntervalMs = null,
+    useMockMinimapData = false,
+}) => {
+    
+    // E-Stop REST API POST 요청 핸들러
+    const handleEStop = async () => {
+        if (!window.confirm('정말로 E-Stop을 발동하시겠습니까?')) return;
+
+        try {
+            await apiClient.post('/robots/cmd/estop/1');
+            window.alert('E-Stop 명령을 전송했습니다.');
+        } catch (error) {
+            console.error('E-Stop error:', error);
+            window.alert('E-Stop 명령 전송에 실패했습니다.');
         }
     };
 
-    return (
-        <div className="h-full flex p-4 gap-4">
-            {/* 좌측: 디지털 트윈 (전체 맵 영역) */}
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
-                <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow border border-slate-200">
-                    <h2 className="font-bold text-slate-800 flex items-center gap-2">
-                        <MapIcon className="w-4 h-4 text-[#006DAA]" /> 디지털 트윈 모니터링
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-1">평소: 전체 Map / 차량 선택 시: 해당 차량 중심 뷰</p>
-                </div>
+    const selectedVehicleLabel = selectedVehicle
+        ? (selectedVehicle.displayName || selectedVehicle.vehicleId || selectedVehicle.id)
+        : '차량을 선택하세요';
 
-                {/* TODO: Three.js 또는 카카오/네이버 지도 연동 영역 */}
-                <div className="flex-1 bg-[#E8F0F8] flex items-center justify-center relative">
-                    <div className="absolute inset-0" style={{
-                        backgroundImage: `radial-gradient(#CBD5E1 1px, transparent 1px)`,
-                        backgroundSize: '24px 24px',
-                        opacity: 0.5
-                    }}></div>
-                    <div className="text-center z-10 p-8 bg-white/80 backdrop-blur rounded-2xl shadow-xl border border-white mt-10">
-                        <div className="w-16 h-16 bg-[#0353A4]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <MapIcon className="w-8 h-8 text-[#0353A4]" />
+    return (
+        <div className="flex h-full gap-4 p-4">
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-4xl">
+                {minimapRouteAlert && (
+                    <div className="absolute left-4 top-4 z-10 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-900 shadow-lg shadow-amber-900/10 backdrop-blur-sm">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                        <div className="min-w-0">
+                            <div className="text-xs font-bold">{minimapRouteAlert.title}</div>
+                            <div className="text-[11px] text-amber-800/80">{minimapRouteAlert.detail}</div>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">디지털 트윈 Map (추후 구현)</h3>
-                        <p className="text-slate-500 text-sm">자율주행 모빌리티의 실시간 위치와 상태를 3D/2D 맵으로 렌더링 할 영역입니다.</p>
                     </div>
+                )}
+
+                <div className="h-full overflow-hidden rounded-4xl">
+                    <MinimapPanel
+                        vehiclePose={minimapVehiclePose}
+                        pathPoints={minimapPathPoints}
+                        fullPathPoints={minimapFullPathPoints}
+                        vehicleState={vehicleState}
+                        vehicleSpeed={vehicleSpeed}
+                        vehicleLocation={vehicleLocation}
+                        updateIntervalMs={updateIntervalMs}
+                        showMockBadge={useMockMinimapData}
+                    />
                 </div>
             </div>
 
-            {/* 우측: 사이드 패널 (차량 리스트 + 카메라) */}
-            <div className="w-[400px] flex flex-col gap-4 shrink-0">
-                {/* 상단: 차량 리스트 */}
-                <div className="flex-[3] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="h-12 border-b border-slate-100 flex items-center px-4 bg-slate-50/50 shrink-0">
-                        <h3 className="font-bold text-slate-800 text-[15px] flex items-center gap-2">
-                            <Truck className="w-4 h-4 text-[#0353A4]" /> 운영 차량 리스트
+            <div className="flex w-100 shrink-0 flex-col gap-4">
+                <button
+                    onClick={handleEStop}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-600/30 transition-transform hover:bg-red-700 active:scale-100"
+                >
+                    <AlertOctagon className="h-5 w-5 animate-pulse" />
+                    EMERGENCY STOP
+                </button>
+
+                <div className="flex flex-3 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5">
+                        <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
+                            <Truck className="h-5 w-5 text-primary" /> 운영 차량 리스트
                         </h3>
-                        <span className="ml-auto bg-[#0353A4] text-white px-2 py-0.5 rounded-full text-xs font-bold">
+                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
                             {vehicles.length}대
                         </span>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                        {vehicles.map(v => (
-                            <div
-                                key={v.id}
-                                onClick={() => setSelectedVehicleId(v.id)}
-                                className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedVehicleId === v.id
-                                    ? 'border-[#0353A4] bg-[#F0F7FF] shadow-sm'
-                                    : 'border-slate-200 hover:border-[#006DAA]/30 hover:bg-slate-50'
-                                    }`}
-                            >
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="font-bold text-slate-800 text-[15px]">{v.id}</div>
-                                    <div className={`text-xs px-2 py-0.5 rounded-md border font-bold ${getStatusBadge(v.status)}`}>
-                                        {v.status}
+
+                    <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto p-3">
+                        {vehicles.map((vehicle) => {
+                            const isPrimaryServiceVehicle = Boolean(vehicle.isPrimaryServiceVehicle);
+                            const isSelectedVehicle = vehicle.id === selectedVehicleId;
+                            const displayStatus = isSelectedVehicle ? vehicleState || vehicle.status : vehicle.status;
+                            const displaySpeed = isSelectedVehicle && typeof vehicleSpeed === 'number'
+                                ? vehicleSpeed
+                                : vehicle.speed;
+                            const displayLocation = isPrimaryServiceVehicle ? vehicle.location : null;
+                            const displayBattery = typeof vehicle.battery === 'number' ? `${vehicle.battery}%` : '-';
+
+                            return (
+                                <div
+                                    key={vehicle.id}
+                                    onClick={isPrimaryServiceVehicle ? () => setSelectedVehicleId(vehicle.id) : undefined}
+                                    className={`rounded-xl border p-3 transition-all ${isSelectedVehicle
+                                        ? 'cursor-pointer border-primary bg-primary/5 shadow-sm'
+                                        : isPrimaryServiceVehicle
+                                            ? 'cursor-pointer border-slate-200 hover:border-accent-1/30 hover:bg-slate-50'
+                                            : 'cursor-default border-slate-200 bg-slate-50/80 opacity-75'
+                                        }`}
+                                >
+                                    <div className="mb-2 flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-slate-800">{vehicle.displayName || vehicle.vehicleId || vehicle.id}</div>
+                                            {vehicle.displayPatientName && (
+                                                <div className="truncate text-[11px] text-slate-500">{vehicle.displayPatientName}</div>
+                                            )}
+                                            {vehicle.displayDestination && (
+                                                <div className="truncate text-[11px] text-slate-400">{vehicle.displayDestination}</div>
+                                            )}
+                                        </div>
+                                        <div className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-bold ${getStatusBadge(displayStatus)}`}>
+                                            {displayStatus}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5 text-xs font-medium text-slate-600">
+                                        <div className="flex items-center gap-2">
+                                            <Navigation className="h-3.5 w-3.5 text-slate-400" />
+                                            <span className="font-mono">
+                                                {formatCoordinate(displayLocation?.lat)}, {formatCoordinate(displayLocation?.lng)}
+                                            </span>
+                                        </div>
+                                        <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2">
+                                            <span className="flex items-center gap-1.5">
+                                                배터리 <span className="font-bold text-slate-800">{displayBattery}</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                속도 <span className="font-bold text-slate-800">{formatSpeed(displaySpeed)}</span>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="space-y-1.5 text-xs text-slate-600 font-medium">
-                                    <div className="flex items-center gap-2">
-                                        <Navigation className="w-3.5 h-3.5 text-slate-400" />
-                                        <span className="font-mono">{v.location.lat.toFixed(4)}, {v.location.lng.toFixed(4)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200/50">
-                                        <span className="flex items-center gap-1.5">
-                                            배터리 <span className="font-bold text-slate-800">{v.battery}%</span>
-                                        </span>
-                                        <span className="flex items-center gap-1.5">
-                                            속도 <span className="font-bold text-slate-800">{v.speed} km/h</span>
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* 하단: 선택 차량 카메라 화면 */}
-                <div className="flex-[2] bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden relative flex flex-col">
-                    <div className="absolute top-3 left-3 z-10 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded text-white text-xs font-bold flex items-center gap-2 border border-white/10">
-                        <Video className="w-3.5 h-3.5 text-red-400" />
-                        {selectedVehicleId ? `${selectedVehicleId} 카메라` : '차량을 선택하세요'}
-                        <span className="ml-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                <div className="relative flex flex-2 flex-col overflow-hidden rounded-4xl border border-slate-800 bg-slate-950 shadow-sm">
+                    <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
+                        <Video className="h-3.5 w-3.5 text-red-400" />
+                        {selectedVehicleLabel}
+                        <span className="ml-1 h-1.5 w-1.5 animate-pulse rounded-full bg-red-500"></span>
                     </div>
 
-                    {/* 실시간 카메라 영상 스트리밍 영역 목업 */}
-                    <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-                        {selectedVehicleId ? (
-                            <>
-                                {/* 카메라 목업 배경 */}
-                                <div className="absolute inset-0 bg-[#1a1c23]">
-                                    {/* HUD 라인 */}
-                                    <div className="absolute inset-0 opacity-20" style={{
-                                        backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
-                                        backgroundSize: '40px 40px'
-                                    }}></div>
-                                    <div className="absolute top-1/2 left-1/4 right-1/4 h-px bg-green-500/30"></div>
-                                    <div className="absolute left-1/2 top-1/4 bottom-1/4 w-px bg-green-500/30"></div>
-                                </div>
-                                <div className="relative z-10 text-center">
-                                    <Video className="w-10 h-10 text-slate-500 mx-auto mb-2 opacity-50" />
-                                    <p className="text-slate-400 text-sm font-medium">실시간 주행 카메라 (추후 연동)</p>
-                                </div>
-                            </>
-                        ) : (
-                            <p className="text-slate-500 text-sm font-medium">리스트에서 차량을 선택해주세요.</p>
-                        )}
+                    <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-4xl">
+                        <div className="absolute inset-0 z-20 h-full w-full overflow-hidden rounded-4xl bg-black">
+                            <iframe
+                                src="/unity_cam/"
+                                title="Camera stream"
+                                className="h-full w-full rounded-4xl border-none"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                            ></iframe>
+                        </div>
                     </div>
                 </div>
             </div>

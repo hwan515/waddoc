@@ -1,10 +1,18 @@
 port: 7880
+prometheus_port: 6789
 rtc:
-  use_external_ip: true
-  udp_port: 7882
-  tcp_port: 7881
+  use_external_ip: false
+  udp_port: 8882
+  tcp_port: 8881
+  turn_servers:
+    - host: $LIVEKIT_NODE_IP
+      port: 8478
+      protocol: udp
+      username: waddoc
+      credential: $TURN_SECRET
+webhook:
+  api_key: $LIVEKIT_API_KEY
+  urls:
+    - $LIVEKIT_WEBHOOK_URL
 turn:
-  enabled: true
-  domain: j14a603.p.ssafy.io
-  tls_port: 0
-  udp_port: 3478
+  enabled: false

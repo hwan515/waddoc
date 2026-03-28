@@ -10,12 +10,13 @@
 | 제어면 / 미디어면 / 추론면 분리 | Spring Boot = 상태·권한·오케스트레이션, LiveKit = WebRTC 미디어, AI = 추론 전용 |
 | AI 내부망 격리 | AI 서버는 외부 직접 노출 금지. React → AI 직접 호출 금지 |
 | AI 분리 배포 | DEV/PROD 공통으로 AI 추론은 별도 GPU 서버에서 실행. 메인 서버 Compose에 AI 컨테이너를 포함하지 않음 |
-| AI 프로토콜 분리 | IDV/OCR = REST multipart, 실시간 STT/문진 = WebSocket, 최종 추천 계산/저장 = REST JSON |
+| AI 프로토콜 분리 | IDV/OCR = REST multipart, 실시간 STT/문진 = WebSocket |
 | 파일 전달 표준화 | IDV/OCR 이미지 전달은 DEV/PROD 공통 multipart 전송. 공유 디렉터리 방식 미사용 |
 | 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 완료 후 room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
-| JWT 분리 저장 | Access Token = 메모리(JS 변수), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
+| JWT 분리 저장 | Access Token = localStorage(Zustand persist), Refresh Token = HttpOnly 쿠키. API는 Authorization 헤더 |
 | 이중 ID | 내부 PK는 bigint 자동 증가, 외부 API에는 `public_id`(접두사 + nanoid) 노출. PK 추론 방지, API 가독성 향상 |
+| 이벤트 버스 분리 | SMS, 의사 SSE 알림, 미션 텔레메트리, 배차 재시도는 Kafka 토픽으로 비동기 분리 |
 | 환자 SMS 알림 | 환자는 계정이 없으므로 예약 결과/취소 알림은 SOLAPI SMS 게이트웨이로 발송. 개발환경은 Mock |
 
 ---
@@ -25,10 +26,10 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                        Clients                          │
-│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────────┐ │
-│  │ 전화     │  │ 의사 웹  │  │ 관리자 │  │ 보호자    │ │
-│  │ 시뮬레이터│  │          │  │ 웹     │  │ 웹(읽기)  │ │
-│  └────┬─────┘  └────┬─────┘  └───┬────┘  └─────┬─────┘ │
+│  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌───────────┐  ┌──────────┐ │
+│  │ 전화     │  │ 의사 웹  │  │ 관리자 │  │ 보호자    │  │ 차량     │ │
+│  │ 시뮬레이터│  │          │  │ 웹     │  │ 웹(읽기)  │  │ 터미널FE │ │
+│  └────┬─────┘  └────┬─────┘  └───┬────┘  └─────┬─────┘  └────┬─────┘ │
 │       └──────────────┴────────────┴─────────────┘       │
 └───────────────────────────┬─────────────────────────────┘
                             │ HTTPS
@@ -50,15 +51,15 @@
 │  │ - 파일 관리 │                                       │
 │  └──────┬──────┘                                       │
 │         │                                              │
-│   ┌─────┴─────┐ ┌───────┐                              │
-│   │ PostgreSQL │ │ Redis │                              │
-│   └────────────┘ └───────┘                              │
+│   ┌─────┴─────┐ ┌───────┐ ┌─────────────┐              │
+│   │ PostgreSQL │ │ Redis │ │ Kafka + ZK │              │
+│   └────────────┘ └───────┘ └─────────────┘              │
 └───────────────────────────┬─────────────────────────────┘
                             │ REST multipart / WebSocket / REST JSON
 ┌───────────────────────────┴─────────────────────────────┐
 │                  GPU Server (AI Inference)              │
 │              ┌─────────┐   ┌────────────────┐           │
-│              │ IDV AI  │   │ STT / Triage AI│           │
+│              │ IDV AI  │   │ STT AI         │           │
 │              └─────────┘   └────────────────┘           │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -66,8 +67,19 @@
 - DEV와 PROD 모두 `Spring Boot -> GPU Server` 경로로만 AI 추론을 호출한다.
 - `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
 - `Spring Boot <-> STT AI` 는 WebSocket 스트리밍으로 partial/final transcript를 주고받는다.
-- `Spring Boot -> Recommendation/Triage API` 는 REST JSON으로 최종 분류/추천 결과를 요청한다.
+- `Spring Boot -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
 - React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
+
+---
+
+### 2.1 Kafka 이벤트 흐름
+
+- `sms.requests` → `SmsConsumer` → `SmsService` (실패 시 `sms.requests.DLT`에 적재)
+- `doctor.notifications` → `DoctorNotificationConsumer` → Redis Pub/Sub publish → `RedisMessageListenerContainer` → 활성 SSE 연결에 전달 (다중 인스턴스 대응)
+- `mission.telemetry` → `MissionTelemetryConsumer` → `MISSION` 위치/단계 반영
+- `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 `MISSION` 자동 생성
+- `dispatch.retry` → `DispatchRetryConsumer` → 동일 권역 배차 재평가 트리거
+- `dispatch_outbox` 테이블은 예약 확정과 Kafka publish 사이를 느슨하게 연결하는 outbox 역할을 담당한다.
 
 ---
 
@@ -76,11 +88,10 @@
 ### 3.1 구성 원칙
 
 - 메인 애플리케이션 스택만 로컬 Docker Compose로 실행한다.
-- IDV AI, STT/추천 AI는 **별도 GPU 서버**에서 실행한다.
+- IDV AI, STT AI는 **별도 GPU 서버**에서 실행한다.
 - DEV와 PROD 모두 Spring Boot는 GPU 서버의 AI 엔드포인트를 직접 호출한다.
 - 본인확인(IDV/OCR)은 **REST multipart**를 사용한다.
 - 실시간 문진/STT는 **WebSocket 스트리밍**을 사용한다.
-- 최종 추천 계산/저장은 **REST JSON**을 사용한다.
 - 로컬 개발에서도 React → AI 직접 호출은 금지하고, 반드시 Spring Boot를 경유한다.
 
 ### 3.2 컨테이너 구성
@@ -113,8 +124,9 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - DB_HOST=postgres
       - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - LIVEKIT_HOST=http://livekit:7880
       - AI_IDV_URL=https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_TRIAGE_URL=https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
     volumes:
@@ -122,6 +134,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - kafka
 
   # === Database ===
   postgres:
@@ -138,10 +151,28 @@ services:
   # === Cache ===
   redis:
     image: redis:7-alpine
+    command: redis-server --notify-keyspace-events Ex
     expose:
       - "6379"
     volumes:
       - redis_data:/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
 
   # === WebRTC ===
   livekit:
@@ -166,6 +197,7 @@ docker network: waddoc-net (bridge, 메인 스택 컨테이너 연결)
 
 외부 공개 포트:
   - 80        → nginx (HTTP)
+  - 9092      → kafka (host access / 로컬 JVM 연동)
   - 7880      → livekit (API + signaling WebSocket)
   - 7881      → livekit (ICE/TCP)
   - 7882/udp  → livekit (ICE/UDP mux)
@@ -180,11 +212,13 @@ Nginx 내부 라우팅:
   - 3000  → frontend
   - 5432  → postgres
   - 6379  → redis
+  - 2181  → zookeeper
+  - 29092 → kafka (container 간 통신)
 
 원격 의존성:
+  - spring-api → kafka:29092 (SMS / 알림 / 텔레메트리 / 배차 이벤트)
   - spring-api → https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (IDV AI REST)
   - spring-api ↔ wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe (STT AI WebSocket)
-  - spring-api → https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend (추천 AI REST)
 ```
 
 ### 3.4 파일 저장 방식 (개발)
@@ -216,9 +250,10 @@ Content-Type: multipart/form-data
 Parts:
   - verificationId: "vrf_001"
   - patientId: "patient_001"
-  - referenceImage: (binary)
-  - probeImage: (binary)
-  - thresholdProfile: "MEDICAL_REMOTE_VISIT"
+  - verificationMode: "FACE_AND_IDCARD"
+  - referenceImage: (binary, optional)
+  - faceImage: (binary)
+  - idCardImage: (binary)
 
 Spring Boot ↔ STT AI
 Connect: wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
@@ -234,28 +269,12 @@ Server → Client:
   {"type":"partial","requestId":"stt_001","text":"머리가 아프고"}
   {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
 
-Spring Boot → Recommendation AI (POST https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend)
-Content-Type: application/json
-
-{
-  "requestId": "rec_001",
-  "intakeSessionId": "its_001",
-  "transcript": "머리가 아프고 어지러워요",
-  "patientContext": {
-    "age": 78,
-    "region": "GANGWON"
-  }
-}
-```
-
----
-
 ## 4. 배포 환경 (Production)
 
 ### 4.1 구성 원칙
 
-- **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, LiveKit
-- **AI 서버 (별도)**: IDV AI, STT/추천 AI
+- **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, Kafka, Zookeeper, LiveKit
+- **AI 서버 (별도)**: IDV AI, STT AI
 - 서버 간 통신: **REST + WebSocket**
 - 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
 - AI 서버는 메인 서버에서만 접근 가능 (외부 직접 노출 금지)
@@ -283,8 +302,8 @@ Content-Type: application/json
 │  │  └─────┬────┘              └──────────┘        │  │
 │  │        │                                        │  │
 │  │  ┌─────┴──────┐  ┌──────────┐  ┌───────────┐  │  │
-│  │  │ PostgreSQL │  │  Redis   │  │           │  │  │
-│  │  │ :5432      │  │  :6379   │  │           │  │  │
+│  │  │ PostgreSQL │  │  Redis   │  │ Kafka+ZK  │  │  │
+│  │  │ :5432      │  │  :6379   │  │ :29092    │  │  │
 │  │  └────────────┘  └──────────┘  └───────────┘  │  │
 │  │        │                                       │  │
 │  └────────┼───────────────────────────────────────┘  │
@@ -298,7 +317,7 @@ Content-Type: application/json
 │  ┌─────────────────────────────────────────────────┐ │
 │  │                                                  │ │
 │  │  ┌───────────┐          ┌────────────┐          │ │
-│  │  │  IDV AI   │          │ STT/Triage │          │ │
+│  │  │  IDV AI   │          │ STT AI     │          │ │
 │  │  │  :8000    │          │  :8001     │          │ │
 │  │  └───────────┘          └────────────┘          │ │
 │  │                                                  │ │
@@ -344,12 +363,16 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       - DB_HOST=postgres
       - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       - AI_IDV_URL=https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_TRIAGE_URL=https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
     volumes:
       - uploads:/data/uploads
+    depends_on:
+      - postgres
+      - redis
+      - kafka
     deploy:
       resources:
         limits:
@@ -380,23 +403,63 @@ services:
         limits:
           memory: 256M
 
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT:-2181}
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    ports:
+      - "${KAFKA_PORT:-8092}:9092"
+    environment:
+      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID:-1}
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:${ZOOKEEPER_CLIENT_PORT:-2181}
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_PORT:-8092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:-1}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-false}"
+    depends_on:
+      - zookeeper
+
   livekit:
     image: livekit/livekit-server:latest
+    entrypoint: ["/bin/sh", "/etc/entrypoint.sh"]
     expose:
       - "7880"               # API + signaling WebSocket (Nginx가 프록시)
     ports:
-      - "8881:7881"          # ICE/TCP (직접 노출 — 미디어 전용)
-      - "8882:7882/udp"      # ICE/UDP mux (직접 노출 — 미디어 전용)
-      - "8478:3478/udp"      # TURN UDP (직접 노출 — NAT traversal)
+      - "8881:8881"          # ICE/TCP (직접 노출 — 미디어 전용)
+      - "8882:8882/udp"      # ICE/UDP mux (직접 노출 — 미디어 전용)
     volumes:
-      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+      - ./livekit/livekit.yaml:/etc/livekit.yaml.tpl:ro
+      - ./livekit/entrypoint.sh:/etc/entrypoint.sh:ro
     environment:
       - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
-      - LIVEKIT_CONFIG=/etc/livekit.yaml
+      - LIVEKIT_NODE_IP=${LIVEKIT_NODE_IP}
+      - TURN_SECRET=${TURN_SECRET}
     deploy:
       resources:
         limits:
           memory: 1G
+
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    command: >
+      -n
+      --listening-port=8478
+      --min-port=8600
+      --max-port=8699
+      --lt-cred-mech
+      --user=waddoc:${TURN_SECRET}
+      --realm=turn.waddoc.com
+      --external-ip=${LIVEKIT_NODE_IP}
+      --no-tls
+      --no-dtls
+      --no-cli
+      --fingerprint
 
 volumes:
   pg_data:
@@ -414,15 +477,14 @@ GPU Server
       - listen 443 ssl
       - /idv/*    -> 127.0.0.1:8000
       - /stt/*    -> 127.0.0.1:8001
-      - /triage/* -> 127.0.0.1:8001
 
   - idv-ai process
       - bind 127.0.0.1:8000
       - 역할: 얼굴 비교 / OCR
 
-  - stt-triage-ai process
+  - stt-ai process
       - bind 127.0.0.1:8001
-      - 역할: 실시간 STT WebSocket / 추천 REST
+      - 역할: 실시간 STT WebSocket
 
   - process manager
       - systemd, supervisor, pm2, 또는 전용 ML serving runtime 사용
@@ -445,9 +507,10 @@ Content-Type: multipart/form-data
 Parts:
   - verificationId: "vrf_001"
   - patientId: "patient_001"
-  - referenceImage: (binary) ← 사전 등록 사진 파일
-  - probeImage: (binary)     ← 현재 촬영 사진 파일
-  - thresholdProfile: "MEDICAL_REMOTE_VISIT"
+  - verificationMode: "FACE_AND_IDCARD"
+  - referenceImage: (binary, optional) ← 사전 등록 사진 파일
+  - faceImage: (binary)                ← 현재 촬영 얼굴 사진 파일
+  - idCardImage: (binary)              ← 신분증 촬영 이미지
 
 Response (JSON):
 {
@@ -468,24 +531,11 @@ Server → Client:
   {"type":"partial","requestId":"stt_001","text":"머리가"}
   {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
 
-Spring Boot → Recommendation AI (POST https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend)
-Content-Type: application/json
-
-{
-  "requestId": "rec_001",
-  "intakeSessionId": "its_001",
-  "transcript": "머리가 아프고 어지러워요"
-}
-```
-
----
-
 ## 5. AI 통신 추상화 레이어
 
 현재 표준 운영 모델은 **역할별 프로토콜 분리**다.
 - IDV/OCR: multipart REST
 - 실시간 STT: WebSocket
-- 최종 추천/분류: REST JSON
 
 과거의 공유 디렉터리(JSON 경로 전달) 전략은 더 이상 기본 아키텍처에 포함하지 않는다.
 
@@ -499,22 +549,16 @@ interface RealtimeSttClient {
     void sendAudioChunk(byte[] chunk);
     void closeSession(String requestId);
 }
-
-interface RecommendationAiClient {
-    RecommendationResult recommend(RecommendationRequest request);
-}
 ```
 
 ```yaml
 # application-local.yml
 ai:
   idv-url: https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-  triage-url: https://<DEV_GPU_SERVER_HOST>/triage/api/v1/recommend
 
 # application-prod.yml
 ai:
   idv-url: https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
-  triage-url: https://<PROD_GPU_SERVER_HOST>/triage/api/v1/recommend
 ```
 
 ---
@@ -524,7 +568,6 @@ ai:
 AI 서버는 **업무 성격에 따라 프로토콜을 분리**한다.
 - 본인확인/신분증 OCR: multipart REST
 - 실시간 STT: WebSocket
-- 최종 증상 분류/추천: REST JSON
 
 ### 6.1 IDV AI API
 
@@ -536,7 +579,7 @@ AI 서버는 **업무 성격에 따라 프로토콜을 분리**한다.
 **요청 모드**
 ```
 Content-Type: multipart/form-data
-Parts: verificationId, referenceImage(file), probeImage(file)
+Parts: verificationId, verificationMode, referenceImage(file, optional), faceImage(file), idCardImage(file)
 ```
 
 **응답 (공통)**
@@ -569,7 +612,7 @@ Content-Type: multipart/form-data
 Parts:
   - verificationId: "vrf_001"
   - patientId: "patient_001"
-  - referenceImage: (binary)   ← 사전 등록 얼굴 사진
+  - referenceImage: (binary, optional)   ← 사전 등록 얼굴 사진
   - faceImage: (binary)        ← 실시간 촬영 얼굴 사진
   - idCardImage: (binary)      ← 신분증 촬영 이미지
   - verificationMode: "FACE_AND_IDCARD"
@@ -585,11 +628,8 @@ Response:
     "rrnMasked": "580315-1******",
     "address": "강원도 강릉시 ..."
   },
-  "matches": {
-    "liveVsRegisteredScore": 0.94,
-    "liveVsIdCardFaceScore": 0.91,
-    "idCardFaceVsRegisteredScore": 0.89
-  },
+  "faceSimilarityScore": 0.94,
+  "idCardFaceSimilarityScore": 0.91,
   "qualityChecks": {
     "faceDetected": true,
     "singleFace": true,
@@ -604,9 +644,9 @@ Response:
 Spring Boot는 위 응답을 받아 다음을 수행한다.
 
 1. OCR 추출 이름과 `PATIENT.name` 비교
-2. 생년월일 또는 주민등록번호 마스킹값과 `PATIENT.birth_date6` 비교
+2. 생년월일 또는 주민등록번호 마스킹값과 `PATIENT.birthDate6` 비교
 3. OCR 주소와 `PATIENT.address` 비교
-4. 얼굴 3자 점수와 OCR 신뢰도를 함께 사용해 최종 `VERIFIED`, `FAILED`, `MANUAL_REVIEW` 판정
+4. AI 응답 `matched=true`이고 OCR 이름, 생년월일 6자리, 주소 중 하나 이상이 일치하면 최종 `VERIFIED` 판정
 5. `VERIFIED`인 경우 영속 테이블 대신 TTL 캐시에 최근 본인 확인 성공 상태를 저장하고, 활력징후 단계 이후 환자 토큰 발급 시 재사용
 
 보안 원칙:
@@ -707,8 +747,8 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 
 | 항목 | 개발 환경 | 배포 환경 |
 |------|----------|----------|
-| TURN 서버 | LiveKit 내장 TURN | LiveKit 내장 TURN |
-| TURN 포트 | 3478/udp (publish) | 8478/udp (publish) |
+| TURN 서버 | LiveKit 내장 TURN | 외부 coturn |
+| TURN 포트 | 3478/udp (publish) | 8478/udp (listener), 8600-8699/udp (relay) |
 | ICE/TCP | 7881 (publish) | 8881 (publish) |
 | ICE/UDP | 7882/udp mux (publish) | 8882/udp mux (publish) |
 | TLS TURN | 없음 | 없음 (P1 검토) |
@@ -722,7 +762,9 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 7880    API + signaling WS  개발: 직접 접속, 배포: Nginx가 WSS 프록시 (/livekit)
 7881    ICE/TCP             TCP fallback, 방화벽에서 UDP 차단 시 사용
 7882    ICE/UDP mux         모든 UDP 미디어가 단일 포트 통과
-3478    TURN/UDP            NAT traversal 릴레이
+3478    TURN/UDP            개발 환경 LiveKit 내장 TURN
+8478    TURN listener       배포 환경 coturn 리스너
+8600-8699 TURN relay        배포 환경 coturn relay range
 ```
 
 #### 배포 환경 포트 매핑
@@ -734,7 +776,8 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 443         443         Nginx HTTPS (API, 프론트, LiveKit WS — SSL termination)
 8881        7881        LiveKit ICE/TCP (직접 노출 — 미디어 전용)
 8882/udp    7882/udp    LiveKit ICE/UDP mux (직접 노출 — 미디어 전용)
-8478/udp    3478/udp    TURN UDP (직접 노출 — NAT traversal)
+8478/udp       8478/udp       coturn TURN listener
+8600-8699/udp  8600-8699/udp  coturn TURN relay range
 
 ※ LiveKit signaling(7880)은 Nginx가 /livekit 경로로 WSS 프록시.
   클라이언트는 wss://<DOMAIN>/livekit 으로 접속.
@@ -744,18 +787,24 @@ NAT/방화벽 뒤의 환자·의사 환경을 고려하여 **TURN 릴레이를 �
 
 ```yaml
 # livekit/livekit.yaml
+port: 7880
 rtc:
-  use_external_ip: true
-  udp_port: 7882               # UDP mux: 모든 ICE/UDP가 단일 포트 통과
-  tcp_port: 7881               # ICE/TCP fallback
-  # port_range_start/end 사용 안 함 (udp_port 사용 시 무시됨)
-
+  use_external_ip: false
+  udp_port: 8882
+  tcp_port: 8881
+  turn_servers:
+    - host: $LIVEKIT_NODE_IP
+      port: 8478
+      protocol: udp
+      username: waddoc
+      credential: $TURN_SECRET
 turn:
-  enabled: true
-  domain: <SERVER_DOMAIN>
-  tls_port: 0                  # MVP에서 TLS TURN 사용 안 함
-  udp_port: 3478               # TURN/UDP (외부 8478으로 매핑)
+  enabled: false
 ```
+
+> 운영 docker-compose에서는 `entrypoint.sh`가 `LIVEKIT_NODE_IP`, `TURN_SECRET`를 치환한 뒤 `/livekit-server --config /tmp/livekit.yaml --node-ip <PUBLIC_IP>` 형태로 LiveKit을 실행한다.
+> TURN listener/relay는 LiveKit이 아니라 `coturn` 컨테이너가 맡는다.
+> bind mount 파일(`livekit.yaml`, `entrypoint.sh`)을 바꾸면 `docker compose restart livekit coturn`이 필요하다.
 
 #### Nginx 설정 (배포 환경)
 
@@ -821,7 +870,8 @@ sudo ufw allow 80/tcp              # HTTP → HTTPS 리다이렉트
 sudo ufw allow 443/tcp             # HTTPS (API, 프론트, LiveKit WS — SSL termination)
 sudo ufw allow 8881/tcp            # LiveKit ICE/TCP
 sudo ufw allow 8882/udp            # LiveKit ICE/UDP mux
-sudo ufw allow 8478/udp            # TURN UDP
+sudo ufw allow 8478/udp            # coturn TURN listener
+sudo ufw allow 8600:8699/udp       # coturn TURN relay range
 sudo ufw enable
 ```
 
@@ -829,7 +879,7 @@ sudo ufw enable
 > **8880 포트 불필요**: LiveKit signaling(7880)은 Nginx가 443 포트에서 `/livekit` 경로로 WSS 프록시하므로, 8880 포트를 별도로 개방할 필요가 없다.
 
 > [!WARNING]
-> **ICE/UDP mux (8882/udp)** 포트가 방화벽에서 차단되면 UDP 미디어가 불가능하고 ICE/TCP(8881)로 fallback된다. TURN/UDP(8478)도 차단되면 NAT traversal이 실패할 수 있다.
+> **ICE/UDP mux (8882/udp)** 포트가 방화벽에서 차단되면 UDP 미디어가 불가능하고 ICE/TCP(8881)로 fallback된다. `coturn`의 8478/udp 또는 relay range(8600-8699/udp)가 차단되면 symmetric NAT 환경에서 TURN 릴레이가 실패할 수 있다.
 
 ### 7.2 네트워크 품질 저하 대응
 
@@ -871,8 +921,8 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 | 참가자 | 발급 시점 | API | Auth | 발급 조건 |
 |--------|-----------|-----|------|-----------|
 | 의사 | 세션 생성 시 | `POST /cases/{caseId}/sessions` | Bearer Token (DOCTOR) | 로그인 + 케이스 배정 확인 |
-| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 미션의 케이스 환자 조회, 기준 이미지 존재 |
-| 환자 | 세션 입장 시 | `POST /sessions/{sessionId}/participants/patient/token` | Bearer Token (ADMIN) — 차량 태블릿(운영 단말) | 최근 본인 확인 성공 상태 + 세션 준비 완료 |
+| 환자 | 본인확인 시 | `POST /missions/{missionId}/identity-check` | Bearer Token (MISSION_TERMINAL 또는 ADMIN) — 차량 태블릿(운영 단말) | `MISSION.phase = VERIFYING`, 미션의 케이스 환자 조회, 기준 이미지 유무와 무관하게 AI 본인확인 수행 |
+| 환자 | 세션 입장 시 | `POST /missions/{missionId}/participants/patient/token` | Bearer Token (MISSION_TERMINAL 또는 ADMIN) — 차량 태블릿(운영 단말) | 최근 본인 확인 성공 상태 + 세션 준비 완료 |
 
 | 항목 | 정책 |
 |------|------|
@@ -891,10 +941,10 @@ ABANDONED      disconnected, 30초 이상   세션 abandoned 판정
 환자 현장 진료 준비 흐름:
 1. 차량 도착 → 환자 탑승 → "진료 시작" 클릭
 2. 서버: MISSION.phase = VERIFYING
-3. 차량 태블릿(운영 단말, 관리자 로그인)에서 POST /api/v1/missions/{missionId}/identity-check (ADMIN Bearer)
-4. 서버: `missionId -> case -> patient` 조회 → 기준 이미지 조회 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
+3. 차량 태블릿(운영 단말, 미션 단말 토큰)에서 POST /api/v1/missions/{missionId}/identity-check (MISSION_TERMINAL Bearer)
+4. 서버: `missionId -> case -> patient` 조회 → 기준 이미지 확인 → GPU IDV API 호출 → OCR 재검증 → 최근 본인 확인 성공 상태 캐시
 5. 차량 태블릿: 활력징후 단계 진행
-6. 의사 세션 준비 후 POST /api/v1/sessions/{sessionId}/participants/patient/token (ADMIN Bearer)
+6. 의사 세션 준비 후 POST /api/v1/missions/{missionId}/participants/patient/token (MISSION_TERMINAL Bearer)
 7. 서버: 최근 본인 확인 성공 상태 검증 → patientToken 발급
 8. 환자 WebRTC 입장
 
@@ -943,7 +993,8 @@ ABANDONED 시:
 │                                                      │
 │  ┌─────────────────┐    ┌──────────────────────────┐ │
 │  │ Access Token    │    │ Refresh Token            │ │
-│  │ (JS 메모리 변수) │    │ (HttpOnly Secure Cookie) │ │
+│  │ (localStorage   │    │ (HttpOnly Secure Cookie) │ │
+│  │  via Zustand)   │    │                          │ │
 │  │ 수명: 15분      │    │ 수명: 7일               │ │
 │  └────────┬────────┘    └──────────┬───────────────┘ │
 │           │                        │                 │
@@ -964,7 +1015,7 @@ ABANDONED 시:
 
 | 결정 | 이유 |
 |------|------|
-| Access Token → JS 메모리 | XSS로 localStorage 탈취 방지. 탭 닫으면 소멸 |
+| Access Token → localStorage (Zustand persist) | Zustand 상태 관리로 새로고침 시에도 유지. `auth-storage` 키 사용 |
 | Refresh Token → HttpOnly 쿠키 | JS 접근 불가, 브라우저가 자동 전송 |
 | API → Authorization 헤더 | 쿠키가 아닌 헤더 전송이므로 **CSRF 방어 부담 없음** |
 | Auth 전용 쿠키 | Path를 `/api/v1/auth`로 제한하여 auth 하위 경로(login, refresh, logout)에만 쿠키 전송 |
@@ -973,11 +1024,11 @@ ABANDONED 시:
 
 | 항목 | Access Token | Refresh Token |
 |------|-------------|---------------|
-| 저장 위치 | JS 메모리 (변수) | HttpOnly Secure Cookie |
+| 저장 위치 | localStorage (Zustand persist) | HttpOnly Secure Cookie |
 | 수명 | 15분 | 7일 |
 | 전송 방식 | `Authorization: Bearer {token}` | 쿠키 자동 전송 |
 | 갱신 | `/api/v1/auth/refresh` 호출 | 로그인 시 발급 |
-| Payload | userId, role, iat, exp | userId, tokenFamily, iat, exp |
+| Payload | userId, role, iat, exp | userId, role, iat, exp |
 | 서명 | HS256 (공유 시크릿) | HS256 (공유 시크릿) |
 
 ### 8.4 쿠키 설정
@@ -998,7 +1049,7 @@ Set-Cookie: refresh_token={token};
    POST /api/v1/auth/login { username, password }
    → 응답 Body: { accessToken, expiresIn, user: {...} }
    → 응답 Cookie: refresh_token (HttpOnly)
-   → React: accessToken을 메모리 변수에 저장
+   → React: accessToken을 Zustand store (localStorage)에 저장
 
 2. API 호출
    GET /api/v1/bookings
@@ -1009,34 +1060,34 @@ Set-Cookie: refresh_token={token};
    POST /api/v1/auth/refresh
    Cookie: refresh_token={RT}  (브라우저 자동 전송)
    → Spring: RT 검증 → 새 AT 발급 (Body) + 새 RT 발급 (Cookie)
-   → React: 새 accessToken으로 메모리 변수 교체
+   → React: 새 accessToken으로 Zustand store 교체
 
 4. 로그아웃
    POST /api/v1/auth/logout
-   → Spring: Refresh Token DB에서 무효화
+   → Spring: Redis에서 Refresh Token 무효화
    → 응답: refresh_token 쿠키 삭제 (Max-Age=0)
-   → React: 메모리의 accessToken 삭제
+   → React: Zustand store에서 accessToken 삭제
 ```
 
 ### 8.6 Refresh Token 보안
 
 | 정책 | 구현 |
 |------|------|
-| DB 저장 | Refresh Token을 해시하여 `AUTH_SESSION` 테이블에 저장 |
-| Token Rotation | 갱신 시 새 RT 발급 + 이전 RT 무효화 |
-| Token Family | 탈취 감지용. 같은 family의 이미 사용된 RT로 갱신 시도 시 family 전체 무효화 |
-| 강제 무효화 | 관리자가 특정 사용자의 모든 세션 강제 로그아웃 가능 |
-| 동시 세션 | 기기별 세션 관리. Redis에 활성 세션 목록 유지 |
+| Redis 저장 | Refresh Token을 `refresh:{token}` 키로 Redis에 저장 (TTL 7일). DB 기반 세션 테이블은 사용하지 않음 |
+| Token Rotation | 갱신 시 새 RT 발급 + 이전 RT Redis에서 삭제 |
+| 강제 무효화 | 관리자가 특정 사용자의 모든 세션 강제 로그아웃 가능 (Redis 키 삭제) |
 
 ### 8.7 역할별 인증 정리
 
 | 대상 | 인증 방식 | 토큰 |
 |------|----------|------|
-| 의사 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
-| 관리자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
-| 보호자 | ID/PW 로그인 | Access(메모리) + Refresh(쿠키) |
+| 의사 | ID/PW 로그인 | Access(localStorage) + Refresh(쿠키) |
+| 관리자 | ID/PW 로그인 | Access(localStorage) + Refresh(쿠키) |
+| 보호자 | ID/PW 로그인 | Access(localStorage) + Refresh(쿠키) |
 | 환자 | 계정 없음 | 본인확인 완료 후 LiveKit Room Token만 |
 | 환자 (인테이크) | 계정 없음 | `intakeSessionId`(nanoid)를 capability token으로 사용 |
+| 미션 터미널 | 미션 기반 토큰 | JWT tokenType=MISSION_TERMINAL (missionId, caseId, scopes 포함, 30분) |
+| 디바이스 터미널 | 부트스트랩 토큰 | JWT tokenType=DEVICE_TERMINAL (terminalId, vehicleId, regionCode 포함, 30분) |
 
 ### 8.8 공개 인테이크 세션 접근 제어
 
@@ -1057,7 +1108,7 @@ Set-Cookie: refresh_token={token};
 CSRF 공격 조건: 브라우저가 쿠키를 자동으로 인증에 사용할 때 위험
 
 본 구조에서:
-- 모든 API 인증 = Authorization 헤더 (JS 메모리에서 직접 세팅)
+- 모든 API 인증 = Authorization 헤더 (Zustand store에서 직접 세팅)
 - 쿠키(Refresh Token)는 /api/v1/auth 하위 경로에만 전송 (login, refresh, logout)
 - SameSite=Strict로 크로스사이트에서 쿠키 미전송
 
@@ -1077,7 +1128,7 @@ React에서 `fetch` 기반 SSE 라이브러리를 사용하여 커스텀 헤더 
 ```javascript
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
-fetchEventSource('/api/v1/notifications/subscribe', {
+fetchEventSource('/api/v1/doctors/me/notifications/stream', {
   method: 'GET',
   headers: {
     'Authorization': `Bearer ${accessToken}`,
@@ -1104,6 +1155,8 @@ fetchEventSource('/api/v1/notifications/subscribe', {
 | 재연결 | 네트워크 오류 시 exponential backoff |
 | 표준 EventSource | 사용 금지 (커스텀 헤더 불가) |
 
+> 신규 예약 알림은 예약/케이스 생성 트랜잭션 커밋 후 `doctor.notifications` Kafka 토픽으로 발행되고, `DoctorNotificationConsumer`가 활성 SSE 연결이 있는 의사에게만 전달한다.
+
 ---
 
 ## 8.11 SMS 게이트웨이 (SOLAPI)
@@ -1111,7 +1164,7 @@ fetchEventSource('/api/v1/notifications/subscribe', {
 환자는 시스템 계정이 없으므로 웹 내 알림 수신이 불가능하다. **예약 생성/취소 결과는 SOLAPI SMS 게이트웨이를 통해 환자 휴대전화로 발송**한다.
 
 ```
-Spring Boot → SOLAPI SDK → 환자 SMS 발송
+Spring Boot → Kafka(sms.requests) → SmsConsumer → SOLAPI SDK → 환자 SMS 발송
 
 발송 대상:
   - 예약 확정 시: 예약 일시/의사/진료과 안내 SMS
@@ -1120,19 +1173,23 @@ Spring Boot → SOLAPI SDK → 환자 SMS 발송
 환경별 처리:
   - 개발 (local): SMS를 실제 발송하지 않고 로그로 기록 (MockSmsService)
   - 배포 (prod):  SOLAPI API로 실제 발송 (SolapiSmsService)
+  - 발송 실패: Kafka 재시도 후 `sms.requests.DLT`에 적재
 ```
 
 ```
 추상화 레이어 (Spring Boot):
 
 interface SmsService {
-    SmsResult send(String recipientPhone, String senderPhone, String messageBody);
+    void send(String to, String message);
+    String getContactNumber();
 }
 
+@ConditionalOnProperty(prefix = "sms", name = "provider", havingValue = "mock", matchIfMissing = true)
 class MockSmsService implements SmsService {
     // 개발: 로그만 기록, 실제 발송 안 함
 }
 
+@ConditionalOnProperty(prefix = "sms", name = "provider", havingValue = "solapi")
 class SolapiSmsService implements SmsService {
     // 배포: SOLAPI SDK로 실제 SMS 발송
 }
@@ -1143,6 +1200,7 @@ class SolapiSmsService implements SmsService {
 sms:
   provider: mock
   sender-number: "01000000000"
+  contact-number: "01000000000"
 
 # application-prod.yml
 sms:
@@ -1170,14 +1228,15 @@ GPU 서버 내부 서비스 포트 8000, 8001은 외부 직접 공개하지 않�
 ```
 메인 서버:
   외부 공개: 80, 443 (Nginx — API, 프론트, LiveKit WS SSL termination),
-            8881 (ICE/TCP), 8882/udp (ICE/UDP), 8478/udp (TURN)
-  내부 전용: 8080 (Spring), 7880 (LiveKit WS), 5432 (PostgreSQL), 6379 (Redis)
+            8092 (Kafka host access), 8881 (ICE/TCP), 8882/udp (ICE/UDP),
+            8478/udp (TURN listener), 8600-8699/udp (TURN relay)
+  내부 전용: 8080 (Spring), 7880 (LiveKit WS), 5432 (PostgreSQL), 6379 (Redis), 2181 (Zookeeper), 29092 (Kafka broker)
 
 AI 서버:
   외부 공개: 443 (TLS reverse proxy)
   메인 서버에서만 접근: 443
   방화벽: 메인 서버 IP만 허용 (iptables/ufw)
-  내부 전용: 8000 (IDV), 8001 (STT/Triage)
+  내부 전용: 8000 (IDV), 8001 (STT)
 
 서버 간 통신:
   - 같은 VPC/내부 네트워크 내에서 private IP 사용
@@ -1213,7 +1272,7 @@ sudo ufw enable
 | 프로세스 | Memory Limit | CPU Limit | 비고 |
 |-----------|-------------|-----------|------|
 | idv-ai process | 4G | 4.0 | 얼굴 비교 / OCR 모델 |
-| stt-triage-ai process | 4G | 4.0 | 실시간 음성 인식 + 추천 보조 |
+| stt-ai process | 4G | 4.0 | 실시간 음성 인식 |
 | **합계** | **8G** | **8.0** | GPU 있으면 CPU 부담 감소 |
 
 ---
@@ -1225,7 +1284,6 @@ sudo ufw enable
 | Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
 | Spring ↔ STT AI (WS 연결) | 3초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
 | STT final 응답 대기 | 12초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
-| Spring → Recommendation AI | 5초 | 1회 자동 | LOW confidence fallback |
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |
@@ -1281,7 +1339,6 @@ docker compose up -d --build spring-api
 
 # 원격 GPU 서버 헬스체크 예시
 curl https://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
-curl https://<DEV_GPU_SERVER_HOST>/triage/api/v1/health
 ```
 
 ### 배포 환경 — 메인 서버
@@ -1296,7 +1353,7 @@ sudo systemctl restart nginx
 
 # AI 프로세스 재시작 예시
 sudo systemctl restart idv-ai
-sudo systemctl restart stt-triage-ai
+sudo systemctl restart stt-ai
 ```
 
 ---
@@ -1309,8 +1366,7 @@ sudo systemctl restart stt-triage-ai
 | AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
 | Spring → IDV AI | https://\<DEV_GPU_SERVER_HOST\>/idv/api/v1/verify | https://\<PROD_GPU_SERVER_HOST\>/idv/api/v1/verify |
 | Spring ↔ STT AI | wss://\<DEV_GPU_SERVER_HOST\>/stt/ws/transcribe | wss://\<PROD_GPU_SERVER_HOST\>/stt/ws/transcribe |
-| Spring → Recommendation AI | https://\<DEV_GPU_SERVER_HOST\>/triage/api/v1/recommend | https://\<PROD_GPU_SERVER_HOST\>/triage/api/v1/recommend |
-| 프로토콜 모델 | IDV=REST multipart, STT=WebSocket, 추천=REST JSON | IDV=REST multipart, STT=WebSocket, 추천=REST JSON |
+| 프로토콜 모델 | IDV=REST multipart, STT=WebSocket | IDV=REST multipart, STT=WebSocket |
 | AI 파일 접근 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 |
 | Spring Profile | `local` | `prod` |
 | DB 비밀번호 | 하드코딩 (dev) | 환경 변수 / secrets |
@@ -1318,8 +1374,8 @@ sudo systemctl restart stt-triage-ai
 | 방화벽 | GPU 서버에 Dev 메인 서버/VPN 대역만 허용 | GPU 서버에 Prod 메인 서버 IP만 허용 |
 | 자원 제한 | 느슨 | 프로세스별 limits / systemd 제어 권장 |
 | 인증 쿠키 Secure | 없음 (HTTP) | Secure 필수 (HTTPS) |
-| TURN | LiveKit 내장, 3478/udp (publish) | LiveKit 내장, 8478/udp (publish) |
+| TURN | LiveKit 내장, 3478/udp (publish) | coturn, 8478/udp (listener) + 8600-8699/udp (relay) |
 | LiveKit signaling | 7880 직접 접속 (HTTP) | Nginx WSS 프록시 (`/livekit` → 7880, SSL termination) |
 | LiveKit 미디어 포트 | 7881, 7882/udp (publish) | 8881, 8882/udp (직접 노출) |
 | 포트 모델 | UDP mux (7882) | UDP mux (8882←7882) |
-| 허용 포트 범위 | 80, 3478, 7880-7882 | 80, 443, 8478, 8881-8882 |
+| 허용 포트 범위 | 80, 3478, 7880-7882 | 80, 443, 8478, 8600-8699, 8881-8882 |

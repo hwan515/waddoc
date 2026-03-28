@@ -37,10 +37,13 @@
    - 컨테이너 내부에서 호스트의 GPU 리소스를 사용하기 위해 필수적입니다.
    - **(⚠️주의)** 만약 GPU가 없는 가상환경 등이라면, `docker-compose.yml` 파일 하단의 `deploy:` 부터 끝까지의 GPU 할당 부분을 반드시 주석 처리하거나 삭제한 뒤 실행해야 컨테이너가 켜집니다.
 3. **GUI 화면 표시 권한 허용 (X11)**
-   - 터미널에서 아래 명령어를 실행하여 Docker 컨테이너가 호스트의 화면을 띄울 수 있도록 권한을 부여해야 합니다. (재부팅 시 매번 혹은 컨테이너 실행 전 최초 1회 입력 필요)
-   ```bash
-   xhost +local:docker
-   ```
+    - 터미널에서 아래 명령어를 실행하여 Docker 컨테이너가 호스트의 화면을 띄울 수 있도록 권한을 부여해야 합니다. (재부팅 시 매번 혹은 컨테이너 실행 전 최초 1회 입력 필요)
+    ```bash
+    xhost +local:docker
+    ```
+4. **Zenoh 도메인 확인**
+   - 운영 표준 endpoint는 `tcp/zenoh.waddoc.site:8081` 입니다.
+   - 더 이상 `tcp/<공인IP>:8081`을 직접 사용하지 않습니다.
 ### 자동 초기 환경 세팅 스크립트 (추천)
 우분투를 갓 설치했거나(순정) 필수 패키지 설치가 번거롭다면, 함께 제공되는 쉘 스크립트를 통해 한 번에 세팅할 수 있습니다.
 
@@ -57,6 +60,20 @@ chmod +x setup.sh  # (이미 실행 권한이 있다면 생략 가능)
 docker compose up -d
 ```
 > *최초 실행 시 이미지를 다운로드하고 패키지를 설치하므로 일정 시간이 소요될 수 있습니다.*
+> *이 환경은 CycloneDDS discovery 충돌을 피하기 위해 `ROS_LOCALHOST_ONLY=1` 로 동작합니다. Unity는 ROS TCP(10000)로 붙기 때문에 이 설정과 충돌하지 않습니다.*
+> *Zenoh 브리지는 `tcp/zenoh.waddoc.site:8081` 로 접속합니다.*
+
+### YOLO 사용 시 추가 설치
+`vision_detect.py` 의 사람/경운기 ROI e-stop 기능은 `ultralytics` 와 PyTorch가 필요합니다. 최신 `Dockerfile`로 이미지를 다시 빌드하면 함께 설치됩니다. 이미 실행 중인 컨테이너에서 바로 테스트하려면 아래를 실행하세요.
+
+```bash
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip3 install ultralytics opencv-python "numpy<2"
+```
+
+설치 후에는 컨테이너를 재시작하거나 새 셸에서 다시 `ros2 run lane_follow_pkg vision_detect ...` 를 실행해 주세요.
+
+X11 권한이 없어서 OpenCV 창이 죽는 환경이면 `--ros-args -p show_debug_windows:=false` 로 실행하세요. 디버그 창이 꼭 필요할 때만 `true` 로 켜는 것을 권장합니다.
 
 ### 컨테이너 내부 접속 (터미널)
 실행된 컨테이너 내부로 들어가 작업하려면 다음 명령어를 사용합니다:
@@ -65,6 +82,7 @@ docker compose up -d
 docker exec -it ros2_dev_env bash
 ```
 > *컨테이너에 접속하면 자동으로 ROS 2 환경(`source /opt/ros/humble/setup.bash`)이 로드되며, 작업 디렉토리(`/root/workspace`)에서 바로 시작할 수 있습니다.*
+> *워크스페이스를 `colcon build` 한 뒤 새 터미널을 열었는데 `ros2 topic list` 에서 기대한 토픽이 안 보이면, 먼저 `source /root/workspace/install/setup.bash`, `export ROS_DOMAIN_ID=0`, `export ROS_LOCALHOST_ONLY=1`, `ros2 daemon stop && ros2 daemon start` 를 순서대로 실행해 같은 그래프를 보게 맞춰 주세요.*
 
 ### 컨테이너 종료
 작업을 마치고 컨테이너를 중지하려면 다음 명령어를 입력합니다. (파일은 `workspace/`에 그대로 남습니다.)

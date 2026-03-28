@@ -9,11 +9,14 @@ import com.waddoc.domain.consultation.entity.ConsultationSummary;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
 import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,13 +24,19 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+/**
+ * 진료 요약의 조회와 저장, 세션 종료 시점 정리를 담당한다.
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConsultationSummaryService {
 
     private final ConsultationSessionRepository consultationSessionRepository;
     private final ConsultationSummaryRepository consultationSummaryRepository;
+    private final MissionRepository missionRepository;
     private final AccessControlService accessControlService;
+    private final ConsultationLiveKitService consultationLiveKitService;
     private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
@@ -87,11 +96,14 @@ public class ConsultationSummaryService {
 
         consultationSummaryRepository.save(summary);
 
+        boolean shouldCloseRoom = false;
         if (session.getStatus() == ConsultationSessionStatus.IN_PROGRESS) {
             // 진료 요약 저장을 세션 종료 시점으로 간주하고 연관된 케이스/예약 상태도 함께 마감한다.
             session.complete(calculateDurationMinutes(session, LocalDateTime.now()));
             session.getCareCase().complete();
             session.getCareCase().getBooking().complete();
+            syncMissionAfterConsultationCompletion(session);
+            shouldCloseRoom = true;
         }
 
         // 요약 내용 전문은 로그에 남기지 않고 운영 추적에 필요한 최소 정보만 남긴다.
@@ -110,6 +122,10 @@ public class ConsultationSummaryService {
                 )
         );
 
+        if (shouldCloseRoom) {
+            closeLiveKitRoom(session);
+        }
+
         return ConsultationSummaryResponse.from(session, summary);
     }
 
@@ -119,5 +135,41 @@ public class ConsultationSummaryService {
             return 0;
         }
         return Math.max(0, (int) Duration.between(session.getStartedAt(), endedAt).toMinutes());
+    }
+
+    private void syncMissionAfterConsultationCompletion(ConsultationSession session) {
+        missionRepository.findByCareCase(session.getCareCase())
+                .ifPresent(mission -> {
+                    if (mission.getPhase() == MissionPhase.CONSULTING
+                            || mission.getPhase() == MissionPhase.VERIFYING) {
+                        mission.updatePhase(MissionPhase.RETURNING);
+                        missionRepository.save(mission);
+                        return;
+                    }
+
+                    if (mission.getPhase() != MissionPhase.RETURNING
+                            && mission.getPhase() != MissionPhase.COMPLETED
+                            && mission.getPhase() != MissionPhase.FAILED) {
+                        log.warn(
+                                "Consultation completed with unexpected mission phase. sessionId={}, missionId={}, missionPhase={}",
+                                session.getPublicId(),
+                                mission.getPublicId(),
+                                mission.getPhase()
+                        );
+                    }
+                });
+    }
+
+    private void closeLiveKitRoom(ConsultationSession session) {
+        try {
+            consultationLiveKitService.deleteRoom(session.getRoomId());
+        } catch (BusinessException e) {
+            log.warn(
+                    "Failed to close LiveKit room after consultation completion. sessionId={}, roomId={}",
+                    session.getPublicId(),
+                    session.getRoomId(),
+                    e
+            );
+        }
     }
 }

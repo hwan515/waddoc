@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 보호자가 연결된 환자와 완료된 진료 요약을 조회할 때 사용하는 API다.
+ */
 @RestController
 @RequestMapping("/api/v1/guardians")
 @RequiredArgsConstructor

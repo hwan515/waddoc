@@ -4,8 +4,11 @@ import com.waddoc.domain.audit.service.AuditLogService;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.mission.entity.MissionPhase;
+import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.monitoring.LiveKitMonitoringMetrics;
 import io.livekit.server.WebhookReceiver;
 import livekit.LivekitWebhook;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * LiveKit webhook을 검증하고 참가자 연결 상태를 진료 세션에 반영한다.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -29,10 +35,12 @@ public class ConsultationWebhookService {
     private static final Duration WEBHOOK_IDEMPOTENCY_TTL = Duration.ofMinutes(5);
 
     private final ConsultationSessionRepository consultationSessionRepository;
+    private final MissionRepository missionRepository;
     private final AuditLogService auditLogService;
     private final WebhookReceiver webhookReceiver;
     private final DisconnectTimerService disconnectTimerService;
     private final StringRedisTemplate redisTemplate;
+    private final LiveKitMonitoringMetrics liveKitMonitoringMetrics;
 
     @Transactional
     public void handleWebhook(String body, String authorizationHeader) {
@@ -40,32 +48,36 @@ public class ConsultationWebhookService {
         try {
             event = webhookReceiver.receive(body, authorizationHeader);
         } catch (RuntimeException e) {
+            liveKitMonitoringMetrics.recordWebhookFailure("invalid_signature");
             throw new BusinessException(ErrorCode.LIVEKIT_WEBHOOK_INVALID_SIGNATURE);
         }
 
         String eventName = event.getEvent();
         if (eventName == null || eventName.isBlank()) {
-            log.info("Ignoring LiveKit webhook with empty event name");
+            liveKitMonitoringMetrics.recordWebhookEvent("empty", () ->
+                    log.info("Ignoring LiveKit webhook with empty event name"));
             return;
         }
 
-        // 웹훅 멱등성: 이미 처리된 이벤트는 무시
-        String eventId = event.getId();
-        if (eventId != null && !eventId.isBlank()) {
-            String idempotencyKey = WEBHOOK_IDEMPOTENCY_PREFIX + eventId;
-            Boolean wasAbsent = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "1", WEBHOOK_IDEMPOTENCY_TTL);
-            if (!Boolean.TRUE.equals(wasAbsent)) {
-                log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
-                return;
+        liveKitMonitoringMetrics.recordWebhookEvent(eventName, () -> {
+            // 웹훅 멱등성: 이미 처리된 이벤트는 무시
+            String eventId = event.getId();
+            if (eventId != null && !eventId.isBlank()) {
+                String idempotencyKey = WEBHOOK_IDEMPOTENCY_PREFIX + eventId;
+                Boolean wasAbsent = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "1", WEBHOOK_IDEMPOTENCY_TTL);
+                if (!Boolean.TRUE.equals(wasAbsent)) {
+                    log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
+                    return;
+                }
             }
-        }
 
-        switch (eventName) {
-            case "participant_joined" -> handleParticipantJoined(event);
-            case "participant_left" -> handleParticipantLeft(event);
-            case "room_finished" -> handleRoomFinished(event);
-            default -> log.info("Ignoring unsupported LiveKit webhook event: {}", eventName);
-        }
+            switch (eventName) {
+                case "participant_joined" -> handleParticipantJoined(event);
+                case "participant_left" -> handleParticipantLeft(event);
+                case "room_finished" -> handleRoomFinished(event);
+                default -> log.info("Ignoring unsupported LiveKit webhook event: {}", eventName);
+            }
+        });
     }
 
     private void handleParticipantJoined(LivekitWebhook.WebhookEvent event) {
@@ -83,6 +95,8 @@ public class ConsultationWebhookService {
             }
         }
 
+        syncMissionPhaseWhenConsultationStarts(session);
+
         auditLogService.log(
                 "LIVEKIT_PARTICIPANT_JOINED",
                 "CONSULTATION_SESSION",
@@ -94,6 +108,36 @@ public class ConsultationWebhookService {
                         "identity", event.getParticipant().getIdentity()
                 )
         );
+    }
+
+    private void syncMissionPhaseWhenConsultationStarts(ConsultationSession session) {
+        if (session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
+            return;
+        }
+
+        missionRepository.findByCareCase(session.getCareCase())
+                .ifPresentOrElse(mission -> {
+                    if (mission.getPhase() == MissionPhase.VERIFYING) {
+                        mission.updatePhase(MissionPhase.CONSULTING);
+                        missionRepository.save(mission);
+                        log.info(
+                                "Mission phase updated to CONSULTING after consultation start. sessionId={}, missionId={}",
+                                session.getPublicId(),
+                                mission.getPublicId()
+                        );
+                    } else if (mission.getPhase() != MissionPhase.CONSULTING) {
+                        log.warn(
+                                "Consultation started with unexpected mission phase. sessionId={}, missionId={}, missionPhase={}",
+                                session.getPublicId(),
+                                mission.getPublicId(),
+                                mission.getPhase()
+                        );
+                    }
+                }, () -> log.warn(
+                        "Mission not found for started consultation session. sessionId={}, caseId={}",
+                        session.getPublicId(),
+                        session.getCareCase().getPublicId()
+                ));
     }
 
     private void handleParticipantLeft(LivekitWebhook.WebhookEvent event) {
@@ -130,7 +174,8 @@ public class ConsultationWebhookService {
         disconnectTimerService.cancel(session.getPublicId(), ParticipantRole.DOCTOR.name());
         disconnectTimerService.cancel(session.getPublicId(), ParticipantRole.PATIENT.name());
 
-        if (session.getStatus() != ConsultationSessionStatus.COMPLETED) {
+        // 진료가 실제 시작된 세션만 room_finished 시 완료 처리한다.
+        if (session.getStatus() == ConsultationSessionStatus.IN_PROGRESS) {
             session.complete(calculateDurationMinutes(session, LocalDateTime.now()));
         }
 

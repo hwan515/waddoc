@@ -6,19 +6,27 @@ import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.user.entity.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "spring.kafka.listener.auto-startup=false",
+                "spring.kafka.admin.auto-create=false"
+        }
+)
 class JwtSecurityIntegrationTest {
 
     @Autowired
@@ -29,6 +37,9 @@ class JwtSecurityIntegrationTest {
 
     @Autowired
     private MissionRepository missionRepository;
+
+    @MockBean
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${telemetry.api-key}")
     private String telemetryApiKey;
@@ -119,8 +130,8 @@ class JwtSecurityIntegrationTest {
                 """.formatted(
                 mission.getVehicleId(),
                 mission.getPhase().name(),
-                mission.getLatitude().toPlainString(),
-                mission.getLongitude().toPlainString()
+                "36.1395",
+                "128.1136"
         );
 
         ResponseEntity<Void> response = restTemplate.exchange(
@@ -131,6 +142,19 @@ class JwtSecurityIntegrationTest {
         );
 
         assertThat(response.getStatusCode().value()).isEqualTo(202);
+    }
+
+    @Test
+    void swaggerApiDocsIsAccessibleWithoutAuthentication() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/swagger/spring/openapi.json",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).contains("\"openapi\"");
     }
 
     @Test
@@ -148,5 +172,79 @@ class JwtSecurityIntegrationTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("patients");
+    }
+
+    @Test
+    void adminAccessTokenCanIssueMonitoringSessionCookie() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/session",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                Void.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.SET_COOKIE)).contains("monitoring_access=");
+    }
+
+    @Test
+    void monitoringAuthorizeAcceptsIssuedCookie() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
+        HttpHeaders bootstrapHeaders = new HttpHeaders();
+        bootstrapHeaders.setBearerAuth(accessToken);
+
+        ResponseEntity<Void> bootstrapResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/session",
+                HttpMethod.POST,
+                new HttpEntity<>(bootstrapHeaders),
+                Void.class
+        );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.COOKIE, extractCookieValue(bootstrapResponse.getHeaders().getFirst(HttpHeaders.SET_COOKIE)));
+
+        ResponseEntity<Void> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/authorize",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                Void.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
+    }
+
+    @Test
+    void monitoringAuthorizeRejectsMissingCookie() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/admin/monitoring/authorize",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("AUTH_UNAUTHORIZED");
+    }
+
+    @Test
+    void prometheusEndpointIsAccessibleWithoutAuthentication() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/actuator/prometheus",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).contains("jvm_memory_used_bytes");
+    }
+
+    private String extractCookieValue(String setCookie) {
+        assertThat(setCookie).isNotBlank();
+        return setCookie.split(";", 2)[0];
     }
 }
