@@ -6,7 +6,6 @@ const WEEK_START_HOUR = 8;
 const WEEK_SLOT_INTERVAL_MINUTES = 30;
 const WEEK_SLOT_COUNT = 22;
 const WEEK_SLOT_HEIGHT = 40;
-const WEEK_END_HOUR = WEEK_START_HOUR + ((WEEK_SLOT_COUNT * WEEK_SLOT_INTERVAL_MINUTES) / 60);
 
 const formatDateKey = (date) => (
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

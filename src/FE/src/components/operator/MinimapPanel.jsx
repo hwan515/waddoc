@@ -109,9 +109,9 @@ const StatCard = ({ icon, label, children }) => {
     const IconComponent = icon;
 
     return (
-        <div className="flex min-h-[9.5rem] flex-1 flex-col rounded-3xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-2.5 text-base font-semibold uppercase tracking-[0.14em] text-slate-100">
-                <IconComponent className="h-[1.125rem] w-[1.125rem] text-secondary" />
+        <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-2.5 text-[1.125rem] font-semibold uppercase tracking-[0.12em] text-slate-100">
+                <IconComponent className="h-5 w-5 text-secondary" />
                 {label}
             </div>
             <div className="flex flex-1 flex-col">
@@ -197,7 +197,7 @@ const MinimapPanel = ({
                 </div>
             )}
 
-            <div className="absolute inset-y-0 left-0 w-[17.5rem] xl:w-[19.5rem] rounded-l-4xl bg-[linear-gradient(90deg,rgba(3,21,47,0.99)_0%,rgba(3,21,47,0.96)_68%,rgba(4,26,58,0.7)_84%,transparent_100%)]" />
+            <div className="absolute inset-y-0 left-0 w-70 xl:w-78 rounded-l-4xl bg-[linear-gradient(90deg,rgba(3,21,47,0.99)_0%,rgba(3,21,47,0.96)_68%,rgba(4,26,58,0.7)_84%,transparent_100%)]" />
             <div className="absolute inset-0 rounded-4xl bg-linear-to-b from-dark/10 via-transparent to-[#020817]/38" />
 
             <svg
@@ -291,28 +291,39 @@ const MinimapPanel = ({
             </svg>
 
             <div className="relative z-10 flex h-full p-4 xl:p-5">
-                <div className="flex h-full w-[16.5rem] flex-col xl:w-[18rem]">
+                <div className="flex h-full w-66 flex-col xl:w-72">
                     {showMockBadge && (
                         <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-100">
                             Mock
                         </div>
                     )}
 
-                    <div className={`flex flex-1 flex-col gap-3 ${showMockBadge ? 'mt-3' : ''}`}>
+                    <div
+                        className={`grid min-h-0 flex-1 gap-3 ${showMockBadge ? 'mt-3' : ''}`}
+                        style={{ gridTemplateRows: '0.96fr 0.96fr 1.12fr' }}
+                    >
                         <StatCard icon={Activity} label="운행 상태">
-                            <div className="flex flex-1 flex-col justify-center">
-                                <div className={`inline-flex self-start items-center gap-2 rounded-full border px-3.5 py-2 text-base font-semibold ${statePresentation.chipClass}`}>
-                                    <span className={`h-2.5 w-2.5 rounded-full ${statePresentation.dotClass}`}></span>
-                                    {statePresentation.label}
+                            <div className="grid flex-1 grid-rows-4">
+                                <div className="row-start-2 -mt-1 flex items-center">
+                                    <div className={`inline-flex items-center gap-2.5 rounded-full border px-4 py-2.5 text-lg font-semibold ${statePresentation.chipClass}`}>
+                                        <span className={`h-3 w-3 rounded-full ${statePresentation.dotClass}`}></span>
+                                        {statePresentation.label}
+                                    </div>
                                 </div>
-                                <p className="mt-3 text-sm text-slate-300">실시간 상태 반영</p>
+                                <div className="row-start-3 flex items-center">
+                                    <p className="text-sm text-slate-300">실시간 상태 반영</p>
+                                </div>
                             </div>
                         </StatCard>
 
                         <StatCard icon={Gauge} label="차량 속도">
-                            <div className="flex flex-1 flex-col justify-center">
-                                <p className="text-[2.2rem] font-semibold leading-none text-white">{formatSpeed(vehicleSpeed)}</p>
-                                <p className="mt-2 text-sm text-slate-300">정지 시 0 km/h</p>
+                            <div className="grid flex-1 grid-rows-4">
+                                <div className="row-start-2 flex items-center">
+                                    <p className="text-[2.2rem] font-semibold leading-none text-white">{formatSpeed(vehicleSpeed)}</p>
+                                </div>
+                                <div className="row-start-3 flex items-center">
+                                    <p className="mt-1 text-sm text-slate-300">정지 시 0 km/h</p>
+                                </div>
                             </div>
                         </StatCard>
 
@@ -321,14 +332,14 @@ const MinimapPanel = ({
                                 <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
                                 <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
                             </div>
-                            <p className="mt-3 text-sm text-slate-300">차량 리스트와 동일</p>
+                            <p className="mt-3 text-sm text-slate-300">GPS 미수신 시 맵 좌표 표시</p>
                         </StatCard>
                     </div>
                 </div>
             </div>
 
             {!minimapVehiclePose && (
-                <div className="absolute bottom-4 left-[17.75rem] rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white shadow-lg backdrop-blur-sm xl:left-[19.75rem]">
+                <div className="absolute bottom-4 left-71 rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white shadow-lg backdrop-blur-sm xl:left-79">
                     odom 위치 데이터가 연결되면 차량 마커가 표시됩니다.
                 </div>
             )}

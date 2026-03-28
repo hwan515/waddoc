@@ -624,7 +624,6 @@ const loadDashboardSnapshot = async ({
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
-    const currentUser = useAuthStore((state) => state.user);
     const { snapshotData, stateData, statusData } = useRobotSSE();
 
     // '지도' | '대시보드'
@@ -857,24 +856,18 @@ const ControlCenter = () => {
         navigate('/operator/login');
     };
 
-    const operatorLoginId = currentUser?.username
-        || currentUser?.loginId
-        || currentUser?.userId
-        || currentUser?.name
-        || 'operator';
-
     const handleGoHome = () => {
         navigate('/');
     };
 
     return (
         <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
-            <header className="h-16 bg-dark text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
-                <div className="flex items-center gap-8">
+            <header className="h-16 bg-dark text-white flex items-center gap-4 px-6 shrink-0 shadow-md z-20">
+                <div className="flex min-w-0 flex-1 items-center gap-6">
                     <button
                         type="button"
                         onClick={handleGoHome}
-                        className="flex items-center gap-3 text-left transition-opacity hover:opacity-90"
+                        className="flex shrink-0 items-center gap-3 text-left transition-opacity hover:opacity-90"
                     >
                         <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-10 w-10 rounded-lg" />
                         <span className="font-bold text-xl tracking-tight">
@@ -883,10 +876,11 @@ const ControlCenter = () => {
                         </span>
                     </button>
 
-                    <div className="flex items-center gap-1 bg-accent-2 p-1 rounded-lg">
-                        <button
+                    <div className="min-w-0 shrink overflow-x-auto">
+                        <div className="inline-flex items-center gap-1 rounded-lg bg-accent-2 p-1">
+                            <button
                             onClick={() => setActiveTab('map')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                             }`}
@@ -894,9 +888,9 @@ const ControlCenter = () => {
                             <MapIcon className="w-4 h-4" />
                             지도 모니터링
                         </button>
-                        <button
+                            <button
                             onClick={() => setActiveTab('dashboard')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                             }`}
@@ -904,9 +898,9 @@ const ControlCenter = () => {
                             <LayoutDashboard className="w-4 h-4" />
                             운영 대시보드
                         </button>
-                        <button
+                            <button
                             onClick={() => setActiveTab('patients')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                             }`}
@@ -914,9 +908,9 @@ const ControlCenter = () => {
                             <Users className="w-4 h-4" />
                             환자 관리
                         </button>
-                        <button
+                            <button
                             onClick={() => setActiveTab('approvals')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
                             }`}
@@ -927,7 +921,7 @@ const ControlCenter = () => {
                         {MONITORING_TAB_ENABLED && (
                             <button
                                 onClick={() => setActiveTab('monitoring')}
-                                className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'monitoring'
+                                className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'monitoring'
                                     ? 'bg-white text-primary shadow-sm'
                                     : 'text-slate-300 hover:text-white hover:bg-white/10'
                                 }`}
@@ -937,21 +931,21 @@ const ControlCenter = () => {
                             </button>
                         )}
                     </div>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-5">
-                    <div className="flex items-center gap-2 text-sm">
+                <div className="flex shrink-0 items-center gap-5 pl-2">
+                    <div className="flex shrink-0 items-center gap-2 text-sm whitespace-nowrap">
                         <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
                         <span className="text-slate-300 font-medium">시스템 정상</span>
                     </div>
                     <div className="w-px h-5 bg-white/20"></div>
-                    <div className="text-sm font-medium flex items-center">
-                        <span className="bg-accent-2 px-2.5 py-1 rounded text-xs mr-2 border border-white/10">관리자</span>
-                        {operatorLoginId}님
+                    <div className="flex shrink-0 items-center whitespace-nowrap text-sm font-medium text-slate-100">
+                        관리자 님
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="flex items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded transition-colors"
+                        className="flex shrink-0 items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded transition-colors"
                     >
                         <LogOut className="w-4 h-4" /> 로그아웃
                     </button>
