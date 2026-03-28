@@ -52,6 +52,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -314,7 +316,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         """, Long.class)
                         .setParameter("bookingIds", bookingIds)
                         .getResultList();
-        java.util.Set<Long> intakeSessionIds = new java.util.LinkedHashSet<>(entityManager.createQuery("""
+        LinkedHashSet<Long> intakeSessionIds = new LinkedHashSet<>(entityManager.createQuery("""
                 select distinct i.id
                   from IntakeSession i
                  where i.patient.id in :patientIds
@@ -397,14 +399,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     .executeUpdate();
         }
 
-        if (!intakeSessionIds.isEmpty()) {
-            entityManager.createQuery("""
-                    delete from IntakeSession i
-                     where i.id in :intakeSessionIds
-                    """)
-                    .setParameter("intakeSessionIds", intakeSessionIds)
-                    .executeUpdate();
-        }
+        deleteOrphanIntakeSessions(intakeSessionIds);
 
         entityManager.createQuery("""
                 delete from Patient p
@@ -813,14 +808,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     .executeUpdate();
         }
 
-        if (!intakeSessionIds.isEmpty()) {
-            entityManager.createQuery("""
-                    delete from IntakeSession i
-                     where i.id in :intakeSessionIds
-                    """)
-                    .setParameter("intakeSessionIds", intakeSessionIds)
-                    .executeUpdate();
-        }
+        deleteOrphanIntakeSessions(intakeSessionIds);
 
         entityManager.createQuery("""
                 delete from ScheduleSlot s
@@ -929,18 +917,45 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     .executeUpdate();
         }
 
-        if (!intakeSessionIds.isEmpty()) {
-            entityManager.createQuery("""
-                    delete from IntakeSession i
-                     where i.id in :intakeSessionIds
-                    """)
-                    .setParameter("intakeSessionIds", intakeSessionIds)
-                    .executeUpdate();
-        }
+        deleteOrphanIntakeSessions(intakeSessionIds);
 
         entityManager.flush();
     }
 
+    private void deleteOrphanIntakeSessions(Collection<Long> intakeSessionIds) {
+        if (intakeSessionIds.isEmpty()) {
+            return;
+        }
+
+        LinkedHashSet<Long> orphanIntakeSessionIds = new LinkedHashSet<>(intakeSessionIds);
+        orphanIntakeSessionIds.removeAll(entityManager.createQuery("""
+                select distinct b.intakeSession.id
+                  from Booking b
+                 where b.intakeSession is not null
+                   and b.intakeSession.id in :intakeSessionIds
+                """, Long.class)
+                .setParameter("intakeSessionIds", intakeSessionIds)
+                .getResultList());
+        orphanIntakeSessionIds.removeAll(entityManager.createQuery("""
+                select distinct c.intakeSession.id
+                  from CareCase c
+                 where c.intakeSession is not null
+                   and c.intakeSession.id in :intakeSessionIds
+                """, Long.class)
+                .setParameter("intakeSessionIds", intakeSessionIds)
+                .getResultList());
+
+        if (orphanIntakeSessionIds.isEmpty()) {
+            return;
+        }
+
+        entityManager.createQuery("""
+                delete from IntakeSession i
+                 where i.id in :intakeSessionIds
+                """)
+                .setParameter("intakeSessionIds", orphanIntakeSessionIds)
+                .executeUpdate();
+    }
     private void seedFutureSlots(LocalDate today, Map<String, DoctorProfile> doctorsByUsername) {
         if (today.isAfter(FUTURE_SLOT_END_DATE)) {
             return;

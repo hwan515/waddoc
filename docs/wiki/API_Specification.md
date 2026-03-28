@@ -2124,7 +2124,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 > 데모 모드에서만 사용할 수 있는 관리자 제어 API다.
 > - `MISSION.targetWaypointNumber`가 있으면 Spring이 FastAPI `POST /api/cmd/waypoint/{target}`를 호출한다.
-> - 호출 성공 후 mission은 `DISPATCHED`로 전이된다.
+> - 호출 성공 후 mission은 `EN_ROUTE`로 전이된다.
 > - waypoint 매핑이 없는 주소는 로봇 호출 없이 더미 완료 mission으로 처리된다.
 > - 처리 완료 후 연결된 `DISPATCH_OUTBOX`는 `COMPLETED`로 정리한다.
 
@@ -2132,7 +2132,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 ```json
 {
   "missionId": "ms_demo_01",
-  "phase": "DISPATCHED",
+  "phase": "EN_ROUTE",
   "previousPhase": "CREATED",
   "vehicleId": "veh_GIMCHEON_01",
   "targetWaypointNumber": 59,
