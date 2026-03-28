@@ -177,6 +177,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        assertSeedDefaultPasswordConfigured();
         LocalDate today = LocalDate.now();
         User adminUser = ensureUser(ADMIN_USERNAME, ADMIN_NAME, Role.ADMIN, null, ApprovalStatus.APPROVED);
         Map<String, DoctorProfile> doctorsByUsername = seedDoctors(adminUser);
@@ -194,6 +195,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         log.info("Prod-like dummy data synced. adminUsername={}, doctorCount={}, vehicleCodes={}, patientCount={}, guardianCount={}, futureSlotEnd={}",
                 adminUser.getUsername(), doctorsByUsername.size(), vehiclesByCode.keySet(), patientsByKey.size(),
                 guardiansByPatientKey.size(), FUTURE_SLOT_END_DATE);
+    }
+
+    private void assertSeedDefaultPasswordConfigured() {
+        if (defaultPassword == null || defaultPassword.isBlank()) {
+            throw new IllegalStateException("APP_SEED_DEFAULT_PASSWORD must be set when app.seed.enabled=true");
+        }
     }
 
     private Map<String, DoctorProfile> seedDoctors(User adminUser) {
