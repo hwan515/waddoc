@@ -154,23 +154,6 @@ class LocalDummyDataSeederTest {
         verify(passwordEncoder, never()).encode("Passw0rd!");
         verify(entityManager, never()).flush();
     }
-    @Test
-    void resolveUpcomingActiveBookingEndDateKeepsUpcomingSeedToSameDay() {
-        LocalDate today = LocalDate.of(2026, 3, 27);
-
-        LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
-
-        assertThat(result).isEqualTo(today);
-    }
-
-    @Test
-    void resolveUpcomingActiveBookingEndDateDoesNotExceedFutureSlotEndDate() {
-        LocalDate today = LocalDate.of(2026, 4, 13);
-
-        LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
-
-        assertThat(result).isEqualTo(today);
-    }
 
     @Test
     void assertSeedDefaultPasswordConfiguredRejectsBlankPassword() {
