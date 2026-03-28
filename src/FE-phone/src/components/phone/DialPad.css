@@ -1,29 +1,31 @@
 .dialpad {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 4px 0 0;
 }
 
 .dialpad-row {
   display: flex;
-  gap: 8px;
+  gap: clamp(8px, 2.8vw, 12px);
   justify-content: center;
 }
 
 .dialpad-btn {
-  width: 64px;
-  height: 48px;
-  border: none;
-  border-radius: 8px;
-  background: #e8e8e8;
+  width: var(--phone-key-width);
+  height: var(--phone-key-height);
+  border: 1px solid #cfcfcf;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfbfb 0%, #e3e3e3 100%);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   transition: background 0.1s, transform 0.08s;
-  box-shadow: 0 2px 0 #bbb;
+  box-shadow:
+    0 2px 0 #b1b1b1,
+    0 5px 10px rgba(0, 0, 0, 0.16);
   user-select: none;
 }
 
@@ -39,7 +41,7 @@
 }
 
 .dialpad-btn-main {
-  font-size: 20px;
+  font-size: clamp(22px, 6vw, 26px);
   font-weight: 700;
   color: #222;
   line-height: 1;
@@ -48,6 +50,6 @@
 .dialpad-btn-sub {
   font-size: 8px;
   color: #666;
-  letter-spacing: 1px;
-  margin-top: 1px;
+  letter-spacing: 0.12em;
+  margin-top: 3px;
 }

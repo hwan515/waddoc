@@ -1,4 +1,5 @@
 import './DialBufferDisplay.css';
+import { formatPhoneNumber } from '../../utils/phoneNumber';
 
 interface Props {
   buffer: string;
@@ -8,12 +9,9 @@ interface Props {
 export default function DialBufferDisplay({ buffer, visible }: Props) {
   if (!visible || !buffer) return null;
 
-  const formattedBuffer =
-    buffer.length > 3 ? `${buffer.slice(0, 3)} ${buffer.slice(3)}` : buffer;
-
   return (
     <div className="dial-buffer">
-      <span className="dial-buffer-text">{formattedBuffer}</span>
+      <span className="dial-buffer-text">{formatPhoneNumber(buffer)}</span>
     </div>
   );
 }

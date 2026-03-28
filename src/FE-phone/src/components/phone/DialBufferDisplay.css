@@ -1,13 +1,14 @@
 .dial-buffer {
   text-align: center;
-  padding: 4px 12px;
+  padding: 6px 12px;
   background: #2d2d2d;
   border-bottom: 1px solid #444;
 }
 
 .dial-buffer-text {
-  font-family: 'Courier New', monospace;
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: #8bc34a;
-  letter-spacing: 3px;
+  letter-spacing: 0.04em;
 }

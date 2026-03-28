@@ -5,6 +5,7 @@ import type {
   AvailableSlot,
   BookingResult,
 } from '../types/intake';
+import { appendPhoneDigit } from '../utils/phoneNumber';
 
 interface IntakeState {
   // 세션
@@ -86,7 +87,7 @@ export const useIntakeStore = create<IntakeState>((set) => ({
     })),
 
   appendDialBuffer: (digit) =>
-    set((state) => ({ dialBuffer: state.dialBuffer + digit })),
+    set((state) => ({ dialBuffer: appendPhoneDigit(state.dialBuffer, digit) })),
   clearDialBuffer: () => set({ dialBuffer: '' }),
 
   setAvailableSlots: (slots) => set({ availableSlots: slots }),
