@@ -8,6 +8,10 @@ import {
     extractVitalsApiErrorMessage,
     upsertMissionVitals,
 } from '../../../utils/vitalsApi';
+import {
+    MEASUREMENT_NEXT_STEP_DELAY_MS,
+    MEASUREMENT_REVEAL_DELAY_MS,
+} from './measurementTiming';
 
 const EcgMeasurementCard = ({ onRetry }) => {
     const navigate = useNavigate();
@@ -38,7 +42,7 @@ const EcgMeasurementCard = ({ onRetry }) => {
                 }
 
                 setSaveStatus('saved');
-                const remainingDelay = Math.max(0, 5000 - (Date.now() - revealedAt));
+                const remainingDelay = Math.max(0, MEASUREMENT_NEXT_STEP_DELAY_MS - (Date.now() - revealedAt));
                 navigateTimeoutId = window.setTimeout(() => {
                     if (!isCancelled) {
                         navigate('/robot/conference');
@@ -56,7 +60,7 @@ const EcgMeasurementCard = ({ onRetry }) => {
                     '심전도 저장에 실패했습니다. 잠시 후 다시 시도해주세요.'
                 ));
             }
-        }, 10000);
+        }, MEASUREMENT_REVEAL_DELAY_MS);
 
         return () => {
             isCancelled = true;
@@ -70,7 +74,7 @@ const EcgMeasurementCard = ({ onRetry }) => {
         : saveStatus === 'saving'
             ? '심전도 파형이 측정되었습니다.\n저장 중입니다.'
             : saveStatus === 'saved'
-                ? '심전도 파형이 저장되었습니다.\n5초 뒤 비대면진료실로 이동합니다.'
+                ? '심전도 파형이 저장되었습니다.\n3초 뒤 비대면진료실로 이동합니다.'
                 : '심전도 저장에 실패했습니다.\n다시 시도해주세요.';
 
     return (
