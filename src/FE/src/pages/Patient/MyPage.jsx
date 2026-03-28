@@ -1,12 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { Activity, User, LogOut, Phone, MapPin, HeartPulse, Stethoscope } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
+import { logoutSession } from '../../utils/logout';
 
 const MyPage = () => {
     const navigate = useNavigate();
-    const logout = useAuthStore((state) => state.logout);
 
     const [user, setUser] = useState({ 
         name: '로딩중', phone: '-', address: '-', birthDate: '-', createdAt: '-', referenceImagePath: null
@@ -64,8 +63,8 @@ const MyPage = () => {
         fetchMyPageData();
     }, []);
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logoutSession();
         navigate('/');
     };
 
