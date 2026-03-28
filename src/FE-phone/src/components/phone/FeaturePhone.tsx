@@ -20,7 +20,6 @@ export default function FeaturePhone() {
     clearDialBuffer,
   } = useIntakeFlow();
 
-  const isActive = phase !== 'IDLE' && phase !== 'SESSION_END';
   const dialDisabled = isLoading;
 
   // 전송 버튼: 번호 입력 모드에서 표시
@@ -41,7 +40,7 @@ export default function FeaturePhone() {
 
         {/* 화면 영역: 상태바 + 대화 */}
         <div className="phone-screen">
-          <StatusBar phase={phase} isActive={isActive} />
+          <StatusBar phase={phase} />
           <DialBufferDisplay buffer={dialBuffer} visible={showDialBuffer} />
           <ChatDisplay />
         </div>

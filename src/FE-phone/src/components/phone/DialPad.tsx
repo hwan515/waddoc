@@ -14,7 +14,7 @@ const KEYS = [
 ];
 
 const SUB_LABELS: Record<string, string> = {
-  '1': '',
+  '1': '.,?!',
   '2': 'ABC',
   '3': 'DEF',
   '4': 'GHI',
@@ -39,19 +39,26 @@ export default function DialPad({ onDigit, disabled }: DialPadProps) {
     <div className="dialpad">
       {KEYS.map((row, ri) => (
         <div className="dialpad-row" key={ri}>
-          {row.map((key) => (
-            <button
-              key={key}
-              className="dialpad-btn"
-              onClick={() => handlePress(key)}
-              disabled={disabled}
-            >
-              <span className="dialpad-btn-main">{key}</span>
-              {SUB_LABELS[key] && (
-                <span className="dialpad-btn-sub">{SUB_LABELS[key]}</span>
-              )}
-            </button>
-          ))}
+          {row.map((key) => {
+            const subLabel = SUB_LABELS[key];
+
+            return (
+              <button
+                key={key}
+                className="dialpad-btn"
+                onClick={() => handlePress(key)}
+                disabled={disabled}
+              >
+                <span className="dialpad-btn-main">{key}</span>
+                <span
+                  className={`dialpad-btn-sub${subLabel ? '' : ' dialpad-btn-sub--empty'}`}
+                  aria-hidden={!subLabel}
+                >
+                  {subLabel || '\u00A0'}
+                </span>
+              </button>
+            );
+          })}
         </div>
       ))}
     </div>

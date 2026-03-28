@@ -16,14 +16,13 @@
   align-items: center;
   justify-content: center;
   color: #5a7a52;
-  font-size: 14px;
   text-align: center;
 }
 
-.chat-empty-sub {
-  font-size: 11px;
-  margin-top: 4px;
-  color: #7a9a72;
+.chat-empty-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .chat-row {

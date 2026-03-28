@@ -52,4 +52,10 @@
   color: #666;
   letter-spacing: 0.12em;
   margin-top: 3px;
+  min-height: 10px;
+  line-height: 1;
+}
+
+.dialpad-btn-sub--empty {
+  visibility: hidden;
 }
