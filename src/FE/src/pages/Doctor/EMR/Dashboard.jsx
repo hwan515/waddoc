@@ -40,6 +40,7 @@ const formatDateKey = (date) => {
 const CASE_SYNC_INTERVAL_MS = 10000;
 const STARTABLE_CASE_STATUSES = new Set(['CREATED', 'PREPARING']);
 const TERMINAL_CASE_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+const REJOINABLE_SESSION_STATUSES = new Set(['CREATED', 'READY', 'IN_PROGRESS']);
 
 const CASE_STATUS_LABELS = {
     CREATED: '예약',
@@ -79,6 +80,8 @@ const mapCaseToReservation = (caseData, existingReservation = {}) => ({
     caseStatus: caseData.status || null,
     type: '비대면',
     missionPhase: caseData.missionPhase || null,
+    sessionId: caseData.sessionId || null,
+    sessionStatus: caseData.sessionStatus || null,
     isNotificationOnly: false,
 });
 
@@ -95,6 +98,8 @@ const mapNotificationToReservation = (notif) => ({
     caseStatus: notif.caseStatus || 'CREATED',
     type: '비대면',
     missionPhase: notif.missionPhase || null,
+    sessionId: null,
+    sessionStatus: null,
     isNotificationOnly: true,
 });
 
@@ -146,8 +151,21 @@ const isConsultationStartTarget = (reservation) => {
     return reservation.type === '비대면' && STARTABLE_CASE_STATUSES.has(reservation.caseStatus);
 };
 
+const hasRejoinableConsultationSession = (reservation) => (
+    reservation.type === '비대면'
+    && Boolean(reservation.sessionId)
+    && REJOINABLE_SESSION_STATUSES.has(reservation.sessionStatus)
+);
+
+const shouldShowConsultationAction = (reservation) => (
+    hasRejoinableConsultationSession(reservation) || isConsultationStartTarget(reservation)
+);
+
 // 비대면 예약이면서 예약일이 오늘이고 미션이 도착한 상태일 때만 진료 시작을 허용한다.
 const canStartConsultation = (reservation, now) => {
+    if (hasRejoinableConsultationSession(reservation)) {
+        return true;
+    }
     if (!isConsultationStartTarget(reservation)) {
         return false;
     }
@@ -159,6 +177,9 @@ const canStartConsultation = (reservation, now) => {
 
 // 버튼이 비활성화된 이유를 바로 이해할 수 있도록 안내 문구를 분기한다.
 const getConsultationStartButtonTitle = (reservation, now) => {
+    if (hasRejoinableConsultationSession(reservation)) {
+        return '진행 중인 진료실로 다시 들어갑니다.';
+    }
     if (!reservation.date || reservation.date !== formatDateKey(now)) {
         return '진료 시작은 예약 당일에만 가능합니다.';
     }
@@ -485,7 +506,7 @@ const LegacyEMRDashboard = () => {
                             </div>
                         ) : (
                             filteredReservations.map((res, idx) => {
-                                const consultationStartTarget = isConsultationStartTarget(res);
+                                const consultationActionVisible = shouldShowConsultationAction(res);
                                 const consultationStartEnabled = canStartConsultation(res, currentTime);
                                 const consultationStartButtonTitle = getConsultationStartButtonTitle(res, currentTime);
 
@@ -506,7 +527,7 @@ const LegacyEMRDashboard = () => {
                                             {res.type}
                                         </div>
                                         <div className="w-28 shrink-0 py-1 text-center flex justify-center items-center">
-                                            {consultationStartTarget ? (
+                                            {consultationActionVisible ? (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -522,7 +543,7 @@ const LegacyEMRDashboard = () => {
                                                         : 'bg-slate-200 text-slate-500 border-slate-400 cursor-not-allowed'
                                                         }`}
                                                 >
-                                                    진료 시작 🎬
+                                                    {hasRejoinableConsultationSession(res) ? '진료실 복귀 ↩' : '진료 시작 🎬'}
                                                 </button>
                                             ) : (
                                                 <span className={getReservationStatusClassName(res)}>{res.status}</span>

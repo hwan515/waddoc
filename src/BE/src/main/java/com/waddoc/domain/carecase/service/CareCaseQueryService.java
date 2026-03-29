@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -89,11 +90,18 @@ public class CareCaseQueryService {
                         mission -> mission.getCareCase().getId(),
                         Mission::getPhase
                 ));
+        Map<Long, ConsultationSession> consultationSessionByCaseId =
+                consultationSessionRepository.findAllByCareCaseIn(careCases).stream()
+                        .collect(Collectors.toMap(
+                                session -> session.getCareCase().getId(),
+                                Function.identity()
+                        ));
 
         List<DoctorCaseSummaryResponse> responses = careCases.stream()
                 .map(careCase -> DoctorCaseSummaryResponse.from(
                         careCase,
-                        missionPhaseByCaseId.get(careCase.getId())
+                        missionPhaseByCaseId.get(careCase.getId()),
+                        consultationSessionByCaseId.get(careCase.getId())
                 ))
                 .toList();
 
