@@ -6,6 +6,7 @@ import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import useConsultationSummarySave from '../../hooks/useConsultationSummarySave';
 import apiClient from '../../utils/api';
+import { sanitizeSelectionReason } from '../../utils/intakeSelectionReason';
 
 const EMPTY_VITALS = {
     caseId: null,
@@ -137,7 +138,10 @@ const VideoConference = () => {
                     patientId: pt.patientId,
                     age: age,
                     gender: pt.gender || 'M',
-                    symptoms: intake.selectionReason || '문진 내용이 없습니다.',
+                    symptoms: sanitizeSelectionReason(
+                        intake.selectionReason,
+                        '문진 내용이 없습니다.'
+                    ),
                     recentVisits: pt.lastConsultationDate || '최근 진료 기록 없음',
                     department: intake.departmentName || '내과',
                     bloodType: pt.bloodType ? pt.bloodType.replace('_PLUS', '+').replace('_MINUS', '-') : '확인 불가',
