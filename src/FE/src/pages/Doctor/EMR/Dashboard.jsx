@@ -4,6 +4,7 @@ import { Bell, X } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
 import { useSSE } from '../../../hooks/useSSE';
 import apiClient from '../../../utils/api';
+import { sanitizeSelectionReason } from '../../../utils/intakeSelectionReason';
 import { logoutSession } from '../../../utils/logout';
 import { parsePrescriptionNote } from '../../../utils/prescriptionNote';
 
@@ -300,7 +301,10 @@ const LegacyEMRDashboard = () => {
                     phone: pInfo.phone || '연락처 없음',
                     age: age,
                     gender: mapGenderLabel(pInfo.gender),
-                    note: detail.intakeSummary?.selectionReason || '자세한 특이사항 없음'
+                    note: sanitizeSelectionReason(
+                        detail.intakeSummary?.selectionReason,
+                        '자세한 특이사항 없음'
+                    )
                 }
             }));
 
@@ -337,7 +341,10 @@ const LegacyEMRDashboard = () => {
                         phone: pInfo.phone || '연락처 없음',
                         age: age,
                         gender: mapGenderLabel(pInfo.gender),
-                        note: detail.intakeSummary?.selectionReason || '자세한 특이사항 없음'
+                        note: sanitizeSelectionReason(
+                            detail.intakeSummary?.selectionReason,
+                            '자세한 특이사항 없음'
+                        )
                     }
                 }));
 
