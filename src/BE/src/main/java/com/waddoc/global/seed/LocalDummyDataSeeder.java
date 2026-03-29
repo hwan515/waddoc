@@ -653,6 +653,186 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return candidate.isAfter(FUTURE_SLOT_END_DATE) ? FUTURE_SLOT_END_DATE : candidate;
     }
 
+    private List<HistoricalBookingPlan> buildHistoricalBookingPlans(List<PatientSeed> patientSeeds) {
+        PatientSeed kwonMiSoon = getPatientSeed(patientSeeds, "gim_wp_059");
+        PatientSeed jeongJiHwan = getPatientSeed(patientSeeds, "gim_wp_092");
+        PatientSeed kimJuDeok = getPatientSeed(patientSeeds, "gim_wp_142");
+
+        Map<String, Integer> remainingBookingsByDoctor = new LinkedHashMap<>();
+        remainingBookingsByDoctor.put("seed_prod_doc_im_01", 9);
+        remainingBookingsByDoctor.put("seed_prod_doc_im_02", 9);
+        remainingBookingsByDoctor.put("seed_prod_doc_ortho_01", 8);
+        remainingBookingsByDoctor.put("seed_prod_doc_derm_01", 8);
+        remainingBookingsByDoctor.put("seed_prod_doc_neuro_01", 8);
+        remainingBookingsByDoctor.put("seed_prod_doc_eye_01", 8);
+
+        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_im_01", 3);
+        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_neuro_01", 3);
+        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_ortho_01", 3);
+
+        List<PatientSeed> otherPatients = patientSeeds.stream()
+                .filter(seed -> !List.of("gim_wp_059", "gim_wp_092", "gim_wp_142").contains(seed.key()))
+                .limit(TARGET_HISTORICAL_MISSION_COUNT - 9L)
+                .toList();
+        List<String> otherDoctorAssignments = buildDoctorAssignmentOrder(remainingBookingsByDoctor);
+        if (otherPatients.size() != otherDoctorAssignments.size()) {
+            throw new IllegalStateException("Historical seed booking plan is imbalanced.");
+        }
+
+        int firstOtherChunk = otherPatients.size() / 2;
+        List<HistoricalBookingPlan> bookingPlans = new java.util.ArrayList<>(TARGET_HISTORICAL_MISSION_COUNT);
+        appendMainPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 1);
+        appendOtherPatientVisits(bookingPlans, otherPatients, otherDoctorAssignments, 0, firstOtherChunk);
+        appendMainPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 2);
+        appendOtherPatientVisits(bookingPlans, otherPatients, otherDoctorAssignments, firstOtherChunk, otherPatients.size());
+        appendMainPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 3);
+
+        if (bookingPlans.size() != TARGET_HISTORICAL_MISSION_COUNT) {
+            throw new IllegalStateException("Historical seed booking count mismatch: " + bookingPlans.size());
+        }
+        return List.copyOf(bookingPlans);
+    }
+
+    private void appendMainPatientVisits(List<HistoricalBookingPlan> bookingPlans, PatientSeed kwonMiSoon,
+            PatientSeed jeongJiHwan, PatientSeed kimJuDeok, int visitSequence) {
+        bookingPlans.add(new HistoricalBookingPlan(kwonMiSoon, "seed_prod_doc_im_01", visitSequence));
+        bookingPlans.add(new HistoricalBookingPlan(jeongJiHwan, "seed_prod_doc_neuro_01", visitSequence));
+        bookingPlans.add(new HistoricalBookingPlan(kimJuDeok, "seed_prod_doc_ortho_01", visitSequence));
+    }
+
+    private void appendOtherPatientVisits(List<HistoricalBookingPlan> bookingPlans, List<PatientSeed> otherPatients,
+            List<String> otherDoctorAssignments, int startInclusive, int endExclusive) {
+        for (int index = startInclusive; index < endExclusive; index++) {
+            bookingPlans.add(new HistoricalBookingPlan(otherPatients.get(index), otherDoctorAssignments.get(index), 1));
+        }
+    }
+
+    private void consumeDoctorQuota(Map<String, Integer> remainingBookingsByDoctor, String doctorUsername, int amount) {
+        Integer remaining = remainingBookingsByDoctor.get(doctorUsername);
+        if (remaining == null || remaining < amount) {
+            throw new IllegalStateException("Doctor booking quota exhausted: " + doctorUsername);
+        }
+        remainingBookingsByDoctor.put(doctorUsername, remaining - amount);
+    }
+
+    private List<String> buildDoctorAssignmentOrder(Map<String, Integer> remainingBookingsByDoctor) {
+        List<String> doctorAssignments = new java.util.ArrayList<>();
+        boolean assigned;
+        do {
+            assigned = false;
+            for (Map.Entry<String, Integer> entry : remainingBookingsByDoctor.entrySet()) {
+                if (entry.getValue() <= 0) {
+                    continue;
+                }
+                doctorAssignments.add(entry.getKey());
+                entry.setValue(entry.getValue() - 1);
+                assigned = true;
+            }
+        } while (assigned);
+        return List.copyOf(doctorAssignments);
+    }
+
+    private List<HistoricalAppointmentSlot> buildHistoricalAppointmentSlots(LocalDate historyStart, LocalDate historyEnd,
+            int bookingCount) {
+        int bookingsPerDay = 3;
+        int requiredDayCount = (bookingCount + bookingsPerDay - 1) / bookingsPerDay;
+        int availableDayCount = (int) historyStart.datesUntil(historyEnd.plusDays(1)).count();
+        if (requiredDayCount > availableDayCount) {
+            throw new IllegalStateException("Not enough historical days to create non-overlapping seed bookings.");
+        }
+
+        LocalDate firstAppointmentDate = historyEnd.minusDays(requiredDayCount - 1L);
+        List<HistoricalAppointmentSlot> appointmentSlots = new java.util.ArrayList<>(bookingCount);
+        int[] slotOffsets = {0, 4, 9};
+
+        for (int dayIndex = 0; dayIndex < requiredDayCount && appointmentSlots.size() < bookingCount; dayIndex++) {
+            LocalDate appointmentDate = firstAppointmentDate.plusDays(dayIndex);
+            int baseOffset = dayIndex % 6;
+            for (int slotOffset : slotOffsets) {
+                if (appointmentSlots.size() >= bookingCount) {
+                    break;
+                }
+                LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(baseOffset + slotOffset);
+                appointmentSlots.add(new HistoricalAppointmentSlot(appointmentDate, startTime));
+            }
+        }
+
+        return List.copyOf(appointmentSlots);
+    }
+
+    private String buildHistoricalIntakePublicId(PatientSeed seed, int visitSequence) {
+        return "ints_prd_%s_%d".formatted(buildWaypointSuffix(seed.waypointNumber()), visitSequence);
+    }
+
+    private String buildSelectionReason(DoctorProfile doctor, PatientSeed seed, int visitSequence) {
+        String symptom = switch (doctor.getDepartment()) {
+            case "INTERNAL_MEDICINE" -> List.of(
+                    "혈압 변동과 어지럼이 반복되어",
+                    "기침과 미열이 며칠째 이어져",
+                    "속쓰림과 복부 불편감이 있어"
+            ).get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
+            case "ORTHOPEDICS" -> List.of(
+                    "무릎 통증과 보행 불편이 있어",
+                    "허리 통증이 심해져",
+                    "어깨 결림과 팔 저림이 있어"
+            ).get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
+            case "DERMATOLOGY" -> List.of(
+                    "팔 안쪽 가려움과 발진이 계속되어",
+                    "건조증과 각질이 심해져",
+                    "등 부위 붉은 반점이 넓어져"
+            ).get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
+            case "NEUROLOGY" -> List.of(
+                    "어지럼과 두통이 반복되어",
+                    "손 저림과 감각 저하가 있어",
+                    "수면 중 떨림과 두근거림이 있어"
+            ).get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
+            case "OPHTHALMOLOGY" -> List.of(
+                    "눈 충혈과 시야 흐림이 있어",
+                    "눈꺼풀 이물감과 눈물이 심해",
+                    "근거리 시야가 갑자기 흐려져"
+            ).get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
+            default -> "증상이 반복되어";
+        };
+        String allergyNote = switch (doctor.getDepartment()) {
+            case "INTERNAL_MEDICINE" -> List.of(
+                    "페니실린 복용 시 발진 이력이 있어 약 처방 전 확인 필요",
+                    "갑각류 섭취 후 두드러기 반응이 있어 식이 안내 필요",
+                    "조영제 알러지 이력이 있어 검사 전 고지 요청"
+            ).get(Math.floorMod(seed.waypointNumber() * 2 + visitSequence, 3));
+            case "ORTHOPEDICS" -> List.of(
+                    "소염진통제 복용 시 속쓰림이 있어 위장약 동반 복용 필요",
+                    "파스 접착제에 피부 발적이 있어 대체 처치 선호",
+                    "라텍스 장갑 접촉 시 가려움 반응이 있어 주의 필요"
+            ).get(Math.floorMod(seed.waypointNumber() * 2 + visitSequence, 3));
+            case "DERMATOLOGY" -> List.of(
+                    "향이 강한 보습제 사용 시 접촉성 발진 이력이 있음",
+                    "꽃가루 알러지로 환절기 피부 증상이 쉽게 악화됨",
+                    "니켈 접촉 시 손등에 가려움이 올라와 금속 자극 주의"
+            ).get(Math.floorMod(seed.waypointNumber() * 2 + visitSequence, 3));
+            case "NEUROLOGY" -> List.of(
+                    "수면유도제 복용 후 과도한 졸림이 있어 저용량 선호",
+                    "카페인 과민 반응이 있어 약 복용 시간 안내 필요",
+                    "진통제 복용 후 메스꺼움 이력이 있어 식후 복용 희망"
+            ).get(Math.floorMod(seed.waypointNumber() * 2 + visitSequence, 3));
+            case "OPHTHALMOLOGY" -> List.of(
+                    "인공눈물 보존제에 따가움이 있어 무보존제 제형 선호",
+                    "항생제 안약 점안 후 눈 주위 발적 이력이 있어 성분 확인 필요",
+                    "렌즈 세정액 사용 시 충혈이 심해져 대체 용품 사용 중"
+            ).get(Math.floorMod(seed.waypointNumber() * 2 + visitSequence, 3));
+            default -> "복용 약 알러지 여부를 다시 확인할 필요가 있음";
+        };
+        String visitType = visitSequence > 1 ? "재진" : "초진";
+        return "(더미 예약) %s 증상으로 %s %s 예약. 특이사항(알러지): %s"
+                .formatted(symptom, doctor.getDepartmentName(), visitType, allergyNote);
+    }
+
+    private PatientSeed getPatientSeed(List<PatientSeed> patientSeeds, String patientKey) {
+        return patientSeeds.stream()
+                .filter(seed -> Objects.equals(seed.key(), patientKey))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Seed patient definition not found: " + patientKey));
+    }
+
     private java.util.Set<String> approvedGuardianPatientKeys() {
         return java.util.Set.of("gim_wp_059", "gim_wp_092", "gim_wp_142");
     }
@@ -1210,9 +1390,45 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         }
     }
 
-    private IntakeSession ensureIntakeSession(String intakePublicId, Patient patient, String callerNumber, String department,
-            String departmentName, String ignoredLegacySelectionReason, String selectionReason, List<String> offeredSlotIds,
+    private IntakeSession ensureIntakeSession(Patient patient, String callerNumber, IntakeChannel channel,
+            String department, String departmentName, String selectionReason, List<String> offeredSlotIds,
             CompletionReason completionReason) {
+        IntakeSession intakeSession = intakeSessionRepository
+                .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, channel)
+                .orElseGet(() -> intakeSessionRepository.save(
+                        IntakeSession.builder()
+                                .callerNumber(callerNumber)
+                                .channel(channel)
+                                .build()));
+
+        if (!Objects.equals(intakeSession.getCallerNumber(), callerNumber)) {
+            entityManager.createQuery("""
+                    update IntakeSession i
+                       set i.callerNumber = :callerNumber
+                     where i.id = :id
+                    """)
+                    .setParameter("callerNumber", callerNumber)
+                    .setParameter("id", intakeSession.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(intakeSession);
+        }
+
+        if (intakeSession.getPatient() == null || !Objects.equals(intakeSession.getPatient().getId(), patient.getId())) {
+            intakeSession.bindPatient(patient);
+        }
+
+        intakeSession.recordSelection(department, departmentName, ConfidenceLevel.HIGH, false, selectionReason,
+                offeredSlotIds);
+        if (intakeSession.isActive()) {
+            intakeSession.complete(completionReason);
+        }
+        return intakeSession;
+    }
+
+    private IntakeSession ensureIntakeSession(String intakePublicId, Patient patient, String callerNumber, IntakeChannel channel,
+            String department, String departmentName, String ignoredLegacySelectionReason, String selectionReason,
+            List<String> offeredSlotIds, CompletionReason completionReason) {
         IntakeSession intakeSession = intakeSessionRepository
                 .findByPublicId(intakePublicId)
                 .orElseGet(() -> intakeSessionRepository.save(
@@ -1228,6 +1444,19 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                      where i.id = :id
                     """)
                     .setParameter("publicId", intakePublicId)
+                    .setParameter("id", intakeSession.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(intakeSession);
+        }
+
+        if (intakeSession.getChannel() != channel) {
+            entityManager.createQuery("""
+                    update IntakeSession i
+                       set i.channel = :channel
+                     where i.id = :id
+                    """)
+                    .setParameter("channel", channel)
                     .setParameter("id", intakeSession.getId())
                     .executeUpdate();
             entityManager.flush();
