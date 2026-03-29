@@ -15,8 +15,7 @@ const SystemMonitoring = () => {
         try {
             await apiClient.post('/admin/monitoring/session');
             setEmbeddedSrc(GRAFANA_DASHBOARD_PATH);
-        } catch (error) {
-            console.error('Grafana bootstrap failed:', error);
+        } catch {
             setErrorMessage('모니터링 대시보드에 접근할 수 없습니다. 운영 권한 또는 네트워크 상태를 확인하세요.');
         } finally {
             setIsBootstrapping(false);

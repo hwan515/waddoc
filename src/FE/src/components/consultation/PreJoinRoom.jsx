@@ -37,8 +37,8 @@ const PreJoinRoom = ({
                 if (localVideoRef.current && videoEnabled) {
                     localVideoRef.current.srcObject = stream;
                 }
-            } catch (err) {
-                console.error("미디어 장치 접근 실패:", err);
+            } catch {
+                // Ignore local media bootstrap failures and keep the join screen usable.
             }
         };
 

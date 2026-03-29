@@ -39,8 +39,7 @@ const AuthStep = () => {
                     videoRef.current.srcObject = stream;
                 }
             })
-            .catch((err) => {
-                console.error(err);
+            .catch(() => {
                 setErrorMsg("카메라 접근을 허용해주세요.");
             });
     };
@@ -136,8 +135,7 @@ const AuthStep = () => {
                 ]);
                 setIsModelLoaded(true);
                 startVideo();
-            } catch (err) {
-                console.error("Failed to load models:", err);
+            } catch {
                 setErrorMsg("얼굴 인식 모델을 불러오는데 실패했습니다.");
             }
         };
@@ -242,8 +240,7 @@ const AuthStep = () => {
                 setAuthStatus('idle');
             }, 500);
 
-        } catch (err) {
-            console.error("Face Capture Error:", err);
+        } catch {
             handleAuthFail();
         }
     };
@@ -259,8 +256,7 @@ const AuthStep = () => {
             setCaptureStep('submitting');
             await submitAuth(faceImgData, idCardBase64);
 
-        } catch (err) {
-            console.error("ID Card Capture Error:", err);
+        } catch {
             handleAuthFail();
         }
     };
@@ -270,7 +266,6 @@ const AuthStep = () => {
         try {
             const missionId = localStorage.getItem('current_mission_id');
             const terminalToken = localStorage.getItem('robot_mission_terminal_token');
-            console.log("🚀 [인증 시작] 대상 미션 ID:", missionId);
 
             if (!missionId) {
                 handleAuthFail('선택된 미션이 없습니다. 진료 시작 화면으로 돌아가 다시 진행해주세요.');
@@ -300,7 +295,6 @@ const AuthStep = () => {
                 navigate('/robot/measure-intro');
             }, 2000);
         } catch (err) {
-            console.error("Auth Error:", err);
             handleAuthFail(extractApiErrorMessage(err, '본인 인증에 실패했습니다. 다시 시도해주세요.'));
         }
     };

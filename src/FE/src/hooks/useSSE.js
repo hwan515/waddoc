@@ -33,15 +33,10 @@ export const useSSE = () => {
                     onopen(res) {
                         if (res.ok && res.status === 200) {
                             setIsConnected(true);
-                            console.log("SSE Connected");
-                        } else if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-                            // 클라이언트 에러(401, 403) 시 재시도 중단
-                            console.error("SSE Auth Error:", res.status);
                         }
                     },
                     
                     onmessage(event) {
-                        console.log("🔥 [SSE Raw Message]", event.event, event.data);
                         if (event.event === 'connected') {
                             setIsConnected(true);
                         } else if (event.event === 'ping') {
@@ -61,25 +56,23 @@ export const useSSE = () => {
                                         return [payload, ...prev];
                                     });
                                 }
-                            } catch (e) {
-                                console.error("Failed to parse SSE notification:", e);
+                            } catch {
+                                // Ignore malformed SSE payloads and keep listening for the next event.
                             }
                         }
                     },
 
                     onclose() {
                         setIsConnected(false);
-                        console.log("SSE Connection closed by server, retrying...");
                     },
 
-                    onerror(err) {
+                    onerror() {
                         setIsConnected(false);
-                        console.error("SSE Error:", err);
                         // 에러 시 자동으로 재연결 시도 (기본 동작)
                     }
                 });
-            } catch (error) {
-                console.error("SSE Setup Error:", error);
+            } catch {
+                // Ignore bootstrap failures and let the next mount attempt reconnect.
             }
         };
 

@@ -309,8 +309,6 @@ export const useRobotSSE = () => {
                     onopen(res) {
                         if (res.ok && res.status === 200) {
                             setIsConnected(true);
-                        } else if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-                            console.error('Robot SSE auth error:', res.status);
                         }
                     },
 
@@ -389,13 +387,12 @@ export const useRobotSSE = () => {
                         setIsConnected(false);
                     },
 
-                    onerror(err) {
+                    onerror() {
                         setIsConnected(false);
-                        console.error('Robot SSE error:', err);
                     },
                 });
-            } catch (error) {
-                console.error('Robot SSE setup error:', error);
+            } catch {
+                // Ignore bootstrap failures and let the built-in reconnect flow retry.
             }
         };
 
