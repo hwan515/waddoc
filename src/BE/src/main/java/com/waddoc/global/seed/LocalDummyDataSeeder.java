@@ -855,7 +855,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             case "NEUROLOGY" -> List.of(
                     "어지럼과 두통이 반복되어",
                     "손 저림과 감각 저하가 있어",
-                    "수면 중 떨림과 두근거림이 있어"
+                    "수면 중에 떨림과 두근거림이 있어"
             ).get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
             case "OPHTHALMOLOGY" -> List.of(
                     "눈 충혈과 시야 흐림이 있어",
