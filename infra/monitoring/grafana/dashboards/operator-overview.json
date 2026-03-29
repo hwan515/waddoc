@@ -67,7 +67,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_server_requests_seconds_count[5m]))",
+          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m])) or vector(0)",
           "legendFormat": "req/s",
           "refId": "A"
         }
@@ -125,7 +125,7 @@
       },
       "targets": [
         {
-          "expr": "100 * ((sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[5m])) or vector(0)) / clamp_min((sum(rate(http_server_requests_seconds_count[5m])) or vector(0)), 0.000001))",
+          "expr": "100 * ((sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator.*\"}[5m])) or vector(0)) / clamp_min((sum(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m])) or vector(0)), 0.000001))",
           "legendFormat": "5xx %",
           "refId": "A"
         }
@@ -179,7 +179,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*\"}[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
