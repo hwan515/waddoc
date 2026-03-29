@@ -23,6 +23,7 @@ public class DoctorCaseSummaryResponse {
     private String departmentName;
     private LocalDate appointmentDate;
     private LocalTime startTime;
+    private String bookingChannel;
     private MissionPhase missionPhase;
     private String sessionId;
     private ConsultationSessionStatus sessionStatus;
@@ -41,6 +42,7 @@ public class DoctorCaseSummaryResponse {
                 .departmentName(careCase.getDoctor().getDepartmentName())
                 .appointmentDate(careCase.getBooking().getAppointmentDate())
                 .startTime(careCase.getBooking().getStartTime())
+                .bookingChannel(careCase.getBooking().getChannel())
                 .missionPhase(missionPhase)
                 .sessionId(consultationSession != null ? consultationSession.getPublicId() : null)
                 .sessionStatus(consultationSession != null ? consultationSession.getStatus() : null)

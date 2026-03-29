@@ -113,13 +113,11 @@ const Home = () => {
                         return;
                     }
                     pollOnce().catch((error) => {
-                        console.error('Robot current mission poll failed:', error);
                         setScreenState('error');
                         setErrorMsg(extractApiErrorMessage(error, '차량 상태 조회에 실패했습니다.'));
                     });
                 }, CURRENT_MISSION_POLL_INTERVAL_MS);
             } catch (error) {
-                console.error('Robot terminal bootstrap failed:', error);
                 setScreenState('error');
                 setErrorMsg(extractApiErrorMessage(error, '차량 단말 인증에 실패했습니다.'));
             }
@@ -176,7 +174,6 @@ const Home = () => {
                 navigate('/robot/auth', { replace: true });
             }, GREETING_REDIRECT_DELAY_MS);
         } catch (error) {
-            console.error('Current mission claim failed:', error);
             setErrorMsg(extractApiErrorMessage(error, '현재 차량 진료를 시작할 수 없습니다.'));
             setIsStarting(false);
         }

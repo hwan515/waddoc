@@ -66,7 +66,6 @@ const Conference = () => {
 
         const terminalToken = localStorage.getItem('robot_mission_terminal_token');
         const missionId = localStorage.getItem('current_mission_id');
-        console.log("📡 [대기방] 접속 대기 중인 미션 ID:", missionId);
 
         const pollForToken = async () => {
             if (!isPolling) return;

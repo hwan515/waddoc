@@ -54,7 +54,6 @@ const BloodMeasurementCard = ({ onRetry }) => {
                     return;
                 }
 
-                console.error('Blood vital save failed:', error);
                 setSaveStatus('error');
                 setErrorMsg(extractVitalsApiErrorMessage(
                     error,

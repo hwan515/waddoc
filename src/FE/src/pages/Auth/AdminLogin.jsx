@@ -54,8 +54,8 @@ const AdminLogin = () => {
                             },
                         }
                     );
-                } catch (logoutError) {
-                    console.error('Admin-only logout cleanup failed:', logoutError);
+                } catch {
+                    // Ignore logout cleanup failures before redirecting the user.
                 }
                 alert('운영자 페이지는 관리자 계정으로만 로그인할 수 있습니다.');
                 return;
@@ -63,8 +63,7 @@ const AdminLogin = () => {
 
             useAuthStore.getState().setAuth(accessToken, user);
             navigate('/operator/control', { replace: true });
-        } catch (error) {
-            console.error('Login Failed:', error);
+        } catch {
             alert('로그인에 실패했습니다. 아이디와 비밀번호를 다시 확인해주세요.');
         }
     };

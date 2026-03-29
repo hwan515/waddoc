@@ -117,7 +117,6 @@ const Setup = () => {
 
             setCandidates(nextCandidates);
         } catch (error) {
-            console.error('Robot check-in lookup failed:', error);
             setErrorMsg(extractApiErrorMessage(error, '차량 단말 인증 또는 대상 조회에 실패했습니다.'));
         } finally {
             setIsSubmitting(false);
@@ -131,7 +130,6 @@ const Setup = () => {
             const deviceTerminalToken = localStorage.getItem('robot_device_terminal_token') || await bootstrapDeviceTerminal();
             await claimMission(missionId, deviceTerminalToken);
         } catch (error) {
-            console.error('Mission claim failed:', error);
             setErrorMsg(extractApiErrorMessage(error, '선택한 예약으로 차량 진료를 시작할 수 없습니다.'));
         } finally {
             setIsSubmitting(false);

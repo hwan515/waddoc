@@ -49,8 +49,8 @@ const EMRLogin = () => {
                             },
                         }
                     );
-                } catch (logoutError) {
-                    console.error('Doctor-only logout cleanup failed:', logoutError);
+                } catch {
+                    // Ignore logout cleanup failures before redirecting the user.
                 }
                 alert('EMR 로그인은 의사 계정으로만 사용할 수 있습니다.');
                 return;
@@ -58,8 +58,7 @@ const EMRLogin = () => {
 
             useAuthStore.getState().setAuth(accessToken, user);
             navigate('/emr/dashboard', { replace: true });
-        } catch (error) {
-            console.error('Login Failed:', error);
+        } catch {
             alert('로그인에 실패했습니다. 사번과 비밀번호를 다시 확인해주세요.');
         }
     };

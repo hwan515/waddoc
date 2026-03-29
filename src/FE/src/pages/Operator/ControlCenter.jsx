@@ -479,8 +479,7 @@ const loadDashboardSnapshot = async ({
     try {
         const todayDateKey = getTodayKstDate();
 
-        const fetchSafe = (req) => req.catch(err => {
-            console.error('API Error:', err);
+        const fetchSafe = (req) => req.catch(() => {
             return { data: {} };
         });
 
@@ -616,8 +615,8 @@ const loadDashboardSnapshot = async ({
             };
         });
         setCalendarEvents(mappedEvents);
-    } catch (error) {
-        console.error('Dashboard data fetch error:', error);
+    } catch {
+        // Keep the previous dashboard snapshot when the refresh fails.
     }
 };
 
@@ -705,7 +704,6 @@ const ControlCenter = () => {
                 setCalendarEvents
             });
         } catch (error) {
-            console.error(`Demo mission ${action} error:`, error);
             window.alert(getErrorMessage(error, fallbackMessageByType[action]));
         } finally {
             setPendingDemoAction(null);
@@ -849,8 +847,8 @@ const ControlCenter = () => {
     const handleLogout = async () => {
         try {
             await apiClient.delete('/admin/monitoring/session');
-        } catch (error) {
-            console.error('Monitoring session cleanup failed:', error);
+        } catch {
+            // Ignore monitoring session cleanup failures during logout.
         }
         logout();
         navigate('/operator/login');

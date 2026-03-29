@@ -53,7 +53,6 @@ const EcgMeasurementCard = ({ onRetry }) => {
                     return;
                 }
 
-                console.error('ECG vital save failed:', error);
                 setSaveStatus('error');
                 setErrorMsg(extractVitalsApiErrorMessage(
                     error,
