@@ -546,7 +546,7 @@ const DashboardView = ({
                                             >
                                                 {pendingDemoAction?.missionId === m.id && pendingDemoAction?.action === 'dispatch'
                                                     ? '출동 처리 중...'
-                                                    : '시연 출동'}
+                                                    : '출동'}
                                             </button>
                                         )}
                                         {m.canArrive && (

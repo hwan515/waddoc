@@ -375,7 +375,7 @@ const getMissionPhaseLabel = (phase) => {
 
 const getDemoActionAvailability = (phase) => ({
     canDispatch: DEMO_MODE_ENABLED && phase === 'CREATED',
-    canArrive: DEMO_MODE_ENABLED && ['DISPATCHED', 'EN_ROUTE'].includes(phase),
+    canArrive: false,
 });
 
 const getDashboardMissionStatusLabel = (phase) => (
