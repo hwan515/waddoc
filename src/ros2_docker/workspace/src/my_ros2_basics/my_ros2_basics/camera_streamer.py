@@ -8,7 +8,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import Int32
+from std_msgs.msg import String
 import numpy as np
 import cv2
 
@@ -19,7 +19,7 @@ class CameraStreamer(Node):
         self.declare_parameter('rtsp_url', 'rtsp://127.0.0.1:8554/unity_cam')
         self.declare_parameter('width', 640)
         self.declare_parameter('height', 480)
-        self.declare_parameter('fps', 30)
+        self.declare_parameter('fps', 10)
         
         self.drive_state = 0 
         
@@ -37,7 +37,7 @@ class CameraStreamer(Node):
         self._start_encoder(rtsp_url, fps)
 
         self.sub_state_drive = self.create_subscription(
-            Int32, '/cmd_state/is_drive', self.state_callback, 1
+            String, '/state', self.state_callback, 1
         )
 
         self.sub_front = self.create_subscription(
@@ -45,10 +45,10 @@ class CameraStreamer(Node):
         )
 
         self.sub_inner = self.create_subscription(
-            Image, '/camera/image_raw2', self.inner_image_callback, 10
+            Image, '/camera/image_raw_inner', self.inner_image_callback, 10
         )
 
-        # 30Hz 주기로 FFmpeg에 프레임을 쏘는 독립 타이머 생성
+        # 30Hz 주기로 FFmpeg에 프레임을 쏘는 독립 타이머 생성d
         self.timer = self.create_timer(1.0 / fps, self.stream_timer_callback)
 
     def _start_encoder(self, rtsp_url, fps):
@@ -93,13 +93,15 @@ class CameraStreamer(Node):
             except Exception:
                 pass
 
-    def state_callback(self, msg: Int32):
-        new_state = msg.data
+    def state_callback(self, msg: String):
+        state_text = msg.data.strip()
+        # '주행 중' 또는 '출발' 상태일 때 전방 카메라, 나머지는 내부 카메라
+        new_state = 1 if state_text in ('주행 중', '출발') else 0
         if new_state != self.drive_state:
             if new_state == 1:
-                self.get_logger().info('카메라 전환: [전방 카메라]')
+                self.get_logger().info(f'카메라 전환: [전방 카메라] (state={state_text!r})')
             else:
-                self.get_logger().info('카메라 전환: [내부 카메라]')
+                self.get_logger().info(f'카메라 전환: [내부 카메라] (state={state_text!r})')
             self.drive_state = new_state
 
     def front_image_callback(self, msg: Image):
