@@ -55,6 +55,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                     join fetch d.user du
                     where (:appointmentDate is null or b.appointmentDate = :appointmentDate)
                       and (:status is null or b.status = :status)
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     order by b.appointmentDate desc, b.startTime desc
                     """,
             countQuery = """
@@ -62,6 +63,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
                     from Booking b
                     where (:appointmentDate is null or b.appointmentDate = :appointmentDate)
                       and (:status is null or b.status = :status)
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     """
     )
     Page<Booking> searchAdminBookings(
