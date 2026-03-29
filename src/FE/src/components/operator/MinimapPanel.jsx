@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Gauge, Navigation, Radio } from 'lucide-react';
+import { Activity, Gauge, Navigation } from 'lucide-react';
 import { pathPointsToMinimap, vehiclePoseToMinimap } from '../../utils/worldToMinimap';
 
 const VIEWBOX_WIDTH = 1000;
@@ -35,15 +35,6 @@ const formatCoordinate = (value) => {
 const formatSpeed = (value) => {
     if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
     return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
-};
-
-const formatUpdateInterval = (value) => {
-    if (value == null) return '실시간';
-    if (typeof value !== 'number' || Number.isNaN(value)) return '-';
-    if (value >= 1000) {
-        return `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} sec`;
-    }
-    return `${value} ms`;
 };
 
 const normalizeState = (state) => {
@@ -118,20 +109,22 @@ const StatCard = ({ icon, label, children }) => {
     const IconComponent = icon;
 
     return (
-        <div className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-slate-200">
-                <IconComponent className="h-4 w-4 text-secondary" />
+        <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-white/10 bg-white/5 px-4 py-3 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-2.5 text-[1.125rem] font-semibold uppercase tracking-[0.12em] text-slate-100">
+                <IconComponent className="h-5 w-5 text-secondary" />
                 {label}
             </div>
-            {children}
+            <div className="flex flex-1 flex-col">
+                {children}
+            </div>
         </div>
     );
 };
 
 const CoordinateRow = ({ axis, value }) => (
-    <div className="flex items-center justify-between rounded-2xl bg-white/5 px-3 py-2">
-        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{axis}</span>
-        <span className="text-sm font-semibold text-white">{value}</span>
+    <div className="flex items-center justify-between rounded-2xl bg-white/5 px-3.5 py-2.5">
+        <span className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-300">{axis}</span>
+        <span className="text-xl font-semibold text-white">{value}</span>
     </div>
 );
 
@@ -145,7 +138,6 @@ const MinimapPanel = ({
     vehicleState = '대기',
     vehicleSpeed = 0,
     vehicleLocation = null,
-    updateIntervalMs = null,
     showMockBadge = false
 }) => {
     const [imageReady, setImageReady] = useState(true);
@@ -187,7 +179,6 @@ const MinimapPanel = ({
     return (
         <div className="relative h-full overflow-hidden rounded-4xl bg-[#03152F] shadow-[0_20px_55px_rgba(3,26,64,0.22)]">
             <div className="absolute inset-0 rounded-4xl bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.28),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.14),transparent_24%),linear-gradient(180deg,#082041_0%,#04142B_58%,#020817_100%)]" />
-            <div className="absolute inset-y-0 left-0 w-[28%] min-w-52.5 max-w-62.5 rounded-l-4xl bg-linear-to-r from-[#03152F]/96 via-[#03152F]/80 to-transparent" />
 
             {imageReady ? (
                 <img
@@ -206,6 +197,7 @@ const MinimapPanel = ({
                 </div>
             )}
 
+            <div className="absolute inset-y-0 left-0 w-70 xl:w-78 rounded-l-4xl bg-[linear-gradient(90deg,rgba(3,21,47,0.99)_0%,rgba(3,21,47,0.96)_68%,rgba(4,26,58,0.7)_84%,transparent_100%)]" />
             <div className="absolute inset-0 rounded-4xl bg-linear-to-b from-dark/10 via-transparent to-[#020817]/38" />
 
             <svg
@@ -299,43 +291,55 @@ const MinimapPanel = ({
             </svg>
 
             <div className="relative z-10 flex h-full p-4 xl:p-5">
-                <div className="w-52.5 space-y-3 xl:w-60">
+                <div className="flex h-full w-66 flex-col xl:w-72">
                     {showMockBadge && (
                         <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-100">
                             Mock
                         </div>
                     )}
 
-                    <StatCard icon={Activity} label="운행 상태">
-                        <div className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold ${statePresentation.chipClass}`}>
-                            <span className={`h-2 w-2 rounded-full ${statePresentation.dotClass}`}></span>
-                            {statePresentation.label}
-                        </div>
-                        <p className="mt-3 text-xs text-slate-400">실시간 상태 반영</p>
-                    </StatCard>
+                    <div
+                        className={`grid min-h-0 flex-1 gap-3 ${showMockBadge ? 'mt-3' : ''}`}
+                        style={{ gridTemplateRows: '0.96fr 0.96fr 1.12fr' }}
+                    >
+                        <StatCard icon={Activity} label="운행 상태">
+                            <div className="grid flex-1 grid-rows-4">
+                                <div className="row-start-2 -mt-1 flex items-center">
+                                    <div className={`inline-flex items-center gap-2.5 rounded-full border px-4 py-2.5 text-lg font-semibold ${statePresentation.chipClass}`}>
+                                        <span className={`h-3 w-3 rounded-full ${statePresentation.dotClass}`}></span>
+                                        {statePresentation.label}
+                                    </div>
+                                </div>
+                                <div className="row-start-3 flex items-center">
+                                    <p className="text-sm text-slate-300">실시간 상태 반영</p>
+                                </div>
+                            </div>
+                        </StatCard>
 
-                    <StatCard icon={Gauge} label="차량 속도">
-                        <p className="mt-3 text-2xl font-semibold text-white">{formatSpeed(vehicleSpeed)}</p>
-                        <p className="mt-1 text-xs text-slate-400">정지 시 0 km/h</p>
-                    </StatCard>
+                        <StatCard icon={Gauge} label="차량 속도">
+                            <div className="grid flex-1 grid-rows-4">
+                                <div className="row-start-2 flex items-center">
+                                    <p className="text-[2.2rem] font-semibold leading-none text-white">{formatSpeed(vehicleSpeed)}</p>
+                                </div>
+                                <div className="row-start-3 flex items-center">
+                                    <p className="mt-1 text-sm text-slate-300">정지 시 0 km/h</p>
+                                </div>
+                            </div>
+                        </StatCard>
 
-                    <StatCard icon={Radio} label="업데이트 주기">
-                        <p className="mt-3 text-2xl font-semibold text-white">{formatUpdateInterval(updateIntervalMs)}</p>
-                        <p className="mt-1 text-xs text-slate-400">SSE 실시간 스트림 기준</p>
-                    </StatCard>
-
-                    <StatCard icon={Navigation} label="실시간 좌표">
-                        <div className="mt-3 space-y-2">
-                            <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
-                            <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
-                        </div>
-                        <p className="mt-3 text-xs text-slate-400">차량 리스트와 동일</p>
-                    </StatCard>
+                        <StatCard icon={Navigation} label="실시간 좌표">
+                            <div className="mt-3 space-y-2">
+                                <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
+                                <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
+                            </div>
+                            <p className="mt-3 text-sm text-slate-300">GPS 미수신 시 맵 좌표 표시</p>
+                        </StatCard>
+                    </div>
                 </div>
             </div>
 
             {!minimapVehiclePose && (
-                <div className="absolute bottom-4 left-[calc(28%+1rem)] rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white shadow-lg backdrop-blur-sm">
+                <div className="absolute bottom-4 left-71 rounded-2xl border border-white/10 bg-dark/72 px-4 py-3 text-sm text-white shadow-lg backdrop-blur-sm xl:left-79">
                     odom 위치 데이터가 연결되면 차량 마커가 표시됩니다.
                 </div>
             )}

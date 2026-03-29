@@ -35,7 +35,7 @@ const primaryEntries = [
 const internalEntries = [
     {
         title: '의사 EMR',
-        description: '의사는 평소 사용하는 EMR 흐름 안에서 예약을 수락하고 원격진료로 진입합니다.',
+        description: '의사는 평소 사용하는 EMR 흐름 안에서 신규 예약 알림을 확인하고 원격진료로 진입합니다.',
         icon: Stethoscope,
         actions: [
             { label: 'EMR 열기', to: '/emr/login', tone: 'outline' },

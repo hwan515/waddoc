@@ -7,7 +7,9 @@ const PreJoinRoom = ({
     setMicEnabled,
     videoEnabled,
     setVideoEnabled,
-    onJoin
+    onJoin,
+    errorMessage = '',
+    isJoining = false
 }) => {
     const localVideoRef = useRef(null);
     const streamRef = useRef(null);
@@ -91,6 +93,11 @@ const PreJoinRoom = ({
             {/* 메인 콘텐츠 영역 */}
             <div className="flex-1 flex flex-col items-center justify-center -mt-10">
                 <h2 className="text-2xl font-bold mb-8">{patientName} 환자의 화상 진료실</h2>
+                {errorMessage && (
+                    <div className="mb-6 w-[800px] rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                        {errorMessage}
+                    </div>
+                )}
 
                 {/* 비디오 프리뷰 영역 */}
                 <div className="w-[800px] h-[450px] bg-[#1C1F22] rounded-2xl flex relative overflow-hidden ring-1 ring-white/10 shadow-2xl">
@@ -148,9 +155,13 @@ const PreJoinRoom = ({
 
                     <button
                         onClick={onJoin}
-                        className="bg-primary hover:bg-blue-600 text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-primary/30 transition-all hover:-translate-y-0.5"
+                        disabled={isJoining}
+                        className={`px-8 py-3 rounded-full font-bold shadow-lg transition-all ${isJoining
+                            ? 'bg-slate-500 text-slate-100 cursor-wait shadow-slate-900/20'
+                            : 'bg-primary hover:bg-blue-600 text-white shadow-primary/30 hover:-translate-y-0.5'
+                            }`}
                     >
-                        진료 시작
+                        {isJoining ? '진료실 연결 중...' : '진료 시작'}
                     </button>
                 </div>
             </div>

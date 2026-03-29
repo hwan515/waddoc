@@ -7,7 +7,10 @@ import com.waddoc.domain.carecase.entity.CaseStatus;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
+import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
+import com.waddoc.domain.consultation.entity.ConsultationSummary;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
@@ -38,6 +41,7 @@ public class CareCaseQueryService {
     private final CareCaseRepository careCaseRepository;
     private final MissionRepository missionRepository;
     private final ConsultationSessionRepository consultationSessionRepository;
+    private final ConsultationSummaryRepository consultationSummaryRepository;
     private final VitalMeasurementRepository vitalMeasurementRepository;
     private final AccessControlService accessControlService;
 
@@ -51,10 +55,15 @@ public class CareCaseQueryService {
         // 미션/세션은 아직 생성 전일 수 있으므로 없으면 null로 내려준다.
         Mission mission = missionRepository.findByCareCase(careCase).orElse(null);
         ConsultationSession session = consultationSessionRepository.findByCareCase(careCase).orElse(null);
+        List<ConsultationSummary> consultationHistories =
+                consultationSummaryRepository.findAllByPatientPublicIdAndSessionStatus(
+                        careCase.getPatient().getPublicId(),
+                        ConsultationSessionStatus.COMPLETED
+                );
         VitalMeasurementResponse vitals = vitalMeasurementRepository.findByCareCase(careCase)
                 .map(VitalMeasurementResponse::from)
                 .orElse(null);
-        return CaseDetailResponse.of(careCase, mission, session, vitals);
+        return CaseDetailResponse.of(careCase, mission, session, consultationHistories, vitals);
     }
 
     public DoctorCaseListResponse getAssignedCases(

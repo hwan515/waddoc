@@ -1,7 +1,8 @@
 .status-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
+  column-gap: 8px;
   padding: 6px 12px;
   background: #2d2d2d;
   color: #ccc;
@@ -10,19 +11,24 @@
   flex-shrink: 0;
 }
 
+.status-bar-left {
+  min-width: 0;
+}
+
 .status-bar-center {
+  justify-self: center;
   font-weight: 700;
   color: #fff;
   font-size: 12px;
+  line-height: 1;
+  text-align: center;
 }
 
 .status-label {
+  display: block;
   color: #8bc34a;
   font-size: 10px;
-}
-
-.status-timer {
-  font-family: 'Courier New', monospace;
-  color: #8bc34a;
-  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -52,6 +52,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -77,9 +79,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private static final String DEFAULT_GUARDIAN_RELATION = "자녀";
     private static final DateTimeFormatter BIRTH_DATE6_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
     private static final LocalDate FUTURE_SLOT_END_DATE = LocalDate.of(2026, 4, 13);
+    // 의사 EMR에는 당일 바로 진료 가능한 예약만 보이도록 활성 예약 시드는 하루치만 유지한다.
+    private static final int UPCOMING_ACTIVE_BOOKING_DAY_COUNT = 1;
     // 2026-03-27 기준 ros2 TopologicalMap.json 의 waypoint 는 1..229 연속이다.
     private static final int TOPOLOGICAL_WAYPOINT_START = 1;
     private static final int TOPOLOGICAL_WAYPOINT_END = 229;
+    private static final int TARGET_PATIENT_WAYPOINT_END = 142;
     private static final int SYNTHETIC_ADDRESS_BUILDING_NUMBER_OFFSET = 3;
 
     private static final List<String> SYNTHETIC_ROAD_NAMES = List.of(
@@ -135,7 +140,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             "민지", "서연", "지현", "주희", "도윤", "민석", "은정", "소연", "현우", "지훈",
             "나영", "유진", "다현", "서준", "하늘", "가영", "민호", "정민", "수진", "예린"
     );
-    private static final int TARGET_HISTORICAL_MISSION_COUNT = 100;
+    private static final int TARGET_HISTORICAL_MISSION_COUNT = 50;
     private static final int PENDING_GUARDIAN_LINK_COUNT = 5;
 
     private static final List<DoctorSeed> DOCTOR_SEEDS = List.of(
@@ -176,6 +181,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        assertSeedDefaultPasswordConfigured();
         LocalDate today = LocalDate.now();
         User adminUser = ensureUser(ADMIN_USERNAME, ADMIN_NAME, Role.ADMIN, null, ApprovalStatus.APPROVED);
         Map<String, DoctorProfile> doctorsByUsername = seedDoctors(adminUser);
@@ -195,6 +201,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 guardiansByPatientKey.size(), FUTURE_SLOT_END_DATE);
     }
 
+    private void assertSeedDefaultPasswordConfigured() {
+        if (defaultPassword == null || defaultPassword.isBlank()) {
+            throw new IllegalStateException("APP_SEED_DEFAULT_PASSWORD must be set when app.seed.enabled=true");
+        }
+    }
+
     private Map<String, DoctorProfile> seedDoctors(User adminUser) {
         Map<String, DoctorProfile> doctorsByUsername = new LinkedHashMap<>();
         for (DoctorSeed seed : DOCTOR_SEEDS) {
@@ -212,7 +224,9 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         }
 
         List<PatientSeed> patientSeeds = new java.util.ArrayList<>(priorityPatientSeeds);
-        for (int waypointNumber = TOPOLOGICAL_WAYPOINT_START; waypointNumber <= TOPOLOGICAL_WAYPOINT_END; waypointNumber++) {
+        for (int waypointNumber = TOPOLOGICAL_WAYPOINT_START;
+                waypointNumber <= TARGET_PATIENT_WAYPOINT_END;
+                waypointNumber++) {
             if (prioritizedSeedsByWaypoint.containsKey(waypointNumber)) {
                 continue;
             }
@@ -302,7 +316,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         """, Long.class)
                         .setParameter("bookingIds", bookingIds)
                         .getResultList();
-        java.util.Set<Long> intakeSessionIds = new java.util.LinkedHashSet<>(entityManager.createQuery("""
+        LinkedHashSet<Long> intakeSessionIds = new LinkedHashSet<>(entityManager.createQuery("""
                 select distinct i.id
                   from IntakeSession i
                  where i.patient.id in :patientIds
@@ -337,6 +351,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             entityManager.createQuery("""
                     delete from VitalMeasurement v
                      where v.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from ConsultationSummary cs
+                     where cs.session.careCase.id in :caseIds
                     """)
                     .setParameter("caseIds", caseIds)
                     .executeUpdate();
@@ -379,14 +399,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     .executeUpdate();
         }
 
-        if (!intakeSessionIds.isEmpty()) {
-            entityManager.createQuery("""
-                    delete from IntakeSession i
-                     where i.id in :intakeSessionIds
-                    """)
-                    .setParameter("intakeSessionIds", intakeSessionIds)
-                    .executeUpdate();
-        }
+        deleteOrphanIntakeSessions(intakeSessionIds);
 
         entityManager.createQuery("""
                 delete from Patient p
@@ -402,8 +415,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         java.util.Set<String> pendingPatientKeys = buildPendingGuardianPatientKeys(patientSeeds, approvedPatientKeys);
         java.util.Set<String> targetPatientKeys = new java.util.LinkedHashSet<>(approvedPatientKeys);
         targetPatientKeys.addAll(pendingPatientKeys);
-
-        pruneUnusedSeedGuardians(patientSeeds, targetPatientKeys);
 
         Map<String, User> guardiansByPatientKey = new LinkedHashMap<>();
         for (PatientSeed seed : patientSeeds) {
@@ -473,19 +484,21 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             return;
         }
 
-        pruneHistoricalSeedArtifacts(historyStart, historyEnd, patientSeeds, patientsByKey);
+        resetSeedClinicalArtifacts(patientsByKey, doctorsByUsername);
 
-        List<DoctorProfile> doctors = List.copyOf(doctorsByUsername.values());
+        List<HistoricalBookingPlan> bookingPlans = buildHistoricalBookingPlans(patientSeeds);
+        List<HistoricalAppointmentSlot> appointmentSlots =
+                buildHistoricalAppointmentSlots(historyStart, historyEnd, bookingPlans.size());
         Vehicle gimcheonVehicle = getVehicle(vehiclesByCode, "GIMCHEON-01");
-        int historyDayCount = (int) historyStart.datesUntil(historyEnd.plusDays(1)).count();
-        int historicalMissionCount = Math.min(TARGET_HISTORICAL_MISSION_COUNT, patientSeeds.size());
 
-        for (int index = 0; index < historicalMissionCount; index++) {
-            PatientSeed seed = patientSeeds.get(index);
+        for (int index = 0; index < bookingPlans.size(); index++) {
+            HistoricalBookingPlan bookingPlan = bookingPlans.get(index);
+            HistoricalAppointmentSlot appointmentSlot = appointmentSlots.get(index);
+            PatientSeed seed = bookingPlan.patientSeed();
             Patient patient = getPatient(patientsByKey, seed.key());
-            LocalDate appointmentDate = historyStart.plusDays(index % historyDayCount);
-            DoctorProfile doctor = doctors.get((index / historyDayCount) % doctors.size());
-            LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(index % REALISTIC_SLOT_START_TIMES.size());
+            DoctorProfile doctor = getDoctor(doctorsByUsername, bookingPlan.doctorUsername());
+            LocalDate appointmentDate = appointmentSlot.appointmentDate();
+            LocalTime startTime = appointmentSlot.startTime();
             LocalTime endTime = startTime.plusMinutes(30);
             LocalDateTime appointmentDateTime = appointmentDate.atTime(startTime);
             LocalDateTime intakeCompletedAt = appointmentDateTime.minusDays(1).withHour(17).withMinute(10);
@@ -499,12 +512,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
             ScheduleSlot slot = ensureSlot(doctor, appointmentDate, startTime, endTime);
             IntakeSession intakeSession = ensureIntakeSession(
+                    buildHistoricalIntakePublicId(seed, bookingPlan.visitSequence()),
                     patient,
                     patient.getPhone(),
                     IntakeChannel.PHONE,
                     doctor.getDepartment(),
                     doctor.getDepartmentName(),
                     "3월 과거 예약 시드 생성",
+                    buildSelectionReason(doctor, seed, bookingPlan.visitSequence()),
                     List.of(slot.getPublicId()),
                     CompletionReason.BOOKING_CREATED
             );
@@ -543,7 +558,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
             ConsultationSession session = ensureConsultationSession(
                     careCase,
-                    "seed-room-" + seed.key(),
+                    "seed-room-" + buildWaypointSuffix(seed.waypointNumber()) + "-" + bookingPlan.visitSequence(),
                     resolveSeedLivekitUrl()
             );
             syncConsultationSessionState(
@@ -563,9 +578,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             return;
         }
 
+        pruneUpcomingSeedArtifacts(today, FUTURE_SLOT_END_DATE, patientSeeds, patientsByKey);
+
         List<DoctorProfile> doctors = List.copyOf(doctorsByUsername.values());
         Vehicle gimcheonVehicle = getVehicle(vehiclesByCode, "GIMCHEON-01");
-        int upcomingDayCount = (int) today.datesUntil(FUTURE_SLOT_END_DATE.plusDays(1)).count();
+        LocalDate upcomingEndDate = resolveUpcomingActiveBookingEndDate(today);
+        int upcomingDayCount = (int) today.datesUntil(upcomingEndDate.plusDays(1)).count();
         int upcomingBookingCount = Math.min(patientSeeds.size(), upcomingDayCount * doctors.size());
 
         for (int index = 0; index < upcomingBookingCount; index++) {
@@ -588,7 +606,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     IntakeChannel.WEB_SIMULATOR,
                     doctor.getDepartment(),
                     doctor.getDepartmentName(),
-                    "오늘 이후 활성 예약 시드 생성",
+                    "당일 활성 예약 시드 생성",
                     List.of(slot.getPublicId()),
                     CompletionReason.BOOKING_CREATED
             );
@@ -628,6 +646,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             DispatchOutbox dispatchOutbox = ensureDispatchOutbox(careCase, patient.getRegionCode(), patient.getAddress());
             syncDispatchOutboxState(dispatchOutbox, DispatchOutboxStatus.COMPLETED);
         }
+    }
+
+    static LocalDate resolveUpcomingActiveBookingEndDate(LocalDate today) {
+        LocalDate candidate = today.plusDays(UPCOMING_ACTIVE_BOOKING_DAY_COUNT - 1L);
+        return candidate.isAfter(FUTURE_SLOT_END_DATE) ? FUTURE_SLOT_END_DATE : candidate;
     }
 
     private java.util.Set<String> approvedGuardianPatientKeys() {
@@ -687,20 +710,17 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.flush();
     }
 
-    private void pruneHistoricalSeedArtifacts(LocalDate historyStart, LocalDate historyEnd,
-            List<PatientSeed> patientSeeds, Map<String, Patient> patientsByKey) {
-        if (patientSeeds.size() <= TARGET_HISTORICAL_MISSION_COUNT) {
-            return;
-        }
-
-        List<Long> removablePatientIds = new java.util.ArrayList<>();
-        for (int index = TARGET_HISTORICAL_MISSION_COUNT; index < patientSeeds.size(); index++) {
-            Patient patient = patientsByKey.get(patientSeeds.get(index).key());
-            if (patient != null && patient.getId() != null) {
-                removablePatientIds.add(patient.getId());
-            }
-        }
-        if (removablePatientIds.isEmpty()) {
+    private void resetSeedClinicalArtifacts(Map<String, Patient> patientsByKey,
+            Map<String, DoctorProfile> doctorsByUsername) {
+        List<Long> patientIds = patientsByKey.values().stream()
+                .map(Patient::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        List<Long> doctorIds = doctorsByUsername.values().stream()
+                .map(DoctorProfile::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (patientIds.isEmpty() || doctorIds.isEmpty()) {
             return;
         }
 
@@ -708,12 +728,123 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 select b.id
                   from Booking b
                  where b.patient.id in :patientIds
-                   and b.appointmentDate >= :historyStart
-                   and b.appointmentDate <= :historyEnd
+                    or b.doctor.id in :doctorIds
                 """, Long.class)
-                .setParameter("patientIds", removablePatientIds)
-                .setParameter("historyStart", historyStart)
-                .setParameter("historyEnd", historyEnd)
+                .setParameter("patientIds", patientIds)
+                .setParameter("doctorIds", doctorIds)
+                .getResultList();
+        List<Long> caseIds = entityManager.createQuery("""
+                select c.id
+                  from CareCase c
+                 where c.patient.id in :patientIds
+                    or c.doctor.id in :doctorIds
+                """, Long.class)
+                .setParameter("patientIds", patientIds)
+                .setParameter("doctorIds", doctorIds)
+                .getResultList();
+        java.util.Set<Long> intakeSessionIds = new java.util.LinkedHashSet<>(entityManager.createQuery("""
+                select i.id
+                  from IntakeSession i
+                 where i.patient.id in :patientIds
+                """, Long.class)
+                .setParameter("patientIds", patientIds)
+                .getResultList());
+        if (!bookingIds.isEmpty()) {
+            intakeSessionIds.addAll(entityManager.createQuery("""
+                    select distinct b.intakeSession.id
+                      from Booking b
+                     where b.id in :bookingIds
+                       and b.intakeSession is not null
+                    """, Long.class)
+                    .setParameter("bookingIds", bookingIds)
+                    .getResultList());
+        }
+
+        if (!caseIds.isEmpty()) {
+            entityManager.createQuery("""
+                    delete from DispatchOutbox d
+                     where d.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from VitalMeasurement v
+                     where v.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from ConsultationSummary cs
+                     where cs.session.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from ConsultationSession s
+                     where s.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from Mission m
+                     where m.careCase.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+            entityManager.createQuery("""
+                    delete from CareCase c
+                     where c.id in :caseIds
+                    """)
+                    .setParameter("caseIds", caseIds)
+                    .executeUpdate();
+        }
+
+        if (!bookingIds.isEmpty()) {
+            entityManager.createQuery("""
+                    delete from Booking b
+                     where b.id in :bookingIds
+                    """)
+                    .setParameter("bookingIds", bookingIds)
+                    .executeUpdate();
+        }
+
+        deleteOrphanIntakeSessions(intakeSessionIds);
+
+        entityManager.createQuery("""
+                delete from ScheduleSlot s
+                 where s.doctor.id in :doctorIds
+                """)
+                .setParameter("doctorIds", doctorIds)
+                .executeUpdate();
+
+        entityManager.flush();
+    }
+
+    private void pruneUpcomingSeedArtifacts(LocalDate upcomingStart, LocalDate upcomingEnd,
+            List<PatientSeed> patientSeeds, Map<String, Patient> patientsByKey) {
+        List<Long> targetPatientIds = patientSeeds.stream()
+                .map(PatientSeed::key)
+                .map(patientsByKey::get)
+                .filter(Objects::nonNull)
+                .map(Patient::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (targetPatientIds.isEmpty()) {
+            return;
+        }
+
+        List<Long> bookingIds = entityManager.createQuery("""
+                select b.id
+                  from Booking b
+                 where b.patient.id in :patientIds
+                   and b.channel = :channel
+                   and b.appointmentDate >= :upcomingStart
+                   and b.appointmentDate <= :upcomingEnd
+                """, Long.class)
+                .setParameter("patientIds", targetPatientIds)
+                .setParameter("channel", WEB_SIMULATOR_CHANNEL)
+                .setParameter("upcomingStart", upcomingStart)
+                .setParameter("upcomingEnd", upcomingEnd)
                 .getResultList();
         if (bookingIds.isEmpty()) {
             return;
@@ -746,12 +877,6 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             entityManager.createQuery("""
                     delete from DispatchOutbox d
                      where d.careCase.id in :caseIds
-                    """)
-                    .setParameter("caseIds", caseIds)
-                    .executeUpdate();
-            entityManager.createQuery("""
-                    delete from VitalMeasurement v
-                     where v.careCase.id in :caseIds
                     """)
                     .setParameter("caseIds", caseIds)
                     .executeUpdate();
@@ -792,18 +917,45 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     .executeUpdate();
         }
 
-        if (!intakeSessionIds.isEmpty()) {
-            entityManager.createQuery("""
-                    delete from IntakeSession i
-                     where i.id in :intakeSessionIds
-                    """)
-                    .setParameter("intakeSessionIds", intakeSessionIds)
-                    .executeUpdate();
-        }
+        deleteOrphanIntakeSessions(intakeSessionIds);
 
         entityManager.flush();
     }
 
+    private void deleteOrphanIntakeSessions(Collection<Long> intakeSessionIds) {
+        if (intakeSessionIds.isEmpty()) {
+            return;
+        }
+
+        LinkedHashSet<Long> orphanIntakeSessionIds = new LinkedHashSet<>(intakeSessionIds);
+        orphanIntakeSessionIds.removeAll(entityManager.createQuery("""
+                select distinct b.intakeSession.id
+                  from Booking b
+                 where b.intakeSession is not null
+                   and b.intakeSession.id in :intakeSessionIds
+                """, Long.class)
+                .setParameter("intakeSessionIds", intakeSessionIds)
+                .getResultList());
+        orphanIntakeSessionIds.removeAll(entityManager.createQuery("""
+                select distinct c.intakeSession.id
+                  from CareCase c
+                 where c.intakeSession is not null
+                   and c.intakeSession.id in :intakeSessionIds
+                """, Long.class)
+                .setParameter("intakeSessionIds", intakeSessionIds)
+                .getResultList());
+
+        if (orphanIntakeSessionIds.isEmpty()) {
+            return;
+        }
+
+        entityManager.createQuery("""
+                delete from IntakeSession i
+                 where i.id in :intakeSessionIds
+                """)
+                .setParameter("intakeSessionIds", orphanIntakeSessionIds)
+                .executeUpdate();
+    }
     private void seedFutureSlots(LocalDate today, Map<String, DoctorProfile> doctorsByUsername) {
         if (today.isAfter(FUTURE_SLOT_END_DATE)) {
             return;
@@ -1058,16 +1210,42 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         }
     }
 
-    private IntakeSession ensureIntakeSession(Patient patient, String callerNumber, IntakeChannel channel,
-            String department, String departmentName, String selectionReason, List<String> offeredSlotIds,
+    private IntakeSession ensureIntakeSession(String intakePublicId, Patient patient, String callerNumber, String department,
+            String departmentName, String ignoredLegacySelectionReason, String selectionReason, List<String> offeredSlotIds,
             CompletionReason completionReason) {
         IntakeSession intakeSession = intakeSessionRepository
-                .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, channel)
+                .findByPublicId(intakePublicId)
                 .orElseGet(() -> intakeSessionRepository.save(
                         IntakeSession.builder()
                                 .callerNumber(callerNumber)
                                 .channel(channel)
                                 .build()));
+
+        if (!Objects.equals(intakeSession.getPublicId(), intakePublicId)) {
+            entityManager.createQuery("""
+                    update IntakeSession i
+                       set i.publicId = :publicId
+                     where i.id = :id
+                    """)
+                    .setParameter("publicId", intakePublicId)
+                    .setParameter("id", intakeSession.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(intakeSession);
+        }
+
+        if (!Objects.equals(intakeSession.getCallerNumber(), callerNumber)) {
+            entityManager.createQuery("""
+                    update IntakeSession i
+                       set i.callerNumber = :callerNumber
+                     where i.id = :id
+                    """)
+                    .setParameter("callerNumber", callerNumber)
+                    .setParameter("id", intakeSession.getId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.refresh(intakeSession);
+        }
 
         if (intakeSession.getPatient() == null || !Objects.equals(intakeSession.getPatient().getId(), patient.getId())) {
             intakeSession.bindPatient(patient);
@@ -1448,6 +1626,53 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return List.of(
                 new PatientSeed(
                         "gim_wp_059",
+                        "권미순",
+                        LocalDate.of(1958, 10, 6),
+                        PatientGender.FEMALE,
+                        "GIMCHEON",
+                        "경상북도 김천시 증산면 유성길 14",
+                        "01042488119",
+                        "patients/pat_prd_gim_waypoint59/reference.jpg",
+                        59,
+                        buildGuardianUsername(59),
+                        "권현우",
+                        DEFAULT_GUARDIAN_RELATION
+                ),
+                new PatientSeed(
+                        "gim_wp_092",
+                        "정지환",
+                        LocalDate.of(1960, 9, 2),
+                        PatientGender.MALE,
+                        "GIMCHEON",
+                        "경상북도 김천시 증산면 유성길 6-9",
+                        "01049163720",
+                        "patients/pat_prd_gim_waypoint92/reference.jpg",
+                        92,
+                        buildGuardianUsername(92),
+                        "정소윤",
+                        DEFAULT_GUARDIAN_RELATION
+                ),
+                new PatientSeed(
+                        "gim_wp_142",
+                        "김주덕",
+                        LocalDate.of(1955, 1, 24),
+                        PatientGender.MALE,
+                        "GIMCHEON",
+                        "경상북도 김천시 증산면 유성길 2길 7",
+                        buildWaypointPhone(142),
+                        "patients/pat_prd_gim_waypoint142/reference.jpg",
+                        142,
+                        buildGuardianUsername(142),
+                        "김현수",
+                        DEFAULT_GUARDIAN_RELATION
+                )
+        );
+    }
+
+    private static List<PatientSeed> buildPriorityPatientSeedsLegacy() {
+        return List.of(
+                new PatientSeed(
+                        "gim_wp_059",
                         "권미정",
                         LocalDate.of(1958, 10, 6),
                         PatientGender.FEMALE,
@@ -1530,6 +1755,12 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private static String buildTopologyWaypointAddress(int waypointNumber) {
         return TOPOLOGY_ADDRESS_PREFIX + waypointNumber;
+    }
+
+    private record HistoricalBookingPlan(PatientSeed patientSeed, String doctorUsername, int visitSequence) {
+    }
+
+    private record HistoricalAppointmentSlot(LocalDate appointmentDate, LocalTime startTime) {
     }
 
     private record DoctorSeed(String username, String name, String department, String departmentName) {

@@ -46,6 +46,7 @@ pipeline {
         COMPOSE_FILES = '-f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml'
         DOCKER_BUILDKIT = '1'
         BUILDX_BUILDER = 'waddoc-builder'          // buildx 빌더 이름 접두사
+        NODE_BUILD_IMAGE = 'node:22-alpine'       // FE 품질 게이트는 에이전트 호스트 Node 버전과 분리한다.
     }
 
     stages {
@@ -137,11 +138,51 @@ pipeline {
                     when { expression { env.BE_CHANGED == 'true' } }
                     steps {
                         echo '=== Running Backend Tests ==='
+                        withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
+                            sh '''
+                                # 통합 테스트는 외부 인프라 의존도가 높아 CI 기본 경로에서는 제외한다.
+                                cd ${PROJECT_PATH}/src/BE && \
+                                chmod +x ./gradlew && \
+                                ./gradlew test --no-daemon -PskipIntegrationTests=true
+                            '''
+                        }
+                    }
+                }
+
+                stage('FE Lint & Build') {
+                    when { expression { env.FE_CHANGED == 'true' } }
+                    steps {
+                        echo '=== Running Frontend Lint & Build ==='
                         sh '''
-                            # 통합 테스트는 외부 인프라 의존도가 높아 CI 기본 경로에서는 제외한다.
-                            cd ${PROJECT_PATH}/src/BE && \
-                            chmod +x ./gradlew && \
-                            ./gradlew test --no-daemon -PskipIntegrationTests=true
+                            LOCAL_UID="$(id -u)"
+                            LOCAL_GID="$(id -g)"
+                            docker run --rm \
+                              --user "${LOCAL_UID}:${LOCAL_GID}" \
+                              --env HOME=/tmp \
+                              --env npm_config_cache=/tmp/.npm \
+                              --volume "${PROJECT_PATH}/src/FE:/app" \
+                              --workdir /app \
+                              ${NODE_BUILD_IMAGE} \
+                              sh -lc 'npm ci --no-audit --no-fund && npm run lint && npm run build'
+                        '''
+                    }
+                }
+
+                stage('Phone Lint & Build') {
+                    when { expression { env.FP_CHANGED == 'true' } }
+                    steps {
+                        echo '=== Running FE-phone Lint & Build ==='
+                        sh '''
+                            LOCAL_UID="$(id -u)"
+                            LOCAL_GID="$(id -g)"
+                            docker run --rm \
+                              --user "${LOCAL_UID}:${LOCAL_GID}" \
+                              --env HOME=/tmp \
+                              --env npm_config_cache=/tmp/.npm \
+                              --volume "${PROJECT_PATH}/src/FE-phone:/app" \
+                              --workdir /app \
+                              ${NODE_BUILD_IMAGE} \
+                              sh -lc 'npm ci --no-audit --no-fund && npm run lint && npm run build'
                         '''
                     }
                 }

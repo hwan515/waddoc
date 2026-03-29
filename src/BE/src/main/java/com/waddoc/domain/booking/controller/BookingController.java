@@ -2,10 +2,13 @@ package com.waddoc.domain.booking.controller;
 
 import com.waddoc.domain.booking.dto.*;
 import com.waddoc.domain.booking.service.BookingService;
+import com.waddoc.global.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -37,13 +40,16 @@ public class BookingController {
     }
 
     /** 4.3 — 예약 상세 조회 (인증 기반) */
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/bookings/{bookingId}")
     public ResponseEntity<BookingDetailResponse> getBookingDetail(
-            @PathVariable String bookingId) {
-        // TODO: @AuthenticationPrincipal로 actorId/actorRole 추출 (JWT 필터 완성 시)
-        String actorId = "SYSTEM";
-        String actorRole = "SYSTEM";
-        BookingDetailResponse response = bookingService.getBookingDetail(bookingId, actorId, actorRole);
+            @PathVariable String bookingId,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser) {
+        BookingDetailResponse response = bookingService.getBookingDetail(
+                bookingId,
+                authenticatedUser.userId(),
+                authenticatedUser.role().name()
+        );
         return ResponseEntity.ok(response);
     }
 
@@ -58,14 +64,18 @@ public class BookingController {
     }
 
     /** 4.5 — 인증 기반 예약 취소 */
+    @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR')")
     @PostMapping("/bookings/{bookingId}/cancel")
     public ResponseEntity<CancelBookingResponse> cancelBooking(
             @PathVariable String bookingId,
-            @RequestBody(required = false) CancelBookingRequest request) {
-        // TODO: @AuthenticationPrincipal로 actorId/actorRole 추출 (JWT 필터 완성 시)
-        String actorId = "SYSTEM";
-        String actorRole = "SYSTEM";
-        CancelBookingResponse response = bookingService.cancelBooking(bookingId, request, actorId, actorRole);
+            @RequestBody(required = false) CancelBookingRequest request,
+            @AuthenticationPrincipal AuthenticatedUser authenticatedUser) {
+        CancelBookingResponse response = bookingService.cancelBooking(
+                bookingId,
+                request,
+                authenticatedUser.userId(),
+                authenticatedUser.role().name()
+        );
         return ResponseEntity.ok(response);
     }
 }

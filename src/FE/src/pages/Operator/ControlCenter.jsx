@@ -146,14 +146,45 @@ const DEFAULT_WAITING_MONITOR_STATE = phaseToMonitorState('WAITING');
 const MOVING_SPEED_THRESHOLD_MS = 0.1;
 const MOVING_SPEED_THRESHOLD_KMH = 0.5;
 
-const inferMonitorStateFromTelemetry = (normalizedState, speedMs, speedKmh) => {
+const inferMonitorStateFromTelemetry = ({
+    normalizedState,
+    speedMs,
+    speedKmh,
+    online,
+    navigationCleared,
+    navigationClearReason,
+    targetWaypointValue,
+    pathWaypoints,
+    fullPathWaypoints,
+}) => {
     const parsedSpeedMs = toFiniteNumber(speedMs);
     const parsedSpeedKmh = toFiniteNumber(speedKmh);
     const hasMovingSpeed = (parsedSpeedMs !== null && parsedSpeedMs > MOVING_SPEED_THRESHOLD_MS)
         || (parsedSpeedKmh !== null && parsedSpeedKmh > MOVING_SPEED_THRESHOLD_KMH);
+    const parsedTargetWaypointValue = toFiniteNumber(targetWaypointValue);
+    const hasRoute = (Array.isArray(pathWaypoints) && pathWaypoints.length > 0)
+        || (Array.isArray(fullPathWaypoints) && fullPathWaypoints.length > 0);
+    const normalizedClearReason = typeof navigationClearReason === 'string'
+        ? navigationClearReason.trim().toLowerCase()
+        : '';
 
     if (hasMovingSpeed && (normalizedState === null || WAITING_MONITOR_STATES.has(normalizedState))) {
         return getMonitorStateFromPhase('EN_ROUTE');
+    }
+
+    if (normalizedState === null) {
+        if (online === false) {
+            return DEFAULT_WAITING_MONITOR_STATE;
+        }
+
+        if (
+            navigationCleared === true
+            && !hasRoute
+            && (parsedTargetWaypointValue === null || parsedTargetWaypointValue === 0)
+            && (!normalizedClearReason || normalizedClearReason === 'waiting_goal')
+        ) {
+            return DEFAULT_WAITING_MONITOR_STATE;
+        }
     }
 
     return normalizedState;
@@ -180,6 +211,20 @@ const createVehicleLocation = (latitudeValue, longitudeValue) => {
     return { lat, lng };
 };
 
+const createPoseFallbackLocation = (pose) => {
+    if (!isValidPose(pose)) {
+        return null;
+    }
+
+    return {
+        lat: pose.x,
+        lng: pose.z,
+        latLabel: 'X',
+        lngLabel: 'Z',
+        source: 'pose',
+    };
+};
+
 const extractVehicleLocation = (...candidates) => {
     for (const candidate of candidates) {
         if (!candidate || typeof candidate !== 'object') {
@@ -193,6 +238,18 @@ const extractVehicleLocation = (...candidates) => {
 
         if (nextLocation) {
             return nextLocation;
+        }
+
+        const poseFallback = createPoseFallbackLocation(
+            candidate.pose
+            ?? candidate.current_pose
+            ?? candidate.currentPose
+            ?? candidate.minimap_pose
+            ?? candidate.minimapPose
+        );
+
+        if (poseFallback) {
+            return poseFallback;
         }
     }
 
@@ -318,7 +375,7 @@ const getMissionPhaseLabel = (phase) => {
 
 const getDemoActionAvailability = (phase) => ({
     canDispatch: DEMO_MODE_ENABLED && phase === 'CREATED',
-    canArrive: DEMO_MODE_ENABLED && ['DISPATCHED', 'EN_ROUTE'].includes(phase),
+    canArrive: false,
 });
 
 const getDashboardMissionStatusLabel = (phase) => (
@@ -361,11 +418,48 @@ const mapMissionToDashboardItem = (mission) => {
         phase: mission.phase,
         phaseLabel: DASHBOARD_MISSION_LABEL_RESOLVERS.phase(mission.phase),
         time: formatMissionDisplayTime(mission),
+        targetWaypointNumber: mission.targetWaypointNumber ?? null,
+        sourceMission: mission,
         dateKey: extractDateKey(mission.appointmentDate)
             || extractDateKey(mission.dispatchedAt || mission.createdAt || mission.updatedAt),
         isPrimaryServiceVehicle,
         ...getDemoActionAvailability(mission.phase)
     };
+};
+
+const applySelectedBookingMissionToVehicles = (vehicles, selectedBookingMission) => {
+    if (!selectedBookingMission?.vehicleId) {
+        return vehicles;
+    }
+
+    return vehicles.map((vehicle) => {
+        if (vehicle.vehicleId !== selectedBookingMission.vehicleId) {
+            return vehicle;
+        }
+
+        const overlayMission = selectedBookingMission.sourceMission || {
+            missionId: selectedBookingMission.missionId,
+            caseId: selectedBookingMission.caseId,
+            patientName: selectedBookingMission.patientName,
+            destination: selectedBookingMission.destination,
+            vehicleId: selectedBookingMission.vehicleId,
+            phase: selectedBookingMission.phase,
+            targetWaypointNumber: selectedBookingMission.targetWaypointNumber,
+        };
+
+        return {
+            ...vehicle,
+            missionId: selectedBookingMission.missionId,
+            patientName: selectedBookingMission.patientName || vehicle.patientName,
+            destination: selectedBookingMission.destination || vehicle.destination,
+            mission: {
+                ...(vehicle.mission || {}),
+                ...overlayMission,
+            },
+            displayPatientName: selectedBookingMission.patientName || vehicle.displayPatientName,
+            displayDestination: selectedBookingMission.destination || vehicle.displayDestination,
+        };
+    });
 };
 
 const getErrorMessage = (error, fallbackMessage) => (
@@ -375,13 +469,13 @@ const getErrorMessage = (error, fallbackMessage) => (
 );
 
 const loadDashboardSnapshot = async ({
-    setVehicles,
-    setSelectedVehicleId,
-    setAllMissionsList,
-    setMissionsList,
-    setStatistics,
-    setCalendarEvents
-}) => {
+                                         setVehicles,
+                                         setSelectedVehicleId,
+                                         setAllMissionsList,
+                                         setMissionsList,
+                                         setStatistics,
+                                         setCalendarEvents
+                                     }) => {
     try {
         const todayDateKey = getTodayKstDate();
 
@@ -390,28 +484,30 @@ const loadDashboardSnapshot = async ({
             return { data: {} };
         });
 
-        const [missionsRes, bookingsRes, vehiclesRes] = await Promise.all([
+        const [todayMissionsRes, allMissionsRes, bookingsRes, vehiclesRes] = await Promise.all([
             fetchSafe(apiClient.get('/missions', { params: { date: todayDateKey } })),
+            fetchSafe(apiClient.get('/missions')),
             fetchSafe(apiClient.get('/admin/bookings', { params: { size: 100 } })),
             fetchSafe(apiClient.get('/admin/vehicles'))
         ]);
 
-        const rawMissions = missionsRes.data.missions || [];
+        const todayRawMissions = todayMissionsRes.data.missions || [];
+        const allRawMissions = allMissionsRes.data.missions || [];
         const rawVehicles = Array.isArray(vehiclesRes.data) ? vehiclesRes.data : [];
         const missionDetailResponses = await Promise.all(
-            rawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
+            todayRawMissions.map((mission) => fetchSafe(apiClient.get(`/missions/${mission.missionId}`)))
         );
         const missionDetailsById = new Map(
-            rawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
+            todayRawMissions.map((mission, index) => [mission.missionId, missionDetailResponses[index]?.data || {}])
         );
-        const latestMissionByVehicleId = rawMissions
+        const latestMissionByVehicleId = todayRawMissions
             .filter((mission) => typeof mission?.vehicleId === 'string' && mission.vehicleId.trim())
             .reduce((accumulator, mission) => {
-            const currentMission = accumulator.get(mission.vehicleId);
+                const currentMission = accumulator.get(mission.vehicleId);
 
-            if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
-                accumulator.set(mission.vehicleId, mission);
-            }
+                if (!currentMission || getMissionRecencyValue(mission) >= getMissionRecencyValue(currentMission)) {
+                    accumulator.set(mission.vehicleId, mission);
+                }
 
                 return accumulator;
             }, new Map());
@@ -482,22 +578,23 @@ const loadDashboardSnapshot = async ({
             setSelectedVehicleId(null);
         }
 
-        const mappedAllMissions = rawMissions
+        const mappedTodayMissions = todayRawMissions
+            .map(mapMissionToDashboardItem)
+            .sort(sortDashboardMissions);
+        const mappedAllMissions = allRawMissions
             .map(mapMissionToDashboardItem)
             .sort(sortDashboardMissions);
 
-        setMissionsList(
-            mappedAllMissions.filter((mission) => mission.dateKey === todayDateKey)
-        );
+        setMissionsList(mappedTodayMissions);
         setAllMissionsList(mappedAllMissions);
 
         setStatistics({
-            totalMissions: rawMissions.length,
-            activeMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
-            dispatchingMissions: rawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
-            consultingMissions: rawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
-            completedMissions: rawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
-            incidentCount: rawMissions.filter((mission) => mission.phase === 'INCIDENT').length
+            totalMissions: allRawMissions.length,
+            activeMissions: allRawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+            dispatchingMissions: allRawMissions.filter((mission) => ['DISPATCHED', 'EN_ROUTE', 'ARRIVED'].includes(mission.phase)).length,
+            consultingMissions: allRawMissions.filter((mission) => ['VERIFYING', 'CONSULTING'].includes(mission.phase)).length,
+            completedMissions: allRawMissions.filter((mission) => ['COMPLETED', 'RETURNING'].includes(mission.phase)).length,
+            incidentCount: allRawMissions.filter((mission) => mission.phase === 'INCIDENT').length
         });
 
         const mappedEvents = (bookingsRes.data.bookings || []).map((booking) => {
@@ -527,8 +624,7 @@ const loadDashboardSnapshot = async ({
 const ControlCenter = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
-    const currentUser = useAuthStore((state) => state.user);
-    const { snapshotData } = useRobotSSE();
+    const { snapshotData, stateData, statusData } = useRobotSSE();
 
     // '지도' | '대시보드'
     const [activeTab, setActiveTab] = useState('map');
@@ -622,37 +718,51 @@ const ControlCenter = () => {
         const telemetry = snapshotData.telemetry ?? {};
         const navigation = snapshotData.navigation ?? {};
         const posePayload = telemetry.pose;
-        const reportedState = normalizeMonitorState(telemetry.state);
+        const reportedState = normalizeMonitorState(
+            telemetry.state
+            ?? stateData?.state
+            ?? stateData?.vehicleState
+            ?? stateData?.status
+        );
+        const telemetryOnline = typeof telemetry.online === 'boolean'
+            ? telemetry.online
+            : (typeof statusData?.online === 'boolean' ? statusData.online : null);
         const nextSpeedKmh = toFiniteNumber(telemetry.speedKmh);
         const nextSpeedMs = toFiniteNumber(telemetry.speedMs);
-        const nextState = inferMonitorStateFromTelemetry(
-            reportedState,
-            nextSpeedMs,
-            nextSpeedKmh
-        );
+        const nextState = inferMonitorStateFromTelemetry({
+            normalizedState: reportedState,
+            speedMs: nextSpeedMs,
+            speedKmh: nextSpeedKmh,
+            online: telemetryOnline,
+            navigationCleared: navigation.cleared,
+            navigationClearReason: navigation.clearReason,
+            targetWaypointValue: navigation.targetWaypointValue,
+            pathWaypoints: navigation.pathWaypoints,
+            fullPathWaypoints: navigation.fullPathWaypoints,
+        });
         const nextSpeed = nextSpeedKmh !== null
             ? normalizeVehicleSpeed(nextSpeedKmh, nextState, 'km/h')
             : normalizeVehicleSpeed(nextSpeedMs, nextState, 'm/s');
         const nextLocation = createVehicleLocation(
             telemetry.location?.lat,
             telemetry.location?.lng
-        );
+        ) || createPoseFallbackLocation(posePayload);
         const nextBattery = normalizeBatterySoc(telemetry.batterySoc);
         const nextGoalWaypointId = typeof navigation.goalWaypointId === 'string'
             ? navigation.goalWaypointId
             : null;
         const nextGoalWaypointNumber = parseWaypointNumberFromGoalId(nextGoalWaypointId);
         const pathPayload = (
-            Array.isArray(navigation.pathWaypoints) && navigation.pathWaypoints.length > 0
-                ? navigation.pathWaypoints
-                : navigation.trajectory
+            Array.isArray(navigation.trajectory) && navigation.trajectory.length > 0
+                ? navigation.trajectory
+                : navigation.pathWaypoints
         );
         const fullPathPayload = (
-            Array.isArray(navigation.fullPathWaypoints) && navigation.fullPathWaypoints.length > 0
-                ? navigation.fullPathWaypoints
+            Array.isArray(navigation.fullTrajectory) && navigation.fullTrajectory.length > 0
+                ? navigation.fullTrajectory
                 : (
-                    Array.isArray(navigation.fullTrajectory) && navigation.fullTrajectory.length > 0
-                        ? navigation.fullTrajectory
+                    Array.isArray(navigation.fullPathWaypoints) && navigation.fullPathWaypoints.length > 0
+                        ? navigation.fullPathWaypoints
                         : pathPayload
                 )
         );
@@ -675,10 +785,10 @@ const ControlCenter = () => {
         setLiveVehicleLocation(nextLocation);
         setVehicles((currentVehicles) => currentVehicles.map((vehicle) => (
             vehicle.vehicleId === ACTIVE_OPERATOR_VEHICLE_ID
-                && (
-                    shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
-                    || hasStandaloneLiveTelemetry
-                )
+            && (
+                shouldUseLiveTelemetryForMission(vehicle.mission, nextGoalWaypointNumber)
+                || hasStandaloneLiveTelemetry
+            )
                 ? {
                     ...vehicle,
                     status: nextState || vehicle.status,
@@ -689,11 +799,15 @@ const ControlCenter = () => {
                 }
                 : vehicle
         )));
-    }, [snapshotData]);
+    }, [snapshotData, stateData, statusData]);
 
-    const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId)
-        || vehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle)
-        || vehicles[0]
+    const selectedBookingMission = selectedBookingEvent?.caseId
+        ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
+        : null;
+    const displayVehicles = applySelectedBookingMissionToVehicles(vehicles, selectedBookingMission);
+    const selectedVehicle = displayVehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+        || displayVehicles.find((vehicle) => vehicle.isPrimaryServiceVehicle)
+        || displayVehicles[0]
         || null;
     const vehicleState = minimapMonitorState || selectedVehicle?.status || '대기';
     const vehicleSpeed = minimapVehicleSpeed ?? selectedVehicle?.speed ?? null;
@@ -704,9 +818,6 @@ const ControlCenter = () => {
         selectedVehicle?.mission,
         minimapGoalWaypointNumber
     );
-    const selectedBookingMission = selectedBookingEvent?.caseId
-        ? allMissionsList.find((mission) => mission.caseId === selectedBookingEvent.caseId) || null
-        : null;
     const displayedDashboardMissions = selectedBookingEvent
         ? (selectedBookingMission ? [selectedBookingMission] : [])
         : missionsList;
@@ -745,24 +856,18 @@ const ControlCenter = () => {
         navigate('/operator/login');
     };
 
-    const operatorLoginId = currentUser?.username
-        || currentUser?.loginId
-        || currentUser?.userId
-        || currentUser?.name
-        || 'operator';
-
     const handleGoHome = () => {
         navigate('/');
     };
 
     return (
         <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
-            <header className="h-16 bg-dark text-white flex items-center justify-between px-6 shrink-0 shadow-md z-20">
-                <div className="flex items-center gap-8">
+            <header className="h-16 bg-dark text-white flex items-center gap-4 px-6 shrink-0 shadow-md z-20">
+                <div className="flex min-w-0 flex-1 items-center gap-6">
                     <button
                         type="button"
                         onClick={handleGoHome}
-                        className="flex items-center gap-3 text-left transition-opacity hover:opacity-90"
+                        className="flex shrink-0 items-center gap-3 text-left transition-opacity hover:opacity-90"
                     >
                         <img src="/waddoc-badge-primary.svg" alt="Waddoc logo" className="h-10 w-10 rounded-lg" />
                         <span className="font-bold text-xl tracking-tight">
@@ -771,43 +876,44 @@ const ControlCenter = () => {
                         </span>
                     </button>
 
-                    <div className="flex items-center gap-1 bg-accent-2 p-1 rounded-lg">
-                        <button
+                    <div className="min-w-0 shrink overflow-x-auto">
+                        <div className="inline-flex items-center gap-1 rounded-lg bg-accent-2 p-1">
+                            <button
                             onClick={() => setActiveTab('map')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'map'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <MapIcon className="w-4 h-4" />
                             지도 모니터링
                         </button>
-                        <button
+                            <button
                             onClick={() => setActiveTab('dashboard')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'dashboard'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <LayoutDashboard className="w-4 h-4" />
                             운영 대시보드
                         </button>
-                        <button
+                            <button
                             onClick={() => setActiveTab('patients')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'patients'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <Users className="w-4 h-4" />
                             환자 관리
                         </button>
-                        <button
+                            <button
                             onClick={() => setActiveTab('approvals')}
-                            className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
+                            className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'approvals'
                                 ? 'bg-white text-primary shadow-sm'
                                 : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                }`}
+                            }`}
                         >
                             <UserCheck className="w-4 h-4" />
                             가입 승인
@@ -815,31 +921,31 @@ const ControlCenter = () => {
                         {MONITORING_TAB_ENABLED && (
                             <button
                                 onClick={() => setActiveTab('monitoring')}
-                                className={`flex justify-center items-center gap-2 px-4 py-1.5 w-36 rounded-md text-sm font-bold transition-all ${activeTab === 'monitoring'
+                                className={`flex shrink-0 justify-center items-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-md text-sm font-bold transition-all ${activeTab === 'monitoring'
                                     ? 'bg-white text-primary shadow-sm'
                                     : 'text-slate-300 hover:text-white hover:bg-white/10'
-                                    }`}
+                                }`}
                             >
                                 <BarChart3 className="w-4 h-4" />
                                 시스템 모니터링
                             </button>
                         )}
                     </div>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-5">
-                    <div className="flex items-center gap-2 text-sm">
+                <div className="flex shrink-0 items-center gap-5 pl-2">
+                    <div className="flex shrink-0 items-center gap-2 text-sm whitespace-nowrap">
                         <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
                         <span className="text-slate-300 font-medium">시스템 정상</span>
                     </div>
                     <div className="w-px h-5 bg-white/20"></div>
-                    <div className="text-sm font-medium flex items-center">
-                        <span className="bg-accent-2 px-2.5 py-1 rounded text-xs mr-2 border border-white/10">관리자</span>
-                        {operatorLoginId}님
+                    <div className="flex shrink-0 items-center whitespace-nowrap text-sm font-medium text-slate-100">
+                        관리자 님
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="flex items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded transition-colors"
+                        className="flex shrink-0 items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded transition-colors"
                     >
                         <LogOut className="w-4 h-4" /> 로그아웃
                     </button>
@@ -849,7 +955,7 @@ const ControlCenter = () => {
             <main className="flex-1 overflow-hidden relative">
                 {activeTab === 'map' && (
                     <MapMonitoring
-                        vehicles={vehicles}
+                        vehicles={displayVehicles}
                         selectedVehicle={selectedVehicle}
                         selectedVehicleId={selectedVehicleId}
                         setSelectedVehicleId={setSelectedVehicleId}
@@ -860,7 +966,6 @@ const ControlCenter = () => {
                         vehicleSpeed={effectiveVehicleSpeed}
                         vehicleLocation={vehicleLocation}
                         minimapRouteAlert={effectiveMinimapRouteAlert}
-                        updateIntervalMs={undefined}
                         useMockMinimapData={false}
                     />
                 )}

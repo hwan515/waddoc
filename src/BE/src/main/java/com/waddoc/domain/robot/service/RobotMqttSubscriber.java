@@ -3,6 +3,7 @@ package com.waddoc.domain.robot.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.waddoc.domain.robot.config.MqttTopics;
+import com.waddoc.global.monitoring.MqttMonitoringMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.integration.annotation.ServiceActivator;
@@ -22,6 +23,7 @@ public class RobotMqttSubscriber {
     private final MqttMissionLocationUpdater missionLocationUpdater;
     private final MqttMissionPhaseUpdater missionPhaseUpdater;
     private final RobotSnapshotAssembler robotSnapshotAssembler;
+    private final MqttMonitoringMetrics mqttMonitoringMetrics;
     private final ObjectMapper objectMapper;
 
     @ServiceActivator(inputChannel = "mqttInboundChannel")
@@ -34,7 +36,7 @@ public class RobotMqttSubscriber {
             return;
         }
 
-        boolean shouldBroadcastSnapshot = switch (topic) {
+        boolean shouldBroadcastSnapshot = mqttMonitoringMetrics.recordInboundProcessing(topic, () -> switch (topic) {
             case MqttTopics.ROBOT_ODOM -> {
                 logPoseCacheDiagnostics(topic, stateCache.getLastOdomJson(), payload, true);
                 stateCache.setLastOdomJson(payload);
@@ -65,7 +67,7 @@ public class RobotMqttSubscriber {
                 log.warn("Unhandled MQTT topic: {}", topic);
                 yield false;
             }
-        };
+        });
 
         if (shouldBroadcastSnapshot) {
             sseService.broadcast("snapshot", robotSnapshotAssembler.fromCache(stateCache));

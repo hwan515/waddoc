@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MEASUREMENT_INTRO_DELAY_MS } from './measurementTiming';
 
 const MeasureIntro = () => {
     const navigate = useNavigate();
 
-    // 5초 후 다음 단계(체온 측정 화면)로 자동 이동
+    // 3초 후 다음 단계(체온 측정 화면)로 자동 이동
     useEffect(() => {
         const timer = setTimeout(() => {
             // 체온 측정 화면 라우트로 이동
             navigate('/robot/measure/temperature');
-        }, 5000);
+        }, MEASUREMENT_INTRO_DELAY_MS);
         return () => clearTimeout(timer);
     }, [navigate]);
 

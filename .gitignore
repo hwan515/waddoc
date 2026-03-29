@@ -51,3 +51,6 @@ UserSettings/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local temp logs
+tmp-*.log

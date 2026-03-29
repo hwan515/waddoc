@@ -3,24 +3,28 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #1a1a2e;
-  padding: 20px;
+  padding: clamp(8px, 3vw, 20px);
 }
 
 /* 피처폰 본체 */
 .phone-body {
-  width: 360px;
+  width: min(360px, calc(100vw - 20px));
   background: linear-gradient(145deg, #2c2c2c 0%, #1a1a1a 100%);
   border-radius: 28px;
-  padding: 24px 16px;
+  padding: clamp(18px, 5vw, 24px) clamp(12px, 3.5vw, 16px);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   border: 2px solid #383838;
+  --phone-key-width: clamp(68px, 21vw, 84px);
+  --phone-key-height: clamp(52px, 15vw, 64px);
+  --phone-action-size: clamp(46px, 14vw, 52px);
+  --phone-action-alt-size: clamp(40px, 11vw, 44px);
 }
 
 /* 스피커 그릴 */
@@ -43,7 +47,7 @@
   border-radius: 6px;
   overflow: hidden;
   border: 2px solid #444;
-  height: 420px;
+  height: clamp(320px, 46vh, 400px);
   display: flex;
   flex-direction: column;
   background: #d4e4d0;
@@ -56,4 +60,27 @@
   background: #444;
   border-radius: 50%;
   margin: 4px auto 0;
+}
+
+@media (max-height: 820px) {
+  .feature-phone {
+    padding: 8px;
+  }
+
+  .phone-body {
+    gap: 8px;
+    padding: 16px 12px;
+    --phone-key-width: clamp(64px, 20vw, 76px);
+    --phone-key-height: clamp(46px, 13vw, 56px);
+    --phone-action-size: 48px;
+    --phone-action-alt-size: 40px;
+  }
+
+  .phone-speaker {
+    padding: 2px 0;
+  }
+
+  .phone-screen {
+    height: clamp(300px, 40vh, 340px);
+  }
 }

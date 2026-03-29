@@ -69,7 +69,8 @@ class AuthServiceTest {
                 passwordEncoder,
                 jwtTokenProvider,
                 refreshTokenService,
-                loginEligibilityService
+                loginEligibilityService,
+                true
         );
     }
 
@@ -106,7 +107,9 @@ class AuthServiceTest {
         assertThat(response.getUserId()).isEqualTo(savedGuardian.getPublicId());
         assertThat(response.getLinkId()).isEqualTo(savedLink.getPublicId());
         assertThat(response.getStatus()).isEqualTo("PENDING");
-        assertThat(response.getPatient().getPatientId()).isEqualTo(patient.getPublicId());
+        assertThat(response.getPatient().getNameMasked()).isEqualTo("홍*동");
+        assertThat(response.getPatient().getBirthDate6Masked()).isEqualTo("5803**");
+        assertThat(response.getMessage()).isEqualTo("가입 요청이 접수되었습니다. 관리자 승인 후 로그인할 수 있습니다.");
     }
 
     @Test
@@ -124,7 +127,7 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.signupGuardian(request))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
-                .isEqualTo(ErrorCode.PATIENT_PHONE_NOT_FOUND);
+                .isEqualTo(ErrorCode.GUARDIAN_SIGNUP_FAILED);
 
         verifyNoInteractions(userRepository, passwordEncoder, patientGuardianLinkRepository);
     }
@@ -272,6 +275,7 @@ class AuthServiceTest {
         assertThat(refreshResponse.getUser().getRole()).isEqualTo(Role.DOCTOR);
         assertThat(response.getHeader("Set-Cookie")).contains("refresh_token=new-refresh-token");
         assertThat(response.getHeader("Set-Cookie")).contains("Path=/api/v1/auth");
+        assertThat(response.getHeader("Set-Cookie")).contains("Secure");
 
         verify(loginEligibilityService).validate(user);
         verify(refreshTokenService).delete(refreshToken);
@@ -358,6 +362,7 @@ class AuthServiceTest {
         assertThat(response.getHeader("Set-Cookie")).contains("refresh_token=");
         assertThat(response.getHeader("Set-Cookie")).contains("Max-Age=0");
         assertThat(response.getHeader("Set-Cookie")).contains("Path=/api/v1/auth");
+        assertThat(response.getHeader("Set-Cookie")).contains("Secure");
     }
 
     @Test
@@ -374,7 +379,7 @@ class AuthServiceTest {
 
     private Patient buildPatient() {
         return Patient.builder()
-                .name("Patient Park")
+                .name("홍길동")
                 .birthDate(LocalDate.of(1958, 3, 15))
                 .regionCode("ULLEUNG")
                 .address("Ulleung")

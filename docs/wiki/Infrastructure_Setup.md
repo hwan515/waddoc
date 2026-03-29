@@ -108,7 +108,7 @@ docker compose -f docker-compose.prod.yml restart livekit coturn
 3. `spring-api` 각 인스턴스에서 `8080/actuator/prometheus`가 내부 네트워크 기준으로 열려 있는지 확인한다.
 4. Prometheus target 화면에서 `spring-api`, `kafka-exporter`, `livekit`, `postgres-exporter`, `redis-exporter`, `cadvisor`가 모두 `UP`인지 확인한다.
 5. `https://<DOMAIN>/grafana/`를 직접 열었을 때 monitoring 쿠키가 없으면 `403`이 반환되는지 확인한다.
-6. 관리자 관제 화면의 `시스템 모니터링` 탭에서 `Grafana 열기` 버튼을 눌러 `operator-overview` 대시보드가 열리는지 확인한다.
+6. 관리자 관제 화면의 `시스템 모니터링` 탭에 진입했을 때 내장된 Grafana가 하단 전체 영역에 `operator-overview` 대시보드를 로드하는지 확인한다.
 7. 운영 EC2에서 아래 명령으로 `cadvisor` raw metrics에 `container_label_com_docker_compose_service` 또는 `name` 라벨이 실제로 붙는지 확인한다.
 
 ```bash

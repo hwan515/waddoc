@@ -24,9 +24,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -152,5 +154,32 @@ class LocalDummyDataSeederTest {
         assertThat(result.getPasswordHash()).isEqualTo("matching-hash");
         verify(passwordEncoder, never()).encode("Passw0rd!");
         verify(entityManager, never()).flush();
+    }
+
+    @Test
+    void assertSeedDefaultPasswordConfiguredRejectsBlankPassword() {
+        ReflectionTestUtils.setField(seeder, "defaultPassword", " ");
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(seeder, "assertSeedDefaultPasswordConfigured"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("APP_SEED_DEFAULT_PASSWORD must be set when app.seed.enabled=true");
+    }
+
+    @Test
+    void resolveUpcomingActiveBookingEndDateKeepsUpcomingSeedToSameDay() {
+        LocalDate today = LocalDate.of(2026, 3, 27);
+
+        LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
+
+        assertThat(result).isEqualTo(today);
+    }
+
+    @Test
+    void resolveUpcomingActiveBookingEndDateDoesNotExceedFutureSlotEndDate() {
+        LocalDate today = LocalDate.of(2026, 4, 13);
+
+        LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
+
+        assertThat(result).isEqualTo(today);
     }
 }

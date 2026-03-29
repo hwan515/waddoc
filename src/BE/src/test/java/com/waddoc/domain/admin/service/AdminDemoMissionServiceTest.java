@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -68,6 +69,7 @@ class AdminDemoMissionServiceTest {
 
         when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
         when(missionRepository.findWithDetailsByPublicId(mission.getPublicId())).thenReturn(Optional.of(mission));
+        when(missionRepository.findAllByVehicleIdAndPhaseIn(eq(mission.getVehicleId()), any())).thenReturn(java.util.List.of());
         when(dispatchOutboxRepository.findWithPatientByCareCasePublicId(anyString())).thenReturn(Optional.of(outbox));
         when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -98,6 +100,7 @@ class AdminDemoMissionServiceTest {
 
         when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
         when(missionRepository.findWithDetailsByPublicId(mission.getPublicId())).thenReturn(Optional.of(mission));
+        when(missionRepository.findAllByVehicleIdAndPhaseIn(eq(mission.getVehicleId()), any())).thenReturn(java.util.List.of());
         when(dispatchOutboxRepository.findWithPatientByCareCasePublicId(anyString())).thenReturn(Optional.of(outbox));
         when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -126,6 +129,35 @@ class AdminDemoMissionServiceTest {
 
         assertThat(response.getPhase()).isEqualTo(MissionPhase.ARRIVED);
         assertThat(response.getPreviousPhase()).isEqualTo(MissionPhase.DISPATCHED);
+    }
+
+    @Test
+    void dispatchMission_completesOtherActiveMissionsOnSameVehicle() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission(59);
+        Mission staleMission = buildMission(13);
+        staleMission.updatePhase(MissionPhase.DISPATCHED);
+        staleMission.updatePhase(MissionPhase.EN_ROUTE);
+        staleMission.updatePhase(MissionPhase.ARRIVED);
+
+        DispatchOutbox outbox = DispatchOutbox.builder()
+                .careCase(mission.getCareCase())
+                .regionCode("GIMCHEON")
+                .destination(mission.getDestination())
+                .build();
+
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
+        when(missionRepository.findWithDetailsByPublicId(mission.getPublicId())).thenReturn(Optional.of(mission));
+        when(missionRepository.findAllByVehicleIdAndPhaseIn(eq(mission.getVehicleId()), any()))
+                .thenReturn(java.util.List.of(staleMission));
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId(anyString())).thenReturn(Optional.of(outbox));
+        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AdminDemoMissionActionResponse response =
+                adminDemoMissionService.dispatchMission(admin, mission.getPublicId());
+
+        assertThat(response.getPhase()).isEqualTo(MissionPhase.EN_ROUTE);
+        assertThat(staleMission.getPhase()).isEqualTo(MissionPhase.COMPLETED);
     }
 
     @Test

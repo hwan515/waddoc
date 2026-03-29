@@ -1,9 +1,11 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, X } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
 import { useSSE } from '../../../hooks/useSSE';
 import apiClient from '../../../utils/api';
+import { logoutSession } from '../../../utils/logout';
+import { parsePrescriptionNote } from '../../../utils/prescriptionNote';
 
 // 진료과에 따른 랜덤 증상 생성 함수 (컴포넌트 외부에 배치)
 const getRandomSymptom = (deptName = '') => {
@@ -27,41 +29,151 @@ const getRandomSymptom = (deptName = '') => {
     return general[Math.floor(Math.random() * general.length)];
 };
 
-const INITIAL_RESERVATIONS = [
-    { id: 'RV001', ptNo: 'P1001', name: '김철수', gender: '남', symptom: '감기, 기침', date: '2026-03-13', time: '09:00', status: '진료대기', type: '외래' },
-    { id: 'RV002', ptNo: 'P1002', name: '이영희', gender: '여', symptom: '소화불량', date: '2026-03-13', time: '09:30', status: '예약', type: '외래' },
-    { id: 'RV003', ptNo: 'P1003', name: '박지성', gender: '남', symptom: '발목 통증', date: '2026-03-13', time: '10:00', status: '수납대기', type: '외래' },
-    { id: 'RV004', ptNo: 'P1004', name: '최수아', gender: '여', symptom: '정기 검진', date: '2026-03-13', time: '10:30', status: '완료', type: '외래' },
-];
-
-const INITIAL_PATIENT_DB = {
-    'P1001': { ptNo: 'P1001', name: '김철수', address: '서울시 강남구 테헤란로 123', birthDate: '800101', phone: '01012345678', age: 46, gender: '남', note: '본태성 고혈압 약 복용중' },
-    'P1002': { ptNo: 'P1002', name: '이영희', address: '서울시 서초구 서초대로 45', birthDate: '940505', phone: '01098765432', age: 32, gender: '여', note: '페니실린 알러지 주의' },
-    'P1003': { ptNo: 'P1003', name: '박지성', address: '경기도 성남시 분당구 판교역로 88', birthDate: '810225', phone: '01055556666', age: 45, gender: '남', note: '특이사항 없음' },
-    'P1004': { ptNo: 'P1004', name: '최수아', address: '서울시 송파구 올림픽로 300', birthDate: '000101', phone: '01077778888', age: 26, gender: '여', note: '비염 이력' },
-    'P2001': { ptNo: 'P2001', name: '홍길동', address: '비대면 환자 (주소 미상)', birthDate: '900301', phone: '01011112222', age: 36, gender: '남', note: '타병원 위내시경 결과 가지고 있음' },
+// 예약일 비교를 위해 YYYY-MM-DD 키를 만든다.
+const formatDateKey = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
-const INITIAL_HISTORY_DB = {
-    'P1001': [
-        { id: 'H1', date: '2026-02-13', doctor: '김의사', symptom: '감기 몸살', dx: 'J00 급성 비인두염', rx: '타이레놀 3일치' },
-        { id: 'H2', date: '2026-01-10', doctor: '김의사', symptom: '두통', dx: 'G44 기타 두통 증후군', rx: '이부프로펜 2일치' }
-    ],
-    'P1002': [
-        { id: 'H3', date: '2025-12-25', doctor: '최원장', symptom: '복통', dx: 'K30 기능성 소화불량', rx: '소화제 처방' }
-    ],
-    'P2001': [
-        { id: 'H4', date: '2025-08-10', doctor: '이원장', symptom: '어지러움', dx: 'H811 양성 발작성 현기증', rx: '안정 권유' }
-    ]
+const CASE_SYNC_INTERVAL_MS = 10000;
+const STARTABLE_CASE_STATUSES = new Set(['CREATED', 'PREPARING']);
+const TERMINAL_CASE_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+
+const CASE_STATUS_LABELS = {
+    CREATED: '예약',
+    PREPARING: '준비 중',
+    IN_PROGRESS: '진료 중',
+    COMPLETED: '완료',
+    FAILED: '실패',
+    CANCELLED: '취소',
+};
+
+const mapCaseStatusToLabel = (status) => CASE_STATUS_LABELS[status] || '상태 미상';
+
+const mapGenderLabel = (gender) => {
+    const normalizedGender = String(gender || '').toUpperCase();
+
+    if (normalizedGender === 'MALE') {
+        return '남';
+    }
+    if (normalizedGender === 'FEMALE') {
+        return '여';
+    }
+
+    return '미상';
+};
+
+const mapCaseToReservation = (caseData, existingReservation = {}) => ({
+    ...existingReservation,
+    id: caseData.caseId,
+    bookingId: caseData.bookingId || existingReservation.bookingId,
+    ptNo: caseData.patientId,
+    name: caseData.patientName,
+    gender: mapGenderLabel(caseData.patientGender),
+    symptom: existingReservation.symptom || getRandomSymptom(caseData.departmentName),
+    date: caseData.appointmentDate,
+    time: caseData.startTime?.substring(0, 5) || '00:00',
+    status: mapCaseStatusToLabel(caseData.status),
+    caseStatus: caseData.status || null,
+    type: '비대면',
+    missionPhase: caseData.missionPhase || null,
+    isNotificationOnly: false,
+});
+
+const mapNotificationToReservation = (notif) => ({
+    id: notif.caseId || notif.bookingId,
+    bookingId: notif.bookingId,
+    ptNo: notif.patientId,
+    name: notif.patientName,
+    gender: mapGenderLabel(notif.patientGender),
+    symptom: getRandomSymptom(notif.departmentName),
+    date: notif.appointmentDate,
+    time: notif.startTime?.substring(0, 5) || '00:00',
+    status: mapCaseStatusToLabel(notif.caseStatus || 'CREATED'),
+    caseStatus: notif.caseStatus || 'CREATED',
+    type: '비대면',
+    missionPhase: notif.missionPhase || null,
+    isNotificationOnly: true,
+});
+
+const buildPrescriptionSummary = (prescriptionNote, isPrescriptionIssued) => {
+    const parsedPrescription = parsePrescriptionNote(prescriptionNote);
+
+    if (parsedPrescription.isStructured && parsedPrescription.items.length > 0) {
+        return parsedPrescription.items.map((item) => item.name).join(', ');
+    }
+
+    if (parsedPrescription.rawText) {
+        return parsedPrescription.rawText;
+    }
+
+    return isPrescriptionIssued ? '처방전 등록' : '처방 없음';
+};
+
+const mapConsultationHistoryToRow = (history) => ({
+    id: history.caseId,
+    date: history.consultationDate || '',
+    doctor: history.doctorName || '담당의 미상',
+    symptom: history.symptom || '문진 내용 없음',
+    dx: history.summaryNote || '소견서 없음',
+    rx: buildPrescriptionSummary(
+        history.prescriptionNote,
+        history.isPrescriptionIssued ?? history.prescriptionIssued
+    ),
+});
+
+const getReservationStatusClassName = (reservation) => {
+    switch (reservation.caseStatus) {
+        case 'CREATED':
+            return 'text-blue-700 font-semibold';
+        case 'PREPARING':
+            return 'text-amber-600 font-semibold';
+        case 'IN_PROGRESS':
+            return 'text-red-600 font-bold';
+        case 'FAILED':
+            return 'text-red-700 font-bold';
+        case 'CANCELLED':
+            return 'text-slate-500';
+        default:
+            return 'text-slate-600';
+    }
+};
+
+// 비대면 예약 상태인 항목만 진료 시작 버튼 대상으로 본다.
+const isConsultationStartTarget = (reservation) => {
+    return reservation.type === '비대면' && STARTABLE_CASE_STATUSES.has(reservation.caseStatus);
+};
+
+// 비대면 예약이면서 예약일이 오늘이고 미션이 도착한 상태일 때만 진료 시작을 허용한다.
+const canStartConsultation = (reservation, now) => {
+    if (!isConsultationStartTarget(reservation)) {
+        return false;
+    }
+    if (!reservation.date) {
+        return false;
+    }
+    return reservation.date === formatDateKey(now) && reservation.missionPhase === 'ARRIVED';
+};
+
+// 버튼이 비활성화된 이유를 바로 이해할 수 있도록 안내 문구를 분기한다.
+const getConsultationStartButtonTitle = (reservation, now) => {
+    if (!reservation.date || reservation.date !== formatDateKey(now)) {
+        return '진료 시작은 예약 당일에만 가능합니다.';
+    }
+    if (reservation.missionPhase !== 'ARRIVED') {
+        return '환자 도착 후 활성화됩니다.';
+    }
+    return '진료를 시작합니다.';
 };
 
 const LegacyEMRDashboard = () => {
     const navigate = useNavigate();
-    const logout = useAuthStore((state) => state.logout);
     const doctorDisplayName = useAuthStore((state) => state.user?.name || state.user?.username || '원장');
 
     // SSE 알림 연동
-    const { isConnected, notifications, removeNotification } = useSSE();
+    const { isConnected, notifications, removeNotification, getNotificationKey } = useSSE();
 
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -69,51 +181,39 @@ const LegacyEMRDashboard = () => {
     const [filterType, setFilterType] = useState('전체');
 
     // 2. State (API 연동 데이터)
-    const [reservations, setReservations] = useState(INITIAL_RESERVATIONS);
-    const [patientDB, setPatientDB] = useState(INITIAL_PATIENT_DB);
-    const [historyDB, setHistoryDB] = useState(INITIAL_HISTORY_DB);
+    const [reservations, setReservations] = useState([]);
+    const [patientDB, setPatientDB] = useState({});
+    const [historyDB, setHistoryDB] = useState({});
 
-    // 3. 현재 선택된 환자
-    const [selectedPatientId, setSelectedPatientId] = useState('P1001');
+    // 3. 현재 선택된 예약
+    const [selectedReservationId, setSelectedReservationId] = useState(null);
 
-    const syncAssignedCases = useEffectEvent(async () => {
+    const syncAssignedCases = useCallback(async () => {
         try {
             const response = await apiClient.get('/cases');
             const cases = response.data.cases || [];
 
-            const mappedReservations = cases.map(c => {
-                const mappedGender = String(c.patientGender).toUpperCase() === 'MALE' ? '남' : String(c.patientGender).toUpperCase() === 'FEMALE' ? '여' : '미상';
-                return {
-                    id: c.caseId,
-                    ptNo: c.patientId,
-                    name: c.patientName,
-                    gender: mappedGender,
-                    symptom: getRandomSymptom(c.departmentName),
-                    date: c.appointmentDate,
-                    time: c.startTime?.substring(0, 5) || '00:00',
-                    status: c.status === 'CREATED' ? '예약' : c.status === 'IN_PROGRESS' ? '진료대기' : '완료',
-                    type: '비대면' // 또는 c.missionPhase 기반 처리
-                };
-            });
-
             setReservations(prev => {
-                const combined = [...prev];
-                mappedReservations.forEach(r => {
-                    if (!combined.some(existing => existing.id === r.id)) {
-                        combined.push(r);
-                    }
-                });
-                return combined;
+                const previousById = new Map(prev.map((reservation) => [reservation.id, reservation]));
+                const syncedReservations = cases.map((caseData) => (
+                    mapCaseToReservation(caseData, previousById.get(caseData.caseId))
+                ));
+                const syncedReservationIds = new Set(syncedReservations.map((reservation) => reservation.id));
+                const pendingNotificationReservations = prev.filter((reservation) => (
+                    reservation.isNotificationOnly && !syncedReservationIds.has(reservation.id)
+                ));
+
+                return [...syncedReservations, ...pendingNotificationReservations];
             });
         } catch (err) {
             console.error("Failed to fetch cases from API:", err);
         }
-    });
+    }, []);
 
     // API를 통한 백엔드 케이스(예약) 초기 로드
     useEffect(() => {
         syncAssignedCases();
-    }, []);
+    }, [syncAssignedCases]);
 
     // SSE 연결이 늦게 붙은 경우 누락된 신규 예약을 한 번 더 동기화한다.
     useEffect(() => {
@@ -121,7 +221,15 @@ const LegacyEMRDashboard = () => {
             return;
         }
         syncAssignedCases();
-    }, [isConnected]);
+    }, [isConnected, syncAssignedCases]);
+
+    // MQTT가 갱신한 미션 상태를 의사 EMR에서도 따라가도록 주기적으로 재조회한다.
+    useEffect(() => {
+        const timer = setInterval(() => {
+            syncAssignedCases();
+        }, CASE_SYNC_INTERVAL_MS);
+        return () => clearInterval(timer);
+    }, [syncAssignedCases]);
 
     // 시계 업데이트
     useEffect(() => {
@@ -131,7 +239,42 @@ const LegacyEMRDashboard = () => {
 
     // 환자 선택 (디테일 조회)
     const handlePatientSelect = async (ptNo, caseId) => {
-        setSelectedPatientId(ptNo);
+        setSelectedReservationId(caseId);
+        try {
+            const response = await apiClient.get(`/cases/${caseId}`);
+            const detail = response.data;
+            const pInfo = detail.patient || {};
+
+            let age = '誘몄긽';
+            if (pInfo.birthDate) {
+                const birthYear = new Date(pInfo.birthDate).getFullYear();
+                const currentYear = new Date().getFullYear();
+                age = currentYear - birthYear;
+            }
+
+            setPatientDB(prev => ({
+                ...prev,
+                [ptNo]: {
+                    ptNo: pInfo.patientId,
+                    name: pInfo.name,
+                    address: pInfo.address || '二쇱냼 誘몄긽',
+                    birthDate: pInfo.birthDate || '?곸꽭?뺣낫 誘몄긽',
+                    phone: pInfo.phone || '?곕씫泥??놁쓬',
+                    age: age,
+                    gender: mapGenderLabel(pInfo.gender),
+                    note: detail.intakeSummary?.selectionReason || '?먯꽭???뱀씠?ы빆 ?놁쓬'
+                }
+            }));
+
+            setHistoryDB(prev => ({
+                ...prev,
+                [ptNo]: (detail.consultationHistories || []).map(mapConsultationHistoryToRow)
+            }));
+
+            return;
+        } catch (err) {
+            console.error(`Failed to fetch details for case ${caseId}:`, err);
+        }
 
         // 만약 환자 상세 정보가 아직 API에서 불러와지지 않았거나(미상), SSE로 등록된 임시 상태라면
         if (!patientDB[ptNo] || patientDB[ptNo].age === '미상') {
@@ -146,8 +289,6 @@ const LegacyEMRDashboard = () => {
                     const currentYear = new Date().getFullYear();
                     age = currentYear - birthYear;
                 }
-                const mappedGender = String(pInfo.gender).toUpperCase() === 'MALE' ? '남' : String(pInfo.gender).toUpperCase() === 'FEMALE' ? '여' : '미상';
-
                 setPatientDB(prev => ({
                     ...prev,
                     [ptNo]: {
@@ -157,7 +298,7 @@ const LegacyEMRDashboard = () => {
                         birthDate: pInfo.birthDate || '상세정보 미상',
                         phone: pInfo.phone || '연락처 없음',
                         age: age,
-                        gender: mappedGender,
+                        gender: mapGenderLabel(pInfo.gender),
                         note: detail.intakeSummary?.selectionReason || '자세한 특이사항 없음'
                     }
                 }));
@@ -173,30 +314,18 @@ const LegacyEMRDashboard = () => {
         }
     };
 
-    const handleAcceptNotification = (notif) => {
-        // SSE 신규 예약 알림이 왔을 때 UI상에 즉시 추가
-        const mappedGender = String(notif.patientGender).toUpperCase() === 'MALE' ? '남' : String(notif.patientGender).toUpperCase() === 'FEMALE' ? '여' : '미상';
-        const randomSymptom = getRandomSymptom(notif.departmentName);
+    const handleDismissNotification = (notif) => {
+        removeNotification(getNotificationKey(notif));
+    };
+
+    const handleAcceptNotification = async (notif) => {
+        const notificationReservation = mapNotificationToReservation(notif);
 
         setReservations(prev => {
-            // 중복 방지 (이미 API로 불러왔을 수도 있으므로)
-            if (prev.some(r => r.id === notif.caseId)) return prev;
-            return [...prev, {
-                id: notif.caseId || notif.bookingId, // caseId가 제공되므로 저장
-                bookingId: notif.bookingId,
-                ptNo: notif.patientId,
-                name: notif.patientName,
-                gender: mappedGender,
-                symptom: randomSymptom,
-                date: notif.appointmentDate,
-                time: notif.startTime?.substring(0, 5) || '00:00',
-                status: '예약',
-                type: '비대면'
-            }];
+            if (prev.some(r => r.id === notificationReservation.id)) return prev;
+            return [...prev, notificationReservation];
         });
 
-        // 환자 DB(State)에 임시로 추가하여 상세 패널에서 임시로 보이게 함
-        // 이후 클릭하면 API를 새로 호출해서 덮어씌기됨
         setPatientDB(prev => {
             if (prev[notif.patientId] && prev[notif.patientId].age !== '미상') return prev;
 
@@ -216,7 +345,7 @@ const LegacyEMRDashboard = () => {
                     birthDate: notif.patientBirthDate || '확인필요',
                     phone: notif.patientPhone || '조회필요',
                     age: age,
-                    gender: mappedGender,
+                    gender: mapGenderLabel(notif.patientGender),
                     note: '신규 SSE 접수 (세부내용 조회시 업데이트 됨)'
                 }
             };
@@ -228,14 +357,25 @@ const LegacyEMRDashboard = () => {
             return { ...prev, [notif.patientId]: [] };
         });
 
-        removeNotification(notif.createdAt);
+        try {
+            if (notif.caseId) {
+                await handlePatientSelect(notif.patientId, notif.caseId);
+            } else {
+                setSelectedReservationId(notificationReservation.id);
+            }
+            await syncAssignedCases();
+        } catch (err) {
+            console.error('Failed to apply SSE notification to dashboard:', err);
+        } finally {
+            handleDismissNotification(notif);
+        }
     };
 
     // 현재 선택된 환자 데이터 & 필터링 뷰
     const sortReservations = (a, b) => {
         // 1. 완료 상태를 맨 아래로
-        const isACompleted = a.status === '완료' ? 1 : 0;
-        const isBCompleted = b.status === '완료' ? 1 : 0;
+        const isACompleted = TERMINAL_CASE_STATUSES.has(a.caseStatus) ? 1 : 0;
+        const isBCompleted = TERMINAL_CASE_STATUSES.has(b.caseStatus) ? 1 : 0;
         if (isACompleted !== isBCompleted) {
             return isACompleted - isBCompleted;
         }
@@ -252,12 +392,18 @@ const LegacyEMRDashboard = () => {
     const filteredReservations = [...reservations]
         .filter(res => filterType === '전체' || res.type === filterType)
         .sort(sortReservations);
-        
-    const selectedPatientInfo = patientDB[selectedPatientId] || null;
-    const selectedHistory = historyDB[selectedPatientId] || [];
+    const effectiveSelectedReservationId = filteredReservations.some((reservation) => reservation.id === selectedReservationId)
+        ? selectedReservationId
+        : (filteredReservations.find((reservation) => !TERMINAL_CASE_STATUSES.has(reservation.caseStatus))?.id
+            || filteredReservations[0]?.id
+            || null);
+    const effectiveSelectedReservation = filteredReservations.find((reservation) => reservation.id === effectiveSelectedReservationId) || null;
+    const effectiveSelectedPatientId = effectiveSelectedReservation?.ptNo || null;
+    const selectedPatientInfo = patientDB[effectiveSelectedPatientId] || null;
+    const selectedHistory = historyDB[effectiveSelectedPatientId] || [];
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logoutSession();
         navigate('/emr/login');
     };
 
@@ -321,57 +467,70 @@ const LegacyEMRDashboard = () => {
                         </div>
                     </div>
 
-                    {/* 데이터 테이블 Header 영역 */}
-                    <div className="bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
-                        <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">번호</div>
-                        <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">환자명</div>
-                        <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">성별</div>
-                        <div className="flex-1 min-w-0 border-r border-[#3B62A4] py-1 text-left px-2">병명/증상</div>
-                        <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">날짜</div>
-                        <div className="w-16 shrink-0 border-r border-[#3B62A4] py-1">시간</div>
-                        <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">구분</div>
-                        <div className="w-28 shrink-0 py-1">상태 (액션)</div>
-                    </div>
+                    <div className="flex-1 overflow-y-auto bg-white" style={{ scrollbarGutter: 'stable' }}>
+                        <div className="sticky top-0 z-10 bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
+                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">번호</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">환자명</div>
+                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">성별</div>
+                            <div className="flex-1 min-w-0 border-r border-[#3B62A4] py-1 text-left px-2">병명/증상</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">날짜</div>
+                            <div className="w-16 shrink-0 border-r border-[#3B62A4] py-1">시간</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">구분</div>
+                            <div className="w-28 shrink-0 py-1">상태</div>
+                        </div>
 
-                    {/* 데이터 테이블 Body 영역 */}
-                    <div className="flex-1 overflow-y-auto bg-white">
                         {filteredReservations.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-slate-400 text-sm">
                                 데이터가 없습니다.
                             </div>
                         ) : (
-                            filteredReservations.map((res, idx) => (
-                                <div
-                                    key={res.id}
-                                    onClick={() => handlePatientSelect(res.ptNo, res.id)}
-                                    className={`flex text-xs border-b border-slate-200 cursor-pointer ${selectedPatientId === res.ptNo ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
-                                        }`}
-                                >
-                                    <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200">{idx + 1}</div>
-                                    <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.name}</div>
-                                    <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.gender}</div>
-                                    <div className="flex-1 min-w-0 py-1.5 px-2 text-left border-r border-slate-200 truncate">{res.symptom}</div>
-                                    <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.date?.substring(5)}</div>
-                                    <div className="w-16 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.time}</div>
-                                    <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 text-[#0051C4] font-bold truncate">
-                                        {res.type}
+                            filteredReservations.map((res, idx) => {
+                                const consultationStartTarget = isConsultationStartTarget(res);
+                                const consultationStartEnabled = canStartConsultation(res, currentTime);
+                                const consultationStartButtonTitle = getConsultationStartButtonTitle(res, currentTime);
+
+                                return (
+                                    <div
+                                        key={res.id}
+                                        onClick={() => handlePatientSelect(res.ptNo, res.id)}
+                                        className={`flex text-xs border-b border-slate-200 cursor-pointer ${effectiveSelectedReservationId === res.id ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
+                                            }`}
+                                    >
+                                        <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200">{idx + 1}</div>
+                                        <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.name}</div>
+                                        <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.gender}</div>
+                                        <div className="flex-1 min-w-0 py-1.5 px-2 text-left border-r border-slate-200 truncate">{res.symptom}</div>
+                                        <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.date?.substring(5)}</div>
+                                        <div className="w-16 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.time}</div>
+                                        <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 text-[#0051C4] font-bold truncate">
+                                            {res.type}
+                                        </div>
+                                        <div className="w-28 shrink-0 py-1 text-center flex justify-center items-center">
+                                            {consultationStartTarget ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (!consultationStartEnabled) {
+                                                            return;
+                                                        }
+                                                        handleStartConsultation(res.id);
+                                                    }}
+                                                    disabled={!consultationStartEnabled}
+                                                    title={consultationStartButtonTitle}
+                                                    className={`px-2 py-0.5 text-xs border shadow-sm ${consultationStartEnabled
+                                                        ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-700'
+                                                        : 'bg-slate-200 text-slate-500 border-slate-400 cursor-not-allowed'
+                                                        }`}
+                                                >
+                                                    진료 시작 🎬
+                                                </button>
+                                            ) : (
+                                                <span className={getReservationStatusClassName(res)}>{res.status}</span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="w-28 shrink-0 py-1 text-center flex justify-center items-center">
-                                        {res.type === '비대면' && res.status === '예약' ? (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleStartConsultation(res.id); }}
-                                                className="px-2 py-0.5 bg-blue-600 text-white text-xs border border-blue-800 shadow-sm hover:bg-blue-700"
-                                            >
-                                                진료 시작 🎬
-                                            </button>
-                                        ) : (
-                                            <span className={`${res.status === '진료대기' ? 'text-red-600 font-bold' :
-                                                res.status === '수납대기' ? 'text-orange-600' : 'text-slate-600'
-                                                }`}>{res.status}</span>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
 
@@ -409,7 +568,10 @@ const LegacyEMRDashboard = () => {
                                                 <td colSpan="5" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.address}</td>
                                             </tr>
                                             <tr>
-                                                <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">특이사항 (알러지)</th>
+                                                <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">
+                                                    <span className="block">특이사항</span>
+                                                    <span className="mt-0.5 block text-[11px] leading-tight">(알러지 등)</span>
+                                                </th>
                                                 <td colSpan="5" className="border border-slate-300 px-2 py-1.5 text-red-600 font-bold h-12 align-top">{selectedPatientInfo.note}</td>
                                             </tr>
                                         </tbody>
@@ -466,7 +628,7 @@ const LegacyEMRDashboard = () => {
             <div className="fixed bottom-12 right-4 z-50 flex flex-col gap-3 pointer-events-none">
                 {notifications.map((notif, index) => (
                     <div
-                        key={notif.createdAt || index}
+                        key={getNotificationKey(notif) || index}
                         className="bg-white border-l-4 border-[#0353A4] shadow-2xl rounded-lg w-80 overflow-hidden pointer-events-auto"
                     >
                         <div className="p-4">
@@ -478,7 +640,7 @@ const LegacyEMRDashboard = () => {
                                     <h3 className="font-bold text-slate-800">신규 예약 접수</h3>
                                 </div>
                                 <button
-                                    onClick={() => removeNotification(notif.createdAt)}
+                                    onClick={() => handleDismissNotification(notif)}
                                     className="text-slate-400 hover:text-slate-600 transition-colors"
                                 >
                                     <X className="w-4 h-4" />
@@ -499,13 +661,13 @@ const LegacyEMRDashboard = () => {
                                         onClick={() => handleAcceptNotification(notif)}
                                         className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded shadow-sm hover:bg-green-700 transition"
                                     >
-                                        수락
+                                        확인
                                     </button>
                                     <button
-                                        onClick={() => removeNotification(notif.createdAt)}
+                                        onClick={() => handleDismissNotification(notif)}
                                         className="px-3 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded shadow-sm hover:bg-slate-300 transition"
                                     >
-                                        거절
+                                        닫기
                                     </button>
                                 </div>
                             </div>

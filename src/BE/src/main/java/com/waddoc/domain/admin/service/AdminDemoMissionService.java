@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.EnumSet;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +26,15 @@ public class AdminDemoMissionService {
     private static final EnumSet<MissionPhase> ARRIVE_ALLOWED_PHASES =
             EnumSet.of(MissionPhase.DISPATCHED, MissionPhase.EN_ROUTE);
     private static final EnumSet<MissionPhase> COMPLETE_ALLOWED_PHASES =
+            EnumSet.of(
+                    MissionPhase.DISPATCHED,
+                    MissionPhase.EN_ROUTE,
+                    MissionPhase.ARRIVED,
+                    MissionPhase.VERIFYING,
+                    MissionPhase.CONSULTING,
+                    MissionPhase.RETURNING
+            );
+    private static final EnumSet<MissionPhase> RESETTABLE_ACTIVE_PHASES =
             EnumSet.of(
                     MissionPhase.DISPATCHED,
                     MissionPhase.EN_ROUTE,
@@ -52,6 +62,8 @@ public class AdminDemoMissionService {
         MissionPhase previousPhase = mission.getPhase();
         boolean waypointCommandSent = false;
         boolean dummyCompleted = false;
+
+        completeOtherActiveMissionsOnSameVehicle(mission);
 
         if (mission.getTargetWaypointNumber() != null) {
             robotWaypointCommandClient.dispatchMission(
@@ -100,6 +112,21 @@ public class AdminDemoMissionService {
         advanceMissionTo(mission, MissionPhase.COMPLETED);
         missionRepository.save(mission);
         return AdminDemoMissionActionResponse.of(mission, previousPhase, false, false);
+    }
+
+    private void completeOtherActiveMissionsOnSameVehicle(Mission mission) {
+        String vehicleId = mission.getVehicleId();
+        if (vehicleId == null || vehicleId.isBlank()) {
+            return;
+        }
+
+        List<Mission> activeMissions = missionRepository.findAllByVehicleIdAndPhaseIn(vehicleId, RESETTABLE_ACTIVE_PHASES);
+        for (Mission activeMission : activeMissions) {
+            if (activeMission.getId() != null && activeMission.getId().equals(mission.getId())) {
+                continue;
+            }
+            advanceMissionTo(activeMission, MissionPhase.COMPLETED);
+        }
     }
 
     private Mission getDemoMission(AuthenticatedUser authenticatedUser, String missionId) {

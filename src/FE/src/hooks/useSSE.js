@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import useAuthStore from '../store/authStore';
 
+const getNotificationKey = (notification) => (
+    notification?.caseId || notification?.bookingId || notification?.createdAt
+);
+
 export const useSSE = () => {
     const token = useAuthStore(state => state.token);
     const [isConnected, setIsConnected] = useState(false);
@@ -46,7 +50,16 @@ export const useSSE = () => {
                             try {
                                 const payload = JSON.parse(event.data);
                                 if (payload.type === 'NEW_BOOKING') {
-                                    setNotifications(prev => [payload, ...prev]);
+                                    setNotifications(prev => {
+                                        const nextKey = getNotificationKey(payload);
+                                        if (!nextKey) {
+                                            return [payload, ...prev];
+                                        }
+                                        if (prev.some(notification => getNotificationKey(notification) === nextKey)) {
+                                            return prev;
+                                        }
+                                        return [payload, ...prev];
+                                    });
                                 }
                             } catch (e) {
                                 console.error("Failed to parse SSE notification:", e);
@@ -80,13 +93,16 @@ export const useSSE = () => {
     }, [token, BASE_URL]);
 
     // 알림 읽음 처리 (UI에서 알림을 닫거나 확인할 때 호출)
-    const removeNotification = (createdAt) => {
-        setNotifications(prev => prev.filter(n => n.createdAt !== createdAt));
+    const removeNotification = (notificationKey) => {
+        setNotifications(prev => prev.filter(
+            notification => getNotificationKey(notification) !== notificationKey
+        ));
     };
 
     return {
         isConnected,
         notifications,
-        removeNotification
+        removeNotification,
+        getNotificationKey,
     };
 };

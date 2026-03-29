@@ -6,7 +6,6 @@ const WEEK_START_HOUR = 8;
 const WEEK_SLOT_INTERVAL_MINUTES = 30;
 const WEEK_SLOT_COUNT = 22;
 const WEEK_SLOT_HEIGHT = 40;
-const WEEK_END_HOUR = WEEK_START_HOUR + ((WEEK_SLOT_COUNT * WEEK_SLOT_INTERVAL_MINUTES) / 60);
 
 const formatDateKey = (date) => (
     `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -51,7 +50,7 @@ const getMissionStatusBadgeClass = (status) => {
         case '도착 완료':
             return 'bg-amber-100 text-amber-700 border-amber-200';
         case '진료 중':
-            return 'bg-primary/10 text-primary border-primary/20';
+            return 'bg-amber-100 text-amber-800 border-amber-200';
         case '장애 발생':
             return 'bg-red-100 text-red-700 border-red-200';
         case '종료/복귀':
@@ -79,6 +78,41 @@ const getDemoButtonClass = (variant, disabled) => {
             return 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100';
         default:
             return 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100';
+    }
+};
+
+const getEventVariant = (event) => {
+    switch (event?.missionPhase) {
+        case 'DISPATCHED':
+        case 'EN_ROUTE':
+            return 'dispatching';
+        case 'ARRIVED':
+            return 'arrived';
+        case 'VERIFYING':
+        case 'CONSULTING':
+            return 'consulting';
+        case 'RETURNING':
+        case 'COMPLETED':
+            return 'complete';
+        case 'INCIDENT':
+        case 'FAILED':
+            return 'incident';
+        case 'CREATED':
+            return 'confirmed';
+        default:
+            break;
+    }
+
+    switch (event?.status) {
+        case 'COMPLETED':
+            return 'complete';
+        case 'CANCELLED':
+        case 'NO_SHOW':
+            return 'cancelled';
+        case 'CONFIRMED':
+            return 'confirmed';
+        default:
+            return 'default';
     }
 };
 
@@ -186,17 +220,30 @@ const DashboardView = ({
         setExpandedMonthlyDate((current) => (current === fullDate ? null : fullDate));
     };
 
-    const getEventColor = (status, isMonthly = false) => {
-        switch (status) {
-            case 'COMPLETED':
+    const getEventColor = (event, isMonthly = false) => {
+        switch (getEventVariant(event)) {
+            case 'complete':
                 return isMonthly
                     ? 'bg-green-50 text-green-700 border border-green-100'
                     : 'border-l-green-500 bg-green-50 text-green-900 ring-1 ring-green-100';
-            case 'CANCELLED':
+            case 'incident':
                 return isMonthly
                     ? 'bg-red-50 text-red-700 border border-red-100'
                     : 'border-l-red-500 bg-red-50 text-red-900 ring-1 ring-red-100';
-            case 'CONFIRMED':
+            case 'cancelled':
+                return isMonthly
+                    ? 'bg-red-50 text-red-700 border border-red-100'
+                    : 'border-l-red-500 bg-red-50 text-red-900 ring-1 ring-red-100';
+            case 'arrived':
+                return isMonthly
+                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                    : 'border-l-amber-500 bg-amber-50 text-amber-900 ring-1 ring-amber-100';
+            case 'consulting':
+                return isMonthly
+                    ? 'bg-amber-50 text-amber-800 border border-amber-100'
+                    : 'border-l-amber-500 bg-amber-50 text-amber-900 ring-1 ring-amber-100';
+            case 'dispatching':
+            case 'confirmed':
                 return isMonthly
                     ? 'bg-secondary/30 text-blue-800 border border-blue-100'
                     : 'border-l-primary bg-secondary/35 text-blue-900 ring-1 ring-blue-100';
@@ -330,7 +377,7 @@ const DashboardView = ({
                                                         style={{ top: `${topOffsetPx}px`, height: '36px' }}
                                                         title={`${ev.name} / ${ev.doctor || 'Unassigned'}`}
                                                         aria-pressed={selectedBookingId === ev.id}
-                                                        className={`absolute inset-x-1.5 flex cursor-pointer items-center overflow-hidden rounded-md border-l-4 px-2 py-1 text-left text-xs transition-colors select-none focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev.status, false)}`}
+                                                        className={`absolute inset-x-1.5 flex cursor-pointer items-center overflow-hidden rounded-md border-l-4 px-2 py-1 text-left text-xs transition-colors select-none focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev, false)}`}
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="truncate text-[11px] font-bold leading-4">
@@ -384,7 +431,7 @@ const DashboardView = ({
                                                                     type="button"
                                                                     onClick={() => onBookingSelect?.(ev)}
                                                                     aria-pressed={selectedBookingId === ev.id}
-                                                                    className={`flex items-center justify-between overflow-hidden whitespace-nowrap rounded px-1.5 py-0.75 text-left text-[10px] leading-tight shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev.status, true)}`}
+                                                                    className={`flex items-center justify-between overflow-hidden whitespace-nowrap rounded px-1.5 py-0.75 text-left text-[10px] leading-tight shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 ${selectedBookingId === ev.id ? 'ring-2 ring-inset ring-primary/20' : ''} ${getEventColor(ev, true)}`}
                                                                 >
                                                                     <span className="mr-1 truncate font-bold">{ev.name}</span>
                                                                     <span className="shrink-0 text-[9px] font-medium opacity-80">{formatScheduleTime(ev.timeStr)}</span>
@@ -413,7 +460,7 @@ const DashboardView = ({
             </div>
 
             {/* 우측: 현황 및 통계 패널 */}
-            <div className="w-112.5 flex flex-col gap-4 shrink-0">
+            <div className="w-[clamp(22rem,28vw,26rem)] flex flex-col gap-4 shrink-0">
                 {/* 우측 상단: 금일 미션 (출동) 현황 */}
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     <div className="h-14 border-b border-slate-100 flex items-center justify-between px-5 bg-slate-50/50 shrink-0">
@@ -499,7 +546,7 @@ const DashboardView = ({
                                             >
                                                 {pendingDemoAction?.missionId === m.id && pendingDemoAction?.action === 'dispatch'
                                                     ? '출동 처리 중...'
-                                                    : '시연 출동'}
+                                                    : '출동'}
                                             </button>
                                         )}
                                         {m.canArrive && (
@@ -541,10 +588,10 @@ const DashboardView = ({
                                 {dispatchingMissionCount}<span className="text-sm font-bold text-blue-700/70 ml-1">건</span>
                             </div>
                         </div>
-                        <div className="bg-secondary/30 rounded-lg border border-blue-100 p-4 flex flex-col justify-center">
-                            <span className="text-xs font-bold text-blue-800 mb-1">진료 중</span>
-                            <div className="text-2xl font-black text-primary">
-                                {consultingMissionCount}<span className="text-sm font-bold text-primary/60 ml-1">건</span>
+                        <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 flex flex-col justify-center">
+                            <span className="text-xs font-bold text-amber-800 mb-1">진료 중</span>
+                            <div className="text-2xl font-black text-amber-900">
+                                {consultingMissionCount}<span className="text-sm font-bold text-amber-700/70 ml-1">건</span>
                             </div>
                         </div>
                         <div className="bg-green-50 rounded-lg border border-green-100 p-4 flex flex-col justify-center">

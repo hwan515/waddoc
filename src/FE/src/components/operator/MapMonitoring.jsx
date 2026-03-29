@@ -1,4 +1,4 @@
-import { Navigation, Truck, Video, AlertOctagon, AlertTriangle } from 'lucide-react';
+import { Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
 import MinimapPanel from './MinimapPanel';
 import apiClient from '../../utils/api';
 
@@ -27,7 +27,7 @@ const getStatusBadge = (status) => {
             return 'bg-amber-100 text-amber-700 border-amber-200';
         case '진료 중':
         case '본인 확인':
-            return 'bg-purple-100 text-purple-700 border-purple-200';
+            return 'bg-amber-100 text-amber-800 border-amber-200';
         case '복귀 중':
         case '종료/복귀':
             return 'bg-yellow-100 text-yellow-700 border-yellow-200';
@@ -54,7 +54,6 @@ const MapMonitoring = ({
     vehicleSpeed = 0,
     vehicleLocation = null,
     minimapRouteAlert = null,
-    updateIntervalMs = null,
     useMockMinimapData = false,
 }) => {
     
@@ -77,32 +76,20 @@ const MapMonitoring = ({
 
     return (
         <div className="flex h-full gap-4 p-4">
-            <div className="relative min-w-0 flex-1 overflow-hidden rounded-4xl">
-                {minimapRouteAlert && (
-                    <div className="absolute left-4 top-4 z-10 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-amber-900 shadow-lg shadow-amber-900/10 backdrop-blur-sm">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                        <div className="min-w-0">
-                            <div className="text-xs font-bold">{minimapRouteAlert.title}</div>
-                            <div className="text-[11px] text-amber-800/80">{minimapRouteAlert.detail}</div>
-                        </div>
-                    </div>
-                )}
-
-                <div className="h-full overflow-hidden rounded-4xl">
-                    <MinimapPanel
-                        vehiclePose={minimapVehiclePose}
-                        pathPoints={minimapPathPoints}
-                        fullPathPoints={minimapFullPathPoints}
-                        vehicleState={vehicleState}
-                        vehicleSpeed={vehicleSpeed}
-                        vehicleLocation={vehicleLocation}
-                        updateIntervalMs={updateIntervalMs}
-                        showMockBadge={useMockMinimapData}
-                    />
-                </div>
+            <div className="min-w-0 flex-1 basis-0">
+                <MinimapPanel
+                    vehiclePose={minimapVehiclePose}
+                    pathPoints={minimapPathPoints}
+                    fullPathPoints={minimapFullPathPoints}
+                    vehicleState={vehicleState}
+                    vehicleSpeed={vehicleSpeed}
+                    vehicleLocation={vehicleLocation}
+                    routeAlert={minimapRouteAlert}
+                    showMockBadge={useMockMinimapData}
+                />
             </div>
 
-            <div className="flex w-100 shrink-0 flex-col gap-4">
+            <div className="flex w-[clamp(22rem,28vw,26rem)] shrink-0 flex-col gap-4">
                 <button
                     onClick={handleEStop}
                     className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-600/30 transition-transform hover:bg-red-700 active:scale-100"

@@ -4,7 +4,7 @@ import './StatusBar.css';
 const PHASE_LABELS: Partial<Record<IntakePhase, string>> = {
   IDLE: '대기 중',
   GREETING: '연결 중...',
-  MENU_SELECT: '메뉴 선택',
+  MENU_SELECT: '예약 선택',
   IDENTIFY_AUTO: '환자 식별 중',
   IDENTIFY_BY_INPUT: '전화번호 입력',
   DEPARTMENT_SELECT: '진료과 선택',
@@ -20,19 +20,15 @@ const PHASE_LABELS: Partial<Record<IntakePhase, string>> = {
 
 interface StatusBarProps {
   phase: IntakePhase;
-  isActive: boolean;
 }
 
-export default function StatusBar({ phase, isActive }: StatusBarProps) {
+export default function StatusBar({ phase }: StatusBarProps) {
   return (
     <div className="status-bar">
       <div className="status-bar-left">
         <span className="status-label">{PHASE_LABELS[phase] ?? phase}</span>
       </div>
       <div className="status-bar-center">왔닥</div>
-      <div className="status-bar-right">
-        {isActive && <span className="status-timer">00:00</span>}
-      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Activity, User, Calendar as CalendarIcon, List, LogOut } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import apiClient from '../../utils/api';
+import { logoutSession } from '../../utils/logout';
 import CalendarView from '../../components/patient/CalendarView';
 import ListView from '../../components/patient/ListView';
 import { parsePrescriptionNote } from '../../utils/prescriptionNote';
@@ -10,7 +11,6 @@ import { parsePrescriptionNote } from '../../utils/prescriptionNote';
 const PatientPortal = () => {
     const [activeTab, setActiveTab] = useState('list');
     const navigate = useNavigate();
-    const logout = useAuthStore(state => state.logout);
 
     // 초기 상태에서 이름은 하드코딩된 '이름' 대신 임시 텍스트 사용
     const [user, setUser] = useState({ name: '불러오는 중...', stats: { totalVisits: 0, nextReservation: '없음' } });
@@ -90,8 +90,8 @@ const PatientPortal = () => {
         }
     }, []);
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logoutSession();
         navigate('/');
     };
 

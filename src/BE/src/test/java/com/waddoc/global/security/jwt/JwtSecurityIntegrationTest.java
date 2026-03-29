@@ -1,7 +1,6 @@
 package com.waddoc.global.security.jwt;
 
 import com.waddoc.domain.mission.entity.Mission;
-import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.user.entity.Role;
 import org.junit.jupiter.api.Test;
@@ -24,7 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.kafka.listener.auto-startup=false",
-                "spring.kafka.admin.auto-create=false"
+                "spring.kafka.admin.auto-create=false",
+                "app.seed.default-password=ci-seed-password"
         }
 )
 class JwtSecurityIntegrationTest {
@@ -82,10 +82,7 @@ class JwtSecurityIntegrationTest {
 
     @Test
     void bearerAccessTokenCanReadMissionDetail() {
-        String missionId = missionRepository.findAllForAdminDashboard().stream()
-                .findFirst()
-                .orElseThrow()
-                .getPublicId();
+        String missionId = seededDashboardMission().getPublicId();
 
         String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
         HttpHeaders headers = new HttpHeaders();
@@ -104,10 +101,7 @@ class JwtSecurityIntegrationTest {
 
     @Test
     void telemetryApiKeyCanPostMissionTelemetry() {
-        Mission mission = missionRepository.findAllForAdminDashboard().stream()
-                .filter(candidate -> candidate.getPhase() == MissionPhase.DISPATCHED)
-                .findFirst()
-                .orElseThrow();
+        Mission mission = seededDashboardMission();
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-API-Key", telemetryApiKey);
@@ -155,6 +149,83 @@ class JwtSecurityIntegrationTest {
 
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(response.getBody()).contains("\"openapi\"");
+    }
+
+    @Test
+    void bookingDetailRejectsUnauthenticatedRequest() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security",
+                HttpMethod.GET,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("AUTH_UNAUTHORIZED");
+    }
+
+    @Test
+    void authenticatedBookingDetailPassesSecurityBoundary() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_guardian", Role.GUARDIAN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(response.getBody()).contains("BOOKING_NOT_FOUND");
+    }
+
+    @Test
+    void bookingCancelRejectsUnauthenticatedRequest() {
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security/cancel",
+                HttpMethod.POST,
+                HttpEntity.EMPTY,
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
+        assertThat(response.getBody()).contains("AUTH_UNAUTHORIZED");
+    }
+
+    @Test
+    void guardianCannotCancelBookingThroughAuthenticatedEndpoint() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_guardian", Role.GUARDIAN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security/cancel",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(403);
+        assertThat(response.getBody()).contains("AUTH_FORBIDDEN");
+    }
+
+    @Test
+    void adminCanReachAuthenticatedBookingCancelEndpoint() {
+        String accessToken = jwtTokenProvider.createAccessToken("usr_admin", Role.ADMIN);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/bookings/bk_missing_security/cancel",
+                HttpMethod.POST,
+                new HttpEntity<>(headers),
+                String.class
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(404);
+        assertThat(response.getBody()).contains("BOOKING_NOT_FOUND");
     }
 
     @Test
@@ -246,5 +317,11 @@ class JwtSecurityIntegrationTest {
     private String extractCookieValue(String setCookie) {
         assertThat(setCookie).isNotBlank();
         return setCookie.split(";", 2)[0];
+    }
+
+    private Mission seededDashboardMission() {
+        return missionRepository.findAllForAdminDashboard().stream()
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected at least one seeded dashboard mission for JwtSecurityIntegrationTest"));
     }
 }

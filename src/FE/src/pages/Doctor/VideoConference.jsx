@@ -70,15 +70,24 @@ const createFallbackDetails = (caseId) => ({
     doctorName: '담당의 미확인',
 });
 
+const extractApiErrorMessage = (error, fallbackMessage) => (
+    error?.response?.data?.message
+    || error?.response?.data?.error
+    || error?.message
+    || fallbackMessage
+);
+
 const VideoConference = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const isDemoMode = !id || id === 'test-room' || id.startsWith('RV_');
+    const isDemoMode = !id || id === 'test-room';
 
     const [isJoined, setIsJoined] = useState(false);
     const [livekitToken, setLivekitToken] = useState('');
     const [livekitUrl, setLivekitUrl] = useState('');
     const [sessionId, setSessionId] = useState(null);
+    const [joinError, setJoinError] = useState('');
+    const [isJoining, setIsJoining] = useState(false);
     const isDoctorEndingRef = useRef(false);
 
     const [micEnabled, setMicEnabled] = useState(true);
@@ -168,11 +177,19 @@ const VideoConference = () => {
     };
 
     const handleJoin = async () => {
+        if (isJoining) {
+            return;
+        }
+
+        setJoinError('');
+        setIsJoining(true);
+
         try {
             if (isDemoMode) {
                 console.warn('임시(데모) 예약건이므로 방 생성 API를 건너뛰고 데모 모드로 전환합니다.');
                 setLivekitToken('test-token');
                 setLivekitUrl('wss://test.livekit.cloud');
+                setSessionId(null);
                 setIsJoined(true);
                 return;
             }
@@ -183,24 +200,32 @@ const VideoConference = () => {
             console.log(`➜ 호출될 엔드포인트: /api/v1/cases/${id}/sessions`);
 
             const response = await apiClient.post(`/cases/${id}/sessions`);
+            const doctorToken = response.data?.doctorToken;
+            const nextLivekitUrl = response.data?.room?.livekitUrl;
+            const nextSessionId = response.data?.sessionId;
 
-            if (response.data && response.data.doctorToken) {
-                setLivekitToken(response.data.doctorToken);
-                setLivekitUrl(response.data.room?.livekitUrl || 'wss://test.livekit.cloud');
-                setSessionId(response.data.sessionId);
-
-                console.log("✅ 의사 세션(LiveKit) 생성 완료:", response.data);
+            if (!doctorToken || !nextLivekitUrl || !nextSessionId) {
+                throw new Error('진료실 연결 정보가 올바르지 않습니다.');
             }
+
+            setLivekitToken(doctorToken);
+            setLivekitUrl(nextLivekitUrl);
+            setSessionId(nextSessionId);
+
+            console.log("✅ 의사 세션(LiveKit) 생성 완료:", response.data);
 
             // 현재 단계(LiveKit 적용)에서는 발급받은 토큰으로 방에 입장
             setIsJoined(true);
 
         } catch (error) {
             console.error("❌ 세션 생성 API 호출 실패:", error);
-            console.warn("백엔드 세션 생성 API 호출에 실패했습니다.\n데모 진행을 위해 가짜 토큰으로 임시 입장합니다.");
-            setLivekitToken('test-token');
-            setLivekitUrl('wss://test.livekit.cloud');
-            setIsJoined(true);
+            setLivekitToken('');
+            setLivekitUrl('');
+            setSessionId(null);
+            setIsJoined(false);
+            setJoinError(extractApiErrorMessage(error, '진료실 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.'));
+        } finally {
+            setIsJoining(false);
         }
     };
 
@@ -218,7 +243,8 @@ const VideoConference = () => {
                 videoEnabled={videoEnabled}
                 setVideoEnabled={setVideoEnabled}
                 onJoin={handleJoin}
-                localVideoRef={null}
+                errorMessage={joinError}
+                isJoining={isJoining}
             />
         );
     }

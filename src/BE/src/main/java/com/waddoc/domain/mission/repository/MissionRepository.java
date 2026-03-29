@@ -22,6 +22,8 @@ public interface MissionRepository extends JpaRepository<Mission, Long> {
 
     boolean existsByVehicleIdAndPhaseIn(String vehicleId, Collection<MissionPhase> phases);
 
+    List<Mission> findAllByVehicleIdAndPhaseIn(String vehicleId, Collection<MissionPhase> phases);
+
     List<Mission> findAllByCareCaseIn(List<CareCase> careCases);
 
     @Query("""

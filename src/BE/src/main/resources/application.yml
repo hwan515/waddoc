@@ -73,6 +73,9 @@ monitoring:
     cookie-name: monitoring_access
     cookie-path: /grafana/
     cookie-max-age: 28800
+auth:
+  refresh-cookie:
+    secure: true
 springdoc:
   api-docs:
     path: /swagger/spring/openapi.json
