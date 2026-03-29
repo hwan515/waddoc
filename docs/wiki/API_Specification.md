@@ -884,7 +884,9 @@
       "departmentName": "내과",
       "appointmentDate": "2026-03-11",
       "startTime": "10:00",
-      "missionPhase": "VERIFYING"
+      "missionPhase": "VERIFYING",
+      "sessionId": "ses_L6pQr1",
+      "sessionStatus": "READY"
     }
   ],
   "totalCount": 1
@@ -902,6 +904,8 @@
 | `cases[].appointmentDate` | string | 예약 날짜 (`YYYY-MM-DD`) |
 | `cases[].startTime` | string | 예약 시작 시간 |
 | `cases[].missionPhase` | string | 연결된 미션 단계 |
+| `cases[].sessionId` | string \| null | 연결된 화상진료 세션 ID |
+| `cases[].sessionStatus` | string \| null | 연결된 화상진료 세션 상태 (`CREATED`, `READY`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `ABANDONED`) |
 | `totalCount` | int | 조회된 케이스 수 |
 
 ---
