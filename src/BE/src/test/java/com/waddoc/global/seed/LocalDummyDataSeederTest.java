@@ -171,12 +171,12 @@ class LocalDummyDataSeederTest {
     }
 
     @Test
-    void resolveUpcomingActiveBookingEndDateKeepsUpcomingSeedToSameDay() {
+    void resolveUpcomingActiveBookingEndDateReturnsYesterdayWhenUpcomingSeedIsDisabled() {
         LocalDate today = LocalDate.of(2026, 3, 27);
 
         LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
 
-        assertThat(result).isEqualTo(today);
+        assertThat(result).isEqualTo(today.minusDays(1));
     }
 
     @Test
@@ -185,6 +185,37 @@ class LocalDummyDataSeederTest {
 
         LocalDate result = LocalDummyDataSeeder.resolveUpcomingActiveBookingEndDate(today);
 
-        assertThat(result).isEqualTo(today);
+        assertThat(result).isEqualTo(today.minusDays(1));
+    }
+
+    @Test
+    void resolveHistoricalSeedEndDateUsesYesterdayInMarch() {
+        LocalDate today = LocalDate.of(2026, 3, 29);
+
+        LocalDate result = LocalDummyDataSeeder.resolveHistoricalSeedEndDate(today);
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 3, 28));
+    }
+
+    @Test
+    void resolveHistoricalSeedEndDateStopsAtMarchEndAfterMarch() {
+        LocalDate today = LocalDate.of(2026, 4, 13);
+
+        LocalDate result = LocalDummyDataSeeder.resolveHistoricalSeedEndDate(today);
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 3, 31));
+    }
+
+    @Test
+    void resolvePrimaryPatientHistoricalConsultationDatePinsToMarch22WhenAvailable() {
+        LocalDate today = LocalDate.of(2026, 3, 29);
+
+        LocalDate result = LocalDummyDataSeeder.resolvePrimaryPatientHistoricalConsultationDate(
+                today,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 3, 28)
+        );
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 3, 22));
     }
 }

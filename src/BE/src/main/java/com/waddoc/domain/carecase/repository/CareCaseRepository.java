@@ -53,11 +53,13 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     join fetch c.doctor d
                     join fetch d.user du
                     left join fetch c.intakeSession i
+                    where (b.channel is null or b.channel <> 'OUTPATIENT')
                     order by b.appointmentDate desc, b.startTime desc
                     """,
             countQuery = """
                     select count(c)
                     from CareCase c
+                    where (c.booking.channel is null or c.booking.channel <> 'OUTPATIENT')
                     """
     )
     Page<CareCase> findAllForAdmin(Pageable pageable);
@@ -72,6 +74,7 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     join fetch d.user du
                     left join fetch c.intakeSession i
                     where b.appointmentDate = :appointmentDate
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     order by b.appointmentDate desc, b.startTime desc
                     """,
             countQuery = """
@@ -79,6 +82,7 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     from CareCase c
                     join c.booking b
                     where b.appointmentDate = :appointmentDate
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     """
     )
     Page<CareCase> findAllForAdminByAppointmentDate(
@@ -96,12 +100,14 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     join fetch d.user du
                     left join fetch c.intakeSession i
                     where c.status = :status
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     order by b.appointmentDate desc, b.startTime desc
                     """,
             countQuery = """
                     select count(c)
                     from CareCase c
                     where c.status = :status
+                      and (c.booking.channel is null or c.booking.channel <> 'OUTPATIENT')
                     """
     )
     Page<CareCase> findAllForAdminByStatus(
@@ -120,6 +126,7 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     left join fetch c.intakeSession i
                     where b.appointmentDate = :appointmentDate
                       and c.status = :status
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     order by b.appointmentDate desc, b.startTime desc
                     """,
             countQuery = """
@@ -128,6 +135,7 @@ public interface CareCaseRepository extends JpaRepository<CareCase, Long> {
                     join c.booking b
                     where b.appointmentDate = :appointmentDate
                       and c.status = :status
+                      and (b.channel is null or b.channel <> 'OUTPATIENT')
                     """
     )
     Page<CareCase> findAllForAdminByAppointmentDateAndStatus(
