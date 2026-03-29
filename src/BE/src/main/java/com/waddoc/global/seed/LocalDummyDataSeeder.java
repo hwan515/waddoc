@@ -9,7 +9,9 @@ import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.consultation.entity.ConnectionState;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
 import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
+import com.waddoc.domain.consultation.entity.ConsultationSummary;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.dispatch.entity.DispatchOutbox;
 import com.waddoc.domain.dispatch.entity.DispatchOutboxStatus;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
@@ -72,6 +74,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private static final String PHONE_CHANNEL = IntakeChannel.PHONE.name();
     private static final String WEB_SIMULATOR_CHANNEL = IntakeChannel.WEB_SIMULATOR.name();
+    private static final String OUTPATIENT_CHANNEL = "OUTPATIENT";
     private static final String ADMIN_USERNAME = "seed_prod_admin";
     private static final String ADMIN_NAME = "운영 더미 관리자";
     private static final String LIVEKIT_URL_PLACEHOLDER = "__SET_LIVEKIT_URL__";
@@ -86,6 +89,15 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private static final int TOPOLOGICAL_WAYPOINT_END = 229;
     private static final int TARGET_PATIENT_WAYPOINT_END = 142;
     private static final int SYNTHETIC_ADDRESS_BUILDING_NUMBER_OFFSET = 3;
+    private static final String PRIMARY_PATIENT_KEY = "gim_wp_059";
+    private static final String PRIMARY_PATIENT_NAME = "김원준";
+    private static final String PRIMARY_PATIENT_PHONE = "01049163720";
+    private static final String PRIMARY_PATIENT_ADDRESS = "경상북도 김천시 증산면 장전4길 14";
+    private static final String PRIMARY_PATIENT_DOCTOR_USERNAME = "seed_prod_doc_im_01";
+    private static final String PRIMARY_PATIENT_CONSULTATION_SUMMARY =
+            "혈압이 높게 유지되어 기존 고혈압 약 복용을 이어가고 염분 섭취를 줄이도록 안내함.";
+    private static final String PRIMARY_PATIENT_PRESCRIPTION_NOTE =
+            "기존 고혈압 약은 동일하게 복용하고 아침, 저녁 혈압을 기록하도록 교육함.";
 
     private static final List<String> SYNTHETIC_ROAD_NAMES = List.of(
             "황항길",
@@ -142,6 +154,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     );
     private static final int TARGET_HISTORICAL_MISSION_COUNT = 50;
     private static final int PENDING_GUARDIAN_LINK_COUNT = 5;
+    private static final int OUTPATIENT_BOOKING_COUNT = 6;
 
     private static final List<DoctorSeed> DOCTOR_SEEDS = List.of(
             new DoctorSeed("seed_prod_doc_im_01", "김도현", "INTERNAL_MEDICINE", "내과"),
@@ -167,6 +180,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private final IntakeSessionRepository intakeSessionRepository;
     private final MissionRepository missionRepository;
     private final ConsultationSessionRepository consultationSessionRepository;
+    private final ConsultationSummaryRepository consultationSummaryRepository;
     private final DispatchOutboxRepository dispatchOutboxRepository;
     private final VehicleRepository vehicleRepository;
     private final PasswordEncoder passwordEncoder;
@@ -188,12 +202,14 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         Map<String, Vehicle> vehiclesByCode = seedVehicles();
         List<PatientSeed> patientSeeds = buildPatientSeeds();
         Map<String, Patient> patientsByKey = seedPatients(patientSeeds, adminUser);
+        syncPrimaryPatientCreatedAt(today, patientsByKey);
         pruneLegacySeedPatients(patientsByKey);
         Map<String, User> guardiansByPatientKey = seedGuardians(patientSeeds, adminUser);
 
         seedGuardianLinks(patientSeeds, patientsByKey, guardiansByPatientKey, adminUser);
         seedHistoricalBookings(today, doctorsByUsername, patientsByKey, vehiclesByCode, patientSeeds);
         seedUpcomingBookings(today, doctorsByUsername, patientsByKey, vehiclesByCode, patientSeeds);
+        seedOutpatientBookings(today, doctorsByUsername, patientsByKey, patientSeeds);
         seedFutureSlots(today, doctorsByUsername);
 
         log.info("Prod-like dummy data synced. adminUsername={}, doctorCount={}, vehicleCodes={}, patientCount={}, guardianCount={}, futureSlotEnd={}",
@@ -269,6 +285,24 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     seed.referenceImagePath(), adminUser));
         }
         return patientsByKey;
+    }
+
+    private void syncPrimaryPatientCreatedAt(LocalDate today, Map<String, Patient> patientsByKey) {
+        Patient primaryPatient = patientsByKey.get(PRIMARY_PATIENT_KEY);
+        if (primaryPatient == null || primaryPatient.getId() == null) {
+            return;
+        }
+
+        entityManager.createNativeQuery("""
+                update patient
+                   set created_at = ?1
+                 where patient_id = ?2
+                """)
+                .setParameter(1, LocalDate.of(today.getYear(), 3, 1).atStartOfDay())
+                .setParameter(2, primaryPatient.getId())
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.refresh(primaryPatient);
     }
 
     private void pruneLegacySeedPatients(Map<String, Patient> patientsByKey) {
@@ -518,8 +552,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     IntakeChannel.PHONE,
                     doctor.getDepartment(),
                     doctor.getDepartmentName(),
-                    "3월 과거 예약 시드 생성",
-                    buildSelectionReason(doctor, seed, bookingPlan.visitSequence()),
+                    "",
                     List.of(slot.getPublicId()),
                     CompletionReason.BOOKING_CREATED
             );
@@ -569,6 +602,15 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     consultationEndedAt,
                     20
             );
+            if (PRIMARY_PATIENT_KEY.equals(seed.key()) && historyStart.equals(appointmentDate)) {
+                ensureConsultationSummary(
+                        session,
+                        PRIMARY_PATIENT_CONSULTATION_SUMMARY,
+                        true,
+                        PRIMARY_PATIENT_PRESCRIPTION_NOTE,
+                        true
+                );
+            }
         }
     }
 
@@ -606,7 +648,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     IntakeChannel.WEB_SIMULATOR,
                     doctor.getDepartment(),
                     doctor.getDepartmentName(),
-                    "당일 활성 예약 시드 생성",
+                    "",
                     List.of(slot.getPublicId()),
                     CompletionReason.BOOKING_CREATED
             );
@@ -645,6 +687,35 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
             DispatchOutbox dispatchOutbox = ensureDispatchOutbox(careCase, patient.getRegionCode(), patient.getAddress());
             syncDispatchOutboxState(dispatchOutbox, DispatchOutboxStatus.COMPLETED);
+        }
+    }
+
+    private void seedOutpatientBookings(LocalDate today, Map<String, DoctorProfile> doctorsByUsername,
+            Map<String, Patient> patientsByKey, List<PatientSeed> patientSeeds) {
+        if (today.isAfter(FUTURE_SLOT_END_DATE)) {
+            return;
+        }
+
+        int outpatientBookingCount = Math.min(
+                OUTPATIENT_BOOKING_COUNT,
+                Math.max(0, Math.min(patientSeeds.size() - DOCTOR_SEEDS.size(), DOCTOR_SEEDS.size()))
+        );
+        if (outpatientBookingCount <= 0) {
+            return;
+        }
+
+        for (int index = 0; index < outpatientBookingCount; index++) {
+            PatientSeed seed = patientSeeds.get(DOCTOR_SEEDS.size() + index);
+            Patient patient = getPatient(patientsByKey, seed.key());
+            DoctorProfile doctor = getDoctor(doctorsByUsername, DOCTOR_SEEDS.get(index).username());
+            LocalDate appointmentDate = today.plusDays(1 + (index / 3));
+            LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(8 + index);
+            LocalTime endTime = startTime.plusMinutes(30);
+
+            ScheduleSlot slot = ensureSlot(doctor, appointmentDate, startTime, endTime);
+            Booking booking = ensureBooking(patient, slot, OUTPATIENT_CHANNEL, BookingStatus.CONFIRMED, null, null);
+            CareCase careCase = ensureCareCase(booking, null);
+            syncCaseStatus(careCase, CaseStatus.CREATED);
         }
     }
 
@@ -822,7 +893,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             default -> "복용 약 알러지 여부를 다시 확인할 필요가 있음";
         };
         String visitType = visitSequence > 1 ? "재진" : "초진";
-        return "(더미 예약) %s 증상으로 %s %s 예약. 특이사항(알러지): %s"
+        return " %s 증상으로 %s %s 예약. 특이사항(알러지): %s"
                 .formatted(symptom, doctor.getDepartmentName(), visitType, allergyNote);
     }
 
@@ -1393,51 +1464,40 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private IntakeSession ensureIntakeSession(Patient patient, String callerNumber, IntakeChannel channel,
             String department, String departmentName, String selectionReason, List<String> offeredSlotIds,
             CompletionReason completionReason) {
-        IntakeSession intakeSession = intakeSessionRepository
-                .findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, channel)
-                .orElseGet(() -> intakeSessionRepository.save(
-                        IntakeSession.builder()
-                                .callerNumber(callerNumber)
-                                .channel(channel)
-                                .build()));
-
-        if (!Objects.equals(intakeSession.getCallerNumber(), callerNumber)) {
-            entityManager.createQuery("""
-                    update IntakeSession i
-                       set i.callerNumber = :callerNumber
-                     where i.id = :id
-                    """)
-                    .setParameter("callerNumber", callerNumber)
-                    .setParameter("id", intakeSession.getId())
-                    .executeUpdate();
-            entityManager.flush();
-            entityManager.refresh(intakeSession);
-        }
-
-        if (intakeSession.getPatient() == null || !Objects.equals(intakeSession.getPatient().getId(), patient.getId())) {
-            intakeSession.bindPatient(patient);
-        }
-
-        intakeSession.recordSelection(department, departmentName, ConfidenceLevel.HIGH, false, selectionReason,
-                offeredSlotIds);
-        if (intakeSession.isActive()) {
-            intakeSession.complete(completionReason);
-        }
-        return intakeSession;
+        return ensureIntakeSession(
+                null,
+                patient,
+                callerNumber,
+                channel,
+                department,
+                departmentName,
+                selectionReason,
+                offeredSlotIds,
+                completionReason
+        );
     }
 
-    private IntakeSession ensureIntakeSession(String intakePublicId, Patient patient, String callerNumber, IntakeChannel channel,
-            String department, String departmentName, String ignoredLegacySelectionReason, String selectionReason,
-            List<String> offeredSlotIds, CompletionReason completionReason) {
-        IntakeSession intakeSession = intakeSessionRepository
-                .findByPublicId(intakePublicId)
+    private IntakeSession ensureIntakeSession(String intakePublicId, Patient patient, String callerNumber,
+            IntakeChannel channel, String department, String departmentName, String selectionReason,
+            List<String> offeredSlotIds,
+            CompletionReason completionReason) {
+        IntakeSession intakeSession = intakePublicId == null
+                ? intakeSessionRepository.findFirstByCallerNumberAndChannelOrderByIdAsc(callerNumber, channel)
+                        .orElseGet(() -> intakeSessionRepository.save(
+                                IntakeSession.builder()
+                                        .patient(patient)
+                                        .callerNumber(callerNumber)
+                                        .channel(channel)
+                                        .build()))
+                : intakeSessionRepository.findByPublicId(intakePublicId)
                 .orElseGet(() -> intakeSessionRepository.save(
                         IntakeSession.builder()
+                                .patient(patient)
                                 .callerNumber(callerNumber)
                                 .channel(channel)
                                 .build()));
 
-        if (!Objects.equals(intakeSession.getPublicId(), intakePublicId)) {
+        if (intakePublicId != null && !Objects.equals(intakeSession.getPublicId(), intakePublicId)) {
             entityManager.createQuery("""
                     update IntakeSession i
                        set i.publicId = :publicId
@@ -1811,6 +1871,27 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         entityManager.refresh(session);
     }
 
+    private ConsultationSummary ensureConsultationSummary(ConsultationSession session, String summaryNote,
+            boolean prescriptionIssued, String prescriptionNote, boolean needsFollowUp) {
+        ConsultationSummary summary = consultationSummaryRepository.findBySession(session)
+                .orElseGet(() -> consultationSummaryRepository.save(
+                        ConsultationSummary.builder()
+                                .session(session)
+                                .summaryNote(summaryNote)
+                                .prescriptionIssued(prescriptionIssued)
+                                .prescriptionNote(prescriptionNote)
+                                .needsFollowUp(needsFollowUp)
+                                .build()));
+
+        if (!Objects.equals(summary.getSummaryNote(), summaryNote)
+                || summary.isPrescriptionIssued() != prescriptionIssued
+                || !Objects.equals(summary.getPrescriptionNote(), prescriptionNote)
+                || summary.isNeedsFollowUp() != needsFollowUp) {
+            summary.update(summaryNote, prescriptionIssued, prescriptionNote, needsFollowUp);
+        }
+        return summary;
+    }
+
     private Patient getPatient(Map<String, Patient> patientsByKey, String patientKey) {
         Patient patient = patientsByKey.get(patientKey);
         if (patient == null) {
@@ -1854,13 +1935,13 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private static List<PatientSeed> buildPriorityPatientSeeds() {
         return List.of(
                 new PatientSeed(
-                        "gim_wp_059",
-                        "권미순",
+                        PRIMARY_PATIENT_KEY,
+                        PRIMARY_PATIENT_NAME,
                         LocalDate.of(1958, 10, 6),
-                        PatientGender.FEMALE,
+                        PatientGender.MALE,
                         "GIMCHEON",
-                        "경상북도 김천시 증산면 유성길 14",
-                        "01042488119",
+                        PRIMARY_PATIENT_ADDRESS,
+                        PRIMARY_PATIENT_PHONE,
                         "patients/pat_prd_gim_waypoint59/reference.jpg",
                         59,
                         buildGuardianUsername(59),
@@ -1874,7 +1955,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         PatientGender.MALE,
                         "GIMCHEON",
                         "경상북도 김천시 증산면 유성길 6-9",
-                        "01049163720",
+                        buildWaypointPhone(92),
                         "patients/pat_prd_gim_waypoint92/reference.jpg",
                         92,
                         buildGuardianUsername(92),

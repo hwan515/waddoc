@@ -15,8 +15,8 @@ const GuardianApprovals = () => {
                 params: { status: 'PENDING', size: 100 } 
             });
             setRequests(response.data.requests || []);
-        } catch (error) {
-            console.error("Failed to fetch guardian requests:", error);
+        } catch {
+            // Keep the empty state visible when the initial fetch fails.
         } finally {
             setLoading(false);
         }
@@ -42,8 +42,7 @@ const GuardianApprovals = () => {
             }
             setModalConfig({ isOpen: false, action: null, linkId: null, comment: '' });
             fetchRequests();
-        } catch (error) {
-            console.error(`Failed to ${action} request:`, error);
+        } catch {
             alert("처리에 실패했습니다.");
         }
     };

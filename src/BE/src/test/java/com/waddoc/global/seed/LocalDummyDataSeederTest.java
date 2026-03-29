@@ -3,6 +3,7 @@ package com.waddoc.global.seed;
 import com.waddoc.domain.booking.repository.BookingRepository;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.dispatch.repository.DispatchOutboxRepository;
 import com.waddoc.domain.doctor.repository.DoctorProfileRepository;
 import com.waddoc.domain.doctor.repository.ScheduleSlotRepository;
@@ -67,6 +68,9 @@ class LocalDummyDataSeederTest {
     private ConsultationSessionRepository consultationSessionRepository;
 
     @Mock
+    private ConsultationSummaryRepository consultationSummaryRepository;
+
+    @Mock
     private DispatchOutboxRepository dispatchOutboxRepository;
 
     @Mock
@@ -93,6 +97,7 @@ class LocalDummyDataSeederTest {
                 intakeSessionRepository,
                 missionRepository,
                 consultationSessionRepository,
+                consultationSummaryRepository,
                 dispatchOutboxRepository,
                 vehicleRepository,
                 passwordEncoder,

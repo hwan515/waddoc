@@ -74,11 +74,7 @@ const PatientPortal = () => {
                         stats: { totalVisits: 0, nextReservation: '없음' },
                     }));
                 }
-            } catch (error) {
-                console.error("Failed to fetch guardian patient data:", error);
-                if (error.response && error.response.status === 401) {
-                    console.error("401 Unauthorized: 로그인된 계정이 '보호자(GUARDIAN)' 권한이 없거나 권한 승인이 대기 상태일 수 있습니다.");
-                }
+            } catch {
                 // 에러 발생 시 초기 상태로 대기
                 setMedicalRecords([]);
                 setCalendarEvents([]);

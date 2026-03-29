@@ -174,6 +174,7 @@ class CareCaseQueryServiceTest {
         assertThat(response.getCases().get(0).getMissionPhase()).isEqualTo(MissionPhase.VERIFYING);
         assertThat(response.getCases().get(0).getSessionId()).isEqualTo(consultationSession.getPublicId());
         assertThat(response.getCases().get(0).getSessionStatus()).isEqualTo(ConsultationSessionStatus.READY);
+        assertThat(response.getCases().get(0).getBookingChannel()).isEqualTo("WEB_SIMULATOR");
         assertThat(response.getCases().get(0).getDepartmentName()).isEqualTo("Internal Medicine");
         verify(accessControlService).getDoctorProfileOrThrow(new AuthenticatedUser("usr_doctor", Role.DOCTOR));
     }

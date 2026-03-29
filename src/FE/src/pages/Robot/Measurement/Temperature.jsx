@@ -54,7 +54,6 @@ const TemperatureMeasurementCard = ({ onRetry }) => {
                     return;
                 }
 
-                console.error('Temperature vital save failed:', error);
                 setSaveStatus('error');
                 setErrorMsg(extractVitalsApiErrorMessage(
                     error,

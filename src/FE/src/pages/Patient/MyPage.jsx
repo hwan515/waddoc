@@ -55,8 +55,8 @@ const MyPage = () => {
                         setMostVisitedDoctor(topDoctor);
                     }
                 }
-            } catch (error) {
-                console.error("Failed to fetch my page data:", error);
+            } catch {
+                // Keep the default profile state when the fetch fails.
             }
         };
 
