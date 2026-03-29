@@ -39,6 +39,7 @@ const formatDateKey = (date) => {
 
 const CASE_SYNC_INTERVAL_MS = 10000;
 const STARTABLE_CASE_STATUSES = new Set(['CREATED', 'PREPARING']);
+const STARTABLE_MISSION_PHASES = new Set(['ARRIVED', 'VERIFYING']);
 const TERMINAL_CASE_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 const REJOINABLE_SESSION_STATUSES = new Set(['CREATED', 'READY', 'IN_PROGRESS']);
 const REMOTE_BOOKING_CHANNELS = new Set(['WEB_SIMULATOR', 'PHONE']);
@@ -177,7 +178,7 @@ const shouldShowConsultationAction = (reservation) => (
     hasRejoinableConsultationSession(reservation) || isConsultationStartTarget(reservation)
 );
 
-// 비대면 예약이면서 예약일이 오늘이고 미션이 도착한 상태일 때만 진료 시작을 허용한다.
+// 비대면 예약이면서 예약일이 오늘이고 환자 도착 이후 단계(본인 확인 포함)일 때만 진료 시작을 허용한다.
 const canStartConsultation = (reservation, now) => {
     if (hasRejoinableConsultationSession(reservation)) {
         return true;
@@ -188,7 +189,7 @@ const canStartConsultation = (reservation, now) => {
     if (!reservation.date) {
         return false;
     }
-    return reservation.date === formatDateKey(now) && reservation.missionPhase === 'ARRIVED';
+    return reservation.date === formatDateKey(now) && STARTABLE_MISSION_PHASES.has(reservation.missionPhase);
 };
 
 // 버튼이 비활성화된 이유를 바로 이해할 수 있도록 안내 문구를 분기한다.
@@ -199,7 +200,7 @@ const getConsultationStartButtonTitle = (reservation, now) => {
     if (!reservation.date || reservation.date !== formatDateKey(now)) {
         return '진료 시작은 예약 당일에만 가능합니다.';
     }
-    if (reservation.missionPhase !== 'ARRIVED') {
+    if (!STARTABLE_MISSION_PHASES.has(reservation.missionPhase)) {
         return '환자 도착 후 활성화됩니다.';
     }
     return '진료를 시작합니다.';
