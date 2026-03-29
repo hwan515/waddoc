@@ -4,6 +4,7 @@ import { Bell, X } from 'lucide-react';
 import useAuthStore from '../../../store/authStore';
 import { useSSE } from '../../../hooks/useSSE';
 import apiClient from '../../../utils/api';
+import { sanitizeSelectionReason } from '../../../utils/intakeSelectionReason';
 import { logoutSession } from '../../../utils/logout';
 import { parsePrescriptionNote } from '../../../utils/prescriptionNote';
 
@@ -39,7 +40,10 @@ const formatDateKey = (date) => {
 
 const CASE_SYNC_INTERVAL_MS = 10000;
 const STARTABLE_CASE_STATUSES = new Set(['CREATED', 'PREPARING']);
+const STARTABLE_MISSION_PHASES = new Set(['ARRIVED', 'VERIFYING']);
 const TERMINAL_CASE_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+const REJOINABLE_SESSION_STATUSES = new Set(['CREATED', 'READY', 'IN_PROGRESS']);
+const REMOTE_BOOKING_CHANNELS = new Set(['WEB_SIMULATOR', 'PHONE']);
 
 const CASE_STATUS_LABELS = {
     CREATED: '예약',
@@ -65,6 +69,19 @@ const mapGenderLabel = (gender) => {
     return '미상';
 };
 
+const mapReservationType = (bookingChannel) => {
+    const normalizedChannel = String(bookingChannel || '').toUpperCase();
+
+    if (!normalizedChannel || REMOTE_BOOKING_CHANNELS.has(normalizedChannel)) {
+        return '비대면';
+    }
+    if (normalizedChannel === 'OUTPATIENT') {
+        return '외래';
+    }
+
+    return '외래';
+};
+
 const mapCaseToReservation = (caseData, existingReservation = {}) => ({
     ...existingReservation,
     id: caseData.caseId,
@@ -77,8 +94,11 @@ const mapCaseToReservation = (caseData, existingReservation = {}) => ({
     time: caseData.startTime?.substring(0, 5) || '00:00',
     status: mapCaseStatusToLabel(caseData.status),
     caseStatus: caseData.status || null,
-    type: '비대면',
+    type: mapReservationType(caseData.bookingChannel || existingReservation.bookingChannel),
+    bookingChannel: caseData.bookingChannel || existingReservation.bookingChannel || null,
     missionPhase: caseData.missionPhase || null,
+    sessionId: caseData.sessionId || null,
+    sessionStatus: caseData.sessionStatus || null,
     isNotificationOnly: false,
 });
 
@@ -93,8 +113,11 @@ const mapNotificationToReservation = (notif) => ({
     time: notif.startTime?.substring(0, 5) || '00:00',
     status: mapCaseStatusToLabel(notif.caseStatus || 'CREATED'),
     caseStatus: notif.caseStatus || 'CREATED',
-    type: '비대면',
+    type: mapReservationType(notif.bookingChannel),
+    bookingChannel: notif.bookingChannel || null,
     missionPhase: notif.missionPhase || null,
+    sessionId: null,
+    sessionStatus: null,
     isNotificationOnly: true,
 });
 
@@ -146,23 +169,39 @@ const isConsultationStartTarget = (reservation) => {
     return reservation.type === '비대면' && STARTABLE_CASE_STATUSES.has(reservation.caseStatus);
 };
 
-// 비대면 예약이면서 예약일이 오늘이고 미션이 도착한 상태일 때만 진료 시작을 허용한다.
+const hasRejoinableConsultationSession = (reservation) => (
+    reservation.type === '비대면'
+    && Boolean(reservation.sessionId)
+    && REJOINABLE_SESSION_STATUSES.has(reservation.sessionStatus)
+);
+
+const shouldShowConsultationAction = (reservation) => (
+    hasRejoinableConsultationSession(reservation) || isConsultationStartTarget(reservation)
+);
+
+// 비대면 예약이면서 예약일이 오늘이고 환자 도착 이후 단계(본인 확인 포함)일 때만 진료 시작을 허용한다.
 const canStartConsultation = (reservation, now) => {
+    if (hasRejoinableConsultationSession(reservation)) {
+        return true;
+    }
     if (!isConsultationStartTarget(reservation)) {
         return false;
     }
     if (!reservation.date) {
         return false;
     }
-    return reservation.date === formatDateKey(now) && reservation.missionPhase === 'ARRIVED';
+    return reservation.date === formatDateKey(now) && STARTABLE_MISSION_PHASES.has(reservation.missionPhase);
 };
 
 // 버튼이 비활성화된 이유를 바로 이해할 수 있도록 안내 문구를 분기한다.
 const getConsultationStartButtonTitle = (reservation, now) => {
+    if (hasRejoinableConsultationSession(reservation)) {
+        return '진행 중인 진료실로 다시 들어갑니다.';
+    }
     if (!reservation.date || reservation.date !== formatDateKey(now)) {
         return '진료 시작은 예약 당일에만 가능합니다.';
     }
-    if (reservation.missionPhase !== 'ARRIVED') {
+    if (!STARTABLE_MISSION_PHASES.has(reservation.missionPhase)) {
         return '환자 도착 후 활성화됩니다.';
     }
     return '진료를 시작합니다.';
@@ -205,8 +244,8 @@ const LegacyEMRDashboard = () => {
 
                 return [...syncedReservations, ...pendingNotificationReservations];
             });
-        } catch (err) {
-            console.error("Failed to fetch cases from API:", err);
+        } catch {
+            // Keep the current reservation snapshot when refresh fails.
         }
     }, []);
 
@@ -245,7 +284,7 @@ const LegacyEMRDashboard = () => {
             const detail = response.data;
             const pInfo = detail.patient || {};
 
-            let age = '誘몄긽';
+            let age = '미상';
             if (pInfo.birthDate) {
                 const birthYear = new Date(pInfo.birthDate).getFullYear();
                 const currentYear = new Date().getFullYear();
@@ -257,12 +296,15 @@ const LegacyEMRDashboard = () => {
                 [ptNo]: {
                     ptNo: pInfo.patientId,
                     name: pInfo.name,
-                    address: pInfo.address || '二쇱냼 誘몄긽',
-                    birthDate: pInfo.birthDate || '?곸꽭?뺣낫 誘몄긽',
-                    phone: pInfo.phone || '?곕씫泥??놁쓬',
+                    address: pInfo.address || '주소 미상',
+                    birthDate: pInfo.birthDate || '상세정보 미상',
+                    phone: pInfo.phone || '연락처 없음',
                     age: age,
                     gender: mapGenderLabel(pInfo.gender),
-                    note: detail.intakeSummary?.selectionReason || '?먯꽭???뱀씠?ы빆 ?놁쓬'
+                    note: sanitizeSelectionReason(
+                        detail.intakeSummary?.selectionReason,
+                        '자세한 특이사항 없음'
+                    )
                 }
             }));
 
@@ -272,8 +314,8 @@ const LegacyEMRDashboard = () => {
             }));
 
             return;
-        } catch (err) {
-            console.error(`Failed to fetch details for case ${caseId}:`, err);
+        } catch {
+            // Leave the existing patient detail visible if the first detail fetch fails.
         }
 
         // 만약 환자 상세 정보가 아직 API에서 불러와지지 않았거나(미상), SSE로 등록된 임시 상태라면
@@ -299,7 +341,10 @@ const LegacyEMRDashboard = () => {
                         phone: pInfo.phone || '연락처 없음',
                         age: age,
                         gender: mapGenderLabel(pInfo.gender),
-                        note: detail.intakeSummary?.selectionReason || '자세한 특이사항 없음'
+                        note: sanitizeSelectionReason(
+                            detail.intakeSummary?.selectionReason,
+                            '자세한 특이사항 없음'
+                        )
                     }
                 }));
 
@@ -308,8 +353,8 @@ const LegacyEMRDashboard = () => {
                     [ptNo]: [] // 현재 과거 진료내역 API가 별도로 없으므로 빈 배열로 초기화
                 }));
 
-            } catch (err) {
-                console.error(`Failed to fetch details for case ${caseId}:`, err);
+            } catch {
+                // Preserve the fallback state when the retry also fails.
             }
         }
     };
@@ -364,8 +409,8 @@ const LegacyEMRDashboard = () => {
                 setSelectedReservationId(notificationReservation.id);
             }
             await syncAssignedCases();
-        } catch (err) {
-            console.error('Failed to apply SSE notification to dashboard:', err);
+        } catch {
+            // Ignore notification sync failures and still dismiss the toast.
         } finally {
             handleDismissNotification(notif);
         }
@@ -485,7 +530,7 @@ const LegacyEMRDashboard = () => {
                             </div>
                         ) : (
                             filteredReservations.map((res, idx) => {
-                                const consultationStartTarget = isConsultationStartTarget(res);
+                                const consultationActionVisible = shouldShowConsultationAction(res);
                                 const consultationStartEnabled = canStartConsultation(res, currentTime);
                                 const consultationStartButtonTitle = getConsultationStartButtonTitle(res, currentTime);
 
@@ -506,7 +551,7 @@ const LegacyEMRDashboard = () => {
                                             {res.type}
                                         </div>
                                         <div className="w-28 shrink-0 py-1 text-center flex justify-center items-center">
-                                            {consultationStartTarget ? (
+                                            {consultationActionVisible ? (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -522,7 +567,7 @@ const LegacyEMRDashboard = () => {
                                                         : 'bg-slate-200 text-slate-500 border-slate-400 cursor-not-allowed'
                                                         }`}
                                                 >
-                                                    진료 시작 🎬
+                                                    {hasRejoinableConsultationSession(res) ? '진료실 복귀 ↩' : '진료 시작 🎬'}
                                                 </button>
                                             ) : (
                                                 <span className={getReservationStatusClassName(res)}>{res.status}</span>
@@ -629,13 +674,13 @@ const LegacyEMRDashboard = () => {
                 {notifications.map((notif, index) => (
                     <div
                         key={getNotificationKey(notif) || index}
-                        className="bg-white border-l-4 border-[#0353A4] shadow-2xl rounded-lg w-80 overflow-hidden pointer-events-auto"
+                        className="bg-white border-l-4 border-primary shadow-2xl rounded-lg w-80 overflow-hidden pointer-events-auto"
                     >
                         <div className="p-4">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-2">
                                     <div className="bg-blue-100 p-1.5 rounded-full">
-                                        <Bell className="w-4 h-4 text-[#0353A4] animate-pulse" />
+                                        <Bell className="w-4 h-4 text-primary animate-pulse" />
                                     </div>
                                     <h3 className="font-bold text-slate-800">신규 예약 접수</h3>
                                 </div>
@@ -653,7 +698,7 @@ const LegacyEMRDashboard = () => {
                                 {notif.location}
                             </div>
                             <div className="flex items-center justify-between mt-2">
-                                <div className="text-xs font-semibold text-[#0353A4] bg-blue-50 py-1 px-2 rounded inline-block">
+                                <div className="text-xs font-semibold text-primary bg-blue-50 py-1 px-2 rounded inline-block">
                                     {notif.departmentName} · {notif.doctorName}
                                 </div>
                                 <div className="flex gap-2">

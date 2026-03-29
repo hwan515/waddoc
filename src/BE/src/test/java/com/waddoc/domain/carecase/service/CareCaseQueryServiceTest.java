@@ -152,9 +152,16 @@ class CareCaseQueryServiceTest {
                 .destination("Ulleung")
                 .build();
         mission.updatePhase(MissionPhase.VERIFYING);
+        ConsultationSession consultationSession = ConsultationSession.builder()
+                .careCase(careCase)
+                .roomId("room_case_100")
+                .livekitUrl("wss://livekit.example.com")
+                .build();
+        consultationSession.markReady();
 
         when(careCaseRepository.findAllAssignedToDoctor("usr_doctor", null, null)).thenReturn(List.of(careCase));
         when(missionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of(mission));
+        when(consultationSessionRepository.findAllByCareCaseIn(List.of(careCase))).thenReturn(List.of(consultationSession));
 
         DoctorCaseListResponse response = careCaseQueryService.getAssignedCases(
                 new AuthenticatedUser("usr_doctor", Role.DOCTOR),
@@ -165,6 +172,9 @@ class CareCaseQueryServiceTest {
         assertThat(response.getTotalCount()).isEqualTo(1);
         assertThat(response.getCases()).hasSize(1);
         assertThat(response.getCases().get(0).getMissionPhase()).isEqualTo(MissionPhase.VERIFYING);
+        assertThat(response.getCases().get(0).getSessionId()).isEqualTo(consultationSession.getPublicId());
+        assertThat(response.getCases().get(0).getSessionStatus()).isEqualTo(ConsultationSessionStatus.READY);
+        assertThat(response.getCases().get(0).getBookingChannel()).isEqualTo("WEB_SIMULATOR");
         assertThat(response.getCases().get(0).getDepartmentName()).isEqualTo("Internal Medicine");
         verify(accessControlService).getDoctorProfileOrThrow(new AuthenticatedUser("usr_doctor", Role.DOCTOR));
     }

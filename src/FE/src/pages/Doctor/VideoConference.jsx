@@ -6,6 +6,7 @@ import PreJoinRoom from '../../components/consultation/PreJoinRoom';
 import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import useConsultationSummarySave from '../../hooks/useConsultationSummarySave';
 import apiClient from '../../utils/api';
+import { sanitizeSelectionReason } from '../../utils/intakeSelectionReason';
 
 const EMPTY_VITALS = {
     caseId: null,
@@ -137,7 +138,10 @@ const VideoConference = () => {
                     patientId: pt.patientId,
                     age: age,
                     gender: pt.gender || 'M',
-                    symptoms: intake.selectionReason || '문진 내용이 없습니다.',
+                    symptoms: sanitizeSelectionReason(
+                        intake.selectionReason,
+                        '문진 내용이 없습니다.'
+                    ),
                     recentVisits: pt.lastConsultationDate || '최근 진료 기록 없음',
                     department: intake.departmentName || '내과',
                     bloodType: pt.bloodType ? pt.bloodType.replace('_PLUS', '+').replace('_MINUS', '-') : '확인 불가',
@@ -146,8 +150,7 @@ const VideoConference = () => {
                     doctorName: caseData.doctor?.name || '담당의 미확인',
                 });
                 setVitals(normalizeVitals(caseData.vitals));
-            } catch (error) {
-                console.error("Failed to fetch case details:", error);
+            } catch {
                 setConsultationDetails(createFallbackDetails(id));
                 setVitals(EMPTY_VITALS);
             } finally {
@@ -196,9 +199,6 @@ const VideoConference = () => {
 
             // [API 연동] 의사의 진료 세션 생성 및 LiveKit 토큰 발급 요청
             // POST /api/v1/cases/{caseId}/sessions
-            console.log(`🚀 [API 호출 준비] 전달받은 URL 파라미터(Case ID): ${id}`);
-            console.log(`➜ 호출될 엔드포인트: /api/v1/cases/${id}/sessions`);
-
             const response = await apiClient.post(`/cases/${id}/sessions`);
             const doctorToken = response.data?.doctorToken;
             const nextLivekitUrl = response.data?.room?.livekitUrl;
@@ -212,13 +212,10 @@ const VideoConference = () => {
             setLivekitUrl(nextLivekitUrl);
             setSessionId(nextSessionId);
 
-            console.log("✅ 의사 세션(LiveKit) 생성 완료:", response.data);
-
             // 현재 단계(LiveKit 적용)에서는 발급받은 토큰으로 방에 입장
             setIsJoined(true);
 
         } catch (error) {
-            console.error("❌ 세션 생성 API 호출 실패:", error);
             setLivekitToken('');
             setLivekitUrl('');
             setSessionId(null);

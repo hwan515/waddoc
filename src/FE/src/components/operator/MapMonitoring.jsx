@@ -64,8 +64,7 @@ const MapMonitoring = ({
         try {
             await apiClient.post('/robots/cmd/estop/1');
             window.alert('E-Stop 명령을 전송했습니다.');
-        } catch (error) {
-            console.error('E-Stop error:', error);
+        } catch {
             window.alert('E-Stop 명령 전송에 실패했습니다.');
         }
     };

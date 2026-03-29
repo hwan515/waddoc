@@ -47,8 +47,8 @@ const PatientManagement = () => {
                 }
             });
             setPatients(response.data.patients || []);
-        } catch (error) {
-            console.error("Failed to fetch patients:", error);
+        } catch {
+            // Leave the current list unchanged when the fetch fails.
         } finally {
             setLoading(false);
         }
@@ -101,8 +101,7 @@ const PatientManagement = () => {
             });
             setImageFile(null);
             fetchPatients(searchTerm);
-        } catch (error) {
-            console.error("Failed to register patient:", error);
+        } catch {
             alert('환자 등록에 실패했습니다.');
         }
     };

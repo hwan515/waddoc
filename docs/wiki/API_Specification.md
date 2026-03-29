@@ -56,7 +56,8 @@
 9. [화상진료 세션 API](#9-화상진료-세션-api)
 10. [보호자 API](#10-보호자-api-apiv1guardians)
 11. [관리자 API](#11-관리자-api-apiv1admin)
-12. [상태 Enum 정의](#12-상태-enum-정의)
+12. [로봇 운영 API](#12-로봇-운영-api-apiv1robots)
+13. [상태 Enum 정의](#13-상태-enum-정의)
 
 ---
 
@@ -187,7 +188,7 @@
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 401 | `AUTH_REFRESH_EXPIRED` | Refresh Token 만료 |
-| 401 | `AUTH_TOKEN_REUSE` | 이미 사용된 RT 재사용 (Token Family 전체 무효화) |
+| 401 | `AUTH_TOKEN_REUSE` | 이미 사용된 RT 재사용 (해당 토큰 폐기). 사용자 상태 변경이 감지되면 별도로 전체 세션 무효화 수행 |
 
 ---
 
@@ -884,7 +885,9 @@
       "departmentName": "내과",
       "appointmentDate": "2026-03-11",
       "startTime": "10:00",
-      "missionPhase": "VERIFYING"
+      "missionPhase": "VERIFYING",
+      "sessionId": "ses_L6pQr1",
+      "sessionStatus": "READY"
     }
   ],
   "totalCount": 1
@@ -902,6 +905,8 @@
 | `cases[].appointmentDate` | string | 예약 날짜 (`YYYY-MM-DD`) |
 | `cases[].startTime` | string | 예약 시작 시간 |
 | `cases[].missionPhase` | string | 연결된 미션 단계 |
+| `cases[].sessionId` | string \| null | 연결된 화상진료 세션 ID |
+| `cases[].sessionStatus` | string \| null | 연결된 화상진료 세션 상태 (`CREATED`, `READY`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `ABANDONED`) |
 | `totalCount` | int | 조회된 케이스 수 |
 
 ---
@@ -1498,6 +1503,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Auth | Bearer Token (MISSION_TERMINAL, ADMIN) |
 
 > 차량 태블릿 플로우에서는 **활력징후 단계 완료 후, 의사 세션이 준비되면** 환자 참가 토큰을 요청하며, 운영/테스트 목적으로 `ADMIN` 호출도 허용한다.
+> 세션 ID를 직접 아는 경우 `POST /api/v1/sessions/{sessionId}/participants/patient/token`으로도 동일한 환자 토큰을 발급받을 수 있다.
 > 이 API는 `missionId -> case -> consultationSession -> patient` 순서로 대상 세션을 서버에서 해석하고, 요청에 사용한 단말 토큰이 같은 미션에 바인딩되어 있는지 확인한 뒤 이미 성공한 본인 확인 상태를 검증하고 환자용 LiveKit 토큰만 발급한다.
 
 **Response** `200 OK`
@@ -2123,7 +2129,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | Auth | Bearer Token (ADMIN) |
 
 > 데모 모드에서만 사용할 수 있는 관리자 제어 API다.
-> - `MISSION.targetWaypointNumber`가 있으면 Spring이 FastAPI `POST /api/cmd/waypoint/{target}`를 호출한다.
+> - `MISSION.targetWaypointNumber`가 있으면 Spring이 MQTT 토픽 `robot/cmd/dispatch`로 waypoint 명령을 publish한다.
 > - 같은 차량에 남아 있는 다른 활성 demo mission(`DISPATCHED`~`RETURNING`)은 새 출동 전에 `COMPLETED`로 정리한다.
 > - 호출 성공 후 mission은 `EN_ROUTE`로 전이된다.
 > - waypoint 매핑이 없는 주소는 로봇 호출 없이 더미 완료 mission으로 처리된다.
@@ -2149,7 +2155,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 | 403 | `DEMO_MODE_DISABLED` | 데모 모드가 비활성화되어 있음 |
 | 404 | `MISSION_NOT_FOUND` | 미션을 찾을 수 없음 |
 | 400 | `MISSION_PHASE_TRANSITION_INVALID` | `CREATED` 상태가 아닌 미션에 출동 요청 |
-| 502 | `ROBOT_COMMAND_REQUEST_FAILED` | waypoint 명령 API 호출 실패 |
+| 502 | `ROBOT_COMMAND_REQUEST_FAILED` | MQTT waypoint 명령 publish 실패 |
 
 ---
 
@@ -2211,7 +2217,206 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 
 ---
 
-## 12. 상태 Enum 정의
+## 12. 로봇 운영 API (`/api/v1/robots`)
+
+> 운영 콘솔에서 로봇 텔레메트리 모니터링과 명령 전달에 사용하는 API다.
+> 로봇 통신은 MQTT 브로커(Mosquitto)를 통해 이루어지며, Spring Boot가 MQTT 메시지를 중계한다.
+
+### 12.1 로봇 텔레메트리 스트림 구독
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/robots/stream` |
+| Auth | Bearer Token (ADMIN, DOCTOR) |
+| Accept | `text/event-stream` |
+
+> Spring Boot가 MQTT 토픽(`robot/odom`, `robot/minimap`, `robot/state`, `robot/status`)에서 수신한 로봇 텔레메트리를 SSE로 중계한다.
+> 운영 콘솔의 지도 모니터링과 미니맵 패널에서 사용한다.
+
+**Response**: SSE 스트림
+
+---
+
+### 12.2 로봇 웨이포인트 명령
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/robots/cmd/waypoint/{n}` |
+| Auth | Bearer Token (ADMIN, DOCTOR) |
+
+> MQTT 토픽 `robot/cmd/waypoint`로 waypoint 번호를 publish한다.
+
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| `n` | int (path) | waypoint 번호 |
+
+**Response** `202 Accepted`
+
+---
+
+### 12.3 로봇 비상정지 명령
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/robots/cmd/estop/{state}` |
+| Auth | Bearer Token (ADMIN, DOCTOR) |
+
+> MQTT 토픽 `robot/cmd/estop`로 비상정지 상태를 publish한다.
+
+| 파라미터 | 타입 | 설명 |
+|----------|------|------|
+| `state` | int (path) | `1` = 비상정지 활성화, `0` = 비상정지 해제 |
+
+**Response** `202 Accepted`
+
+---
+
+### 12.4 차량 목록 조회
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/admin/vehicles` |
+| Auth | Bearer Token (ADMIN) |
+
+> 전체 차량 목록을 조회한다. 운영 콘솔의 차량 관리 패널에서 사용한다.
+
+**Response** `200 OK`
+```json
+[
+  {
+    "vehicleId": "veh_00000001",
+    "code": "GIMCHEON-01",
+    "regionCode": "GIMCHEON_JEUNGSAN",
+    "displayName": "김천증산 1호차",
+    "active": true,
+    "operationalStatus": "OPERATIONAL",
+    "statusChangedAt": "2026-03-20T09:00:00+09:00",
+    "statusReason": null,
+    "createdAt": "2026-03-20T08:00:00+09:00",
+    "updatedAt": "2026-03-20T09:00:00+09:00"
+  }
+]
+```
+
+---
+
+### 12.5 차량 현재 미션 조회 (차량 단말)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/terminal/current-mission` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> 차량 단말이 현재 자신에게 배정된 미션을 조회한다. `DEVICE_TERMINAL` 토큰에 바인딩된 `vehicleId`와 `regionCode` 기준으로 해당 차량의 활성 미션을 반환한다.
+
+**Response** `200 OK` (미션 있음)
+```json
+{
+  "hasMission": true,
+  "missionId": "ms_F2gHn6",
+  "patientName": "홍길동",
+  "appointmentDate": "2026-03-20",
+  "appointmentTime": "14:30",
+  "phase": "ARRIVED",
+  "vehicleId": "veh_GIMCHEON_01",
+  "targetWaypointNumber": 59
+}
+```
+
+**Response** `200 OK` (미션 없음)
+```json
+{
+  "hasMission": false
+}
+```
+
+---
+
+### 12.6 현재 미션 자동 claim (차량 단말)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/terminal/current-mission/claim` |
+| Auth | Bearer Token (`DEVICE_TERMINAL`) |
+
+> `GET /api/v1/terminal/current-mission`으로 조회된 미션을 별도 입력 없이 바로 claim한다. 응답은 9.2b와 동일한 `IssueMissionTerminalTokenResponse` 구조다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "terminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "mission:identity-check",
+    "session:issue-patient-token",
+    "mission:vitals-write"
+  ]
+}
+```
+
+---
+
+### 12.7 미션 단말 토큰 발급 (의사/관리자)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `POST` |
+| Path | `/api/v1/missions/{missionId}/terminal/token` |
+| Auth | Bearer Token (DOCTOR, ADMIN) |
+
+> 의사 또는 관리자가 특정 미션에 대한 `MISSION_TERMINAL` 토큰을 발급받는다. 운영/테스트 목적으로 차량 단말 부트스트랩 없이 직접 미션 토큰을 획득할 때 사용한다.
+
+**Response** `200 OK`
+```json
+{
+  "missionId": "ms_F2gHn6",
+  "caseId": "case_T7nLp4",
+  "terminalToken": "eyJhbGci...",
+  "expiresIn": 1800,
+  "scopes": [
+    "mission:identity-check",
+    "session:issue-patient-token",
+    "mission:vitals-write"
+  ]
+}
+```
+
+---
+
+### 12.8 미션별 진료 세션 상태 조회 (차량 단말)
+
+| 항목 | 값 |
+|------|-----|
+| Method | `GET` |
+| Path | `/api/v1/missions/{missionId}/consultation-status` |
+| Auth | Bearer Token (ADMIN, MISSION_TERMINAL) |
+
+> 차량 단말이 현재 미션에 연결된 화상진료 세션의 상태를 폴링한다. 세션이 `COMPLETED`, `FAILED`, `ABANDONED` 상태가 되면 차량 단말은 종료 화면으로 전환한다.
+
+**Response** `200 OK`
+```json
+{
+  "sessionId": "ses_L6pQr1",
+  "caseId": "case_T7nLp4",
+  "status": "IN_PROGRESS",
+  "room": {
+    "roomId": "room_ses_L6pQr1",
+    "livekitUrl": "wss://<DOMAIN>/livekit"
+  }
+}
+```
+
+---
+
+## 13. 상태 Enum 정의
 
 > **`doctorId` 참조 규칙**: API의 `doctorId`는 `DOCTOR_PROFILE.public_id` 값을 의미한다. 내부 저장은 `doctor_profile_id`(`bigint` PK)를 사용한다. 사용자 식별이 필요할 때는 별도로 `userId`를 사용한다.
 >

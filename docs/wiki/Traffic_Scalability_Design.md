@@ -55,9 +55,20 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 
 - 예약 트랜잭션이 커밋된 뒤에만 SMS와 의사 알림을 발행한다.
 - Kafka consumer는 `enable-auto-commit: false`, `ack-mode: record`로 동작해서 실패 레코드만 재처리할 수 있다.
-- SMS는 재시도 후에도 실패하면 DLT(`sms.requests.dlt`)로 보내서 본 업무 흐름과 분리한다.
+- SMS는 재시도 후에도 실패하면 DLT(`sms.requests.DLT`)로 보내서 본 업무 흐름과 분리한다.
 
 이 방식은 외부 SMS 벤더 지연이나 실패가 사용자 요청 경로를 직접 막지 않게 해 준다.
+
+#### 2.2.1 SMS DLT 에러 핸들링 상세
+
+`KafkaConfig` 기준으로 SMS consumer의 실패 처리는 일반 listener와 분리해서 구성돼 있다.
+
+- `smsKafkaListenerContainerFactory`가 SMS 전용 `DefaultErrorHandler`를 사용한다.
+- 에러 핸들러는 `FixedBackOff(1000ms, 2)`로 설정돼 있어, 최초 처리 실패 후 1초 간격으로 2회 재시도한다.
+- 2회 재시도 후에도 실패하면 `DeadLetterPublishingRecoverer`가 메시지를 `sms.requests.DLT` 토픽의 `0`번 partition으로 보낸다.
+- `errorHandler.setCommitRecovered(true)`가 설정돼 있으므로 DLT로 넘긴 레코드는 recover 처리 후 offset을 commit한다.
+
+즉, SMS는 "업무 트랜잭션과 분리된 비동기 처리"일 뿐 아니라, "짧은 재시도 후 DLT 격리"까지 포함한 실패 관리 경로를 갖고 있다.
 
 ### 2.3 의사 실시간 알림은 Kafka -> Redis Pub/Sub -> SSE fan-out
 
@@ -99,6 +110,49 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 - 최신 위치와 phase만 mission 엔티티에 반영하고, 이전 텔레메트리 전체를 별도 적재하지 않는다.
 
 이 구조는 텔레메트리 burst가 들어와도 API thread가 DB update에 오래 묶이지 않게 만들고, 순서 뒤섞임과 중복 수신을 애플리케이션 레벨에서 흡수한다.
+
+### 2.4.1 현재 Kafka 이벤트 메시지 구조
+
+문서상 자주 언급되는 Kafka 이벤트는 모두 Spring Kafka의 JSON 직렬화를 사용하며, 현재 구현 기준 대표 payload 구조는 아래와 같다.
+
+#### `DispatchRequestMessage`
+
+- topic: `dispatch.requests`
+- key: `regionCode`
+- fields
+  - `caseId`: 배차 대상 `care_case.public_id`
+  - `regionCode`: 차량 탐색 및 retry fan-out 기준이 되는 권역 코드
+  - `destination`: 환자 목적지 주소
+
+#### `SmsRequestMessage`
+
+- topic: `sms.requests`
+- key: 없음
+- fields
+  - `recipientPhone`: SMS 수신 번호
+  - `message`: 실제 발송 본문
+  - `correlationId`: 감사 로그/실패 추적용 상관관계 ID
+
+#### `TelemetryMessage`
+
+- topic: `mission.telemetry`
+- key: `missionId`
+- top-level fields
+  - `missionId`: 반영 대상 미션 `public_id`
+  - `request`: 실제 텔레메트리 payload
+- `request`(`MissionTelemetryRequest`) fields
+  - `source`: 이벤트 발생 소스 식별자
+  - `sourceEventId`: 중복 제거용 원본 이벤트 ID
+  - `seqNo`: 역순 판정에 쓰는 시퀀스 번호
+  - `vehicleId`: 이벤트를 보낸 차량 ID
+  - `phase`: 수집 시점의 미션 phase
+  - `latitude`, `longitude`: 최신 위치 좌표
+  - `speed`: 수집 시점 속도
+  - `heading`: 수집 시점 방위각
+  - `timestamp`: 이벤트 발생 시각
+  - `metadata`: 확장용 부가 정보 맵
+
+즉, 현재 이벤트 메시지는 "큰 엔티티 전체를 싣는 구조"가 아니라, consumer가 필요한 식별자와 처리 필드만 담는 비교적 얇은 DTO 중심 구조다.
 
 ### 2.5 화상 진료는 LiveKit으로 미디어 plane을 분리
 

@@ -34,6 +34,7 @@ public class NewBookingNotificationPayload {
     private String patientPhone;
     private LocalDate appointmentDate;
     private LocalTime startTime;
+    private String bookingChannel;
     private String location;
     private OffsetDateTime createdAt;
 
@@ -52,6 +53,7 @@ public class NewBookingNotificationPayload {
                 .patientPhone(booking.getPatient().getPhone())
                 .appointmentDate(booking.getAppointmentDate())
                 .startTime(booking.getStartTime())
+                .bookingChannel(booking.getChannel())
                 .location(booking.getPatient().getAddress())
                 .createdAt(booking.getCreatedAt().atZone(KST).toOffsetDateTime())
                 .build();

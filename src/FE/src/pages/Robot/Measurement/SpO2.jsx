@@ -54,7 +54,6 @@ const SpO2MeasurementCard = ({ onRetry }) => {
                     return;
                 }
 
-                console.error('SpO2 vital save failed:', error);
                 setSaveStatus('error');
                 setErrorMsg(extractVitalsApiErrorMessage(
                     error,

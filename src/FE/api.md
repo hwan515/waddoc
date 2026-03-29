@@ -830,11 +830,15 @@
     {
       "caseId": "case_T7nLp4",
       "status": "PREPARING",
+      "patientId": "pat_Zk3mQ9",
       "patientName": "홍길동",
+      "patientGender": "MALE",
       "departmentName": "내과",
       "appointmentDate": "2026-03-11",
       "startTime": "10:00",
-      "missionPhase": "VERIFYING"
+      "missionPhase": "VERIFYING",
+      "sessionId": "ses_L6pQr1",
+      "sessionStatus": "READY"
     }
   ],
   "totalCount": 1
