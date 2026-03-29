@@ -22,6 +22,7 @@ public interface ConsultationSummaryRepository extends JpaRepository<Consultatio
             join fetch careCase.booking booking
             join fetch careCase.doctor doctor
             join fetch doctor.user doctorUser
+            left join fetch careCase.intakeSession intakeSession
             where careCase.patient.publicId = :patientPublicId
               and session.status = :sessionStatus
             order by session.endedAt desc, booking.appointmentDate desc, booking.startTime desc

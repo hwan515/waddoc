@@ -6,7 +6,10 @@ import com.waddoc.domain.carecase.dto.DoctorCaseListResponse;
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.domain.carecase.repository.CareCaseRepository;
 import com.waddoc.domain.consultation.entity.ConsultationSession;
+import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
+import com.waddoc.domain.consultation.entity.ConsultationSummary;
 import com.waddoc.domain.consultation.repository.ConsultationSessionRepository;
+import com.waddoc.domain.consultation.repository.ConsultationSummaryRepository;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.domain.intake.entity.ConfidenceLevel;
 import com.waddoc.domain.intake.entity.IntakeChannel;
@@ -51,6 +54,9 @@ class CareCaseQueryServiceTest {
     private ConsultationSessionRepository consultationSessionRepository;
 
     @Mock
+    private ConsultationSummaryRepository consultationSummaryRepository;
+
+    @Mock
     private VitalMeasurementRepository vitalMeasurementRepository;
 
     @Mock
@@ -72,6 +78,19 @@ class CareCaseQueryServiceTest {
                 .roomId("room-1")
                 .livekitUrl("wss://livekit.test")
                 .build();
+        ConsultationSession historySession = ConsultationSession.builder()
+                .careCase(careCase)
+                .roomId("room-history")
+                .livekitUrl("wss://livekit.history")
+                .build();
+        setField(historySession, "endedAt", LocalDateTime.of(2026, 3, 9, 14, 20));
+        ConsultationSummary consultationSummary = ConsultationSummary.builder()
+                .session(historySession)
+                .summaryNote("Follow-up required")
+                .prescriptionIssued(true)
+                .prescriptionNote("[\"MED001\"]")
+                .needsFollowUp(true)
+                .build();
         VitalMeasurement vitalMeasurement = VitalMeasurement.create(careCase);
         vitalMeasurement.applyMeasurements(
                 new BigDecimal("36.7"),
@@ -89,6 +108,10 @@ class CareCaseQueryServiceTest {
         when(careCaseRepository.findWithDetailsByPublicId(careCase.getPublicId())).thenReturn(Optional.of(careCase));
         when(missionRepository.findByCareCase(careCase)).thenReturn(Optional.of(mission));
         when(consultationSessionRepository.findByCareCase(careCase)).thenReturn(Optional.of(session));
+        when(consultationSummaryRepository.findAllByPatientPublicIdAndSessionStatus(
+                careCase.getPatient().getPublicId(),
+                ConsultationSessionStatus.COMPLETED
+        )).thenReturn(List.of(consultationSummary));
         when(vitalMeasurementRepository.findByCareCase(careCase)).thenReturn(Optional.of(vitalMeasurement));
 
         CaseDetailResponse response = careCaseQueryService.getCaseDetail(
@@ -101,6 +124,12 @@ class CareCaseQueryServiceTest {
         assertThat(response.getSessionId()).isEqualTo(session.getPublicId());
         assertThat(response.getPatient().getName()).isEqualTo("Hong Gil-dong");
         assertThat(response.getIntakeSummary().getDepartmentName()).isEqualTo("Internal Medicine");
+        assertThat(response.getConsultationHistories()).hasSize(1);
+        assertThat(response.getConsultationHistories().get(0).getDoctorName()).isEqualTo("Doctor Kim");
+        assertThat(response.getConsultationHistories().get(0).getSymptom())
+                .isEqualTo("Patient selected the department directly.");
+        assertThat(response.getConsultationHistories().get(0).getSummaryNote()).isEqualTo("Follow-up required");
+        assertThat(response.getConsultationHistories().get(0).isPrescriptionIssued()).isTrue();
         assertThat(response.getVitals()).isNotNull();
         assertThat(response.getVitals().getTemperature()).isEqualByComparingTo("36.7");
         assertThat(response.getVitals().getBloodPressureSys()).isEqualTo(128);

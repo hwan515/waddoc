@@ -5,6 +5,7 @@ import useAuthStore from '../../../store/authStore';
 import { useSSE } from '../../../hooks/useSSE';
 import apiClient from '../../../utils/api';
 import { logoutSession } from '../../../utils/logout';
+import { parsePrescriptionNote } from '../../../utils/prescriptionNote';
 
 // 진료과에 따른 랜덤 증상 생성 함수 (컴포넌트 외부에 배치)
 const getRandomSymptom = (deptName = '') => {
@@ -95,6 +96,32 @@ const mapNotificationToReservation = (notif) => ({
     type: '비대면',
     missionPhase: notif.missionPhase || null,
     isNotificationOnly: true,
+});
+
+const buildPrescriptionSummary = (prescriptionNote, isPrescriptionIssued) => {
+    const parsedPrescription = parsePrescriptionNote(prescriptionNote);
+
+    if (parsedPrescription.isStructured && parsedPrescription.items.length > 0) {
+        return parsedPrescription.items.map((item) => item.name).join(', ');
+    }
+
+    if (parsedPrescription.rawText) {
+        return parsedPrescription.rawText;
+    }
+
+    return isPrescriptionIssued ? '처방전 등록' : '처방 없음';
+};
+
+const mapConsultationHistoryToRow = (history) => ({
+    id: history.caseId,
+    date: history.consultationDate || '',
+    doctor: history.doctorName || '담당의 미상',
+    symptom: history.symptom || '문진 내용 없음',
+    dx: history.summaryNote || '소견서 없음',
+    rx: buildPrescriptionSummary(
+        history.prescriptionNote,
+        history.isPrescriptionIssued ?? history.prescriptionIssued
+    ),
 });
 
 const getReservationStatusClassName = (reservation) => {
@@ -213,6 +240,41 @@ const LegacyEMRDashboard = () => {
     // 환자 선택 (디테일 조회)
     const handlePatientSelect = async (ptNo, caseId) => {
         setSelectedReservationId(caseId);
+        try {
+            const response = await apiClient.get(`/cases/${caseId}`);
+            const detail = response.data;
+            const pInfo = detail.patient || {};
+
+            let age = '誘몄긽';
+            if (pInfo.birthDate) {
+                const birthYear = new Date(pInfo.birthDate).getFullYear();
+                const currentYear = new Date().getFullYear();
+                age = currentYear - birthYear;
+            }
+
+            setPatientDB(prev => ({
+                ...prev,
+                [ptNo]: {
+                    ptNo: pInfo.patientId,
+                    name: pInfo.name,
+                    address: pInfo.address || '二쇱냼 誘몄긽',
+                    birthDate: pInfo.birthDate || '?곸꽭?뺣낫 誘몄긽',
+                    phone: pInfo.phone || '?곕씫泥??놁쓬',
+                    age: age,
+                    gender: mapGenderLabel(pInfo.gender),
+                    note: detail.intakeSummary?.selectionReason || '?먯꽭???뱀씠?ы빆 ?놁쓬'
+                }
+            }));
+
+            setHistoryDB(prev => ({
+                ...prev,
+                [ptNo]: (detail.consultationHistories || []).map(mapConsultationHistoryToRow)
+            }));
+
+            return;
+        } catch (err) {
+            console.error(`Failed to fetch details for case ${caseId}:`, err);
+        }
 
         // 만약 환자 상세 정보가 아직 API에서 불러와지지 않았거나(미상), SSE로 등록된 임시 상태라면
         if (!patientDB[ptNo] || patientDB[ptNo].age === '미상') {
