@@ -7,7 +7,6 @@
  *   3. 변경 감지: src/BE, src/FE, src/FE-phone, infra 중 변경된 부분만 처리
  *      - infra/nginx 및 앱 이미지(src/BE, src/FE, src/FE-phone) 변경은 nginx 재시작
  *   4. 변경된 이미지 서비스만 Docker buildx → DockerHub push
- *      - ros2_app_ec2는 배포 서버에서 로컬 build
  *   5. docker compose pull/build → up -d
  *      - 변경된 서비스만 교체
  *      - spring-api는 배포 후 항상 3개 유지
