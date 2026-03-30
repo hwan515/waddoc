@@ -1,8 +1,5 @@
 # 도서·산간 방문형 비대면 진료 서비스 — 시스템 아키텍처
 
-> 2026-03 기준 현재 MVP 신규 예약 흐름은 STT를 사용하지 않고 DTMF 진료과 선택을 사용한다.
-> 아래 STT/WebSocket 관련 설계는 향후 확장 검토용 legacy 초안으로 본다.
-
 ## 1. 아키텍처 원칙
 
 | 원칙 | 설명 |
@@ -10,7 +7,7 @@
 | 제어면 / 미디어면 / 추론면 분리 | Spring Boot = 상태·권한·오케스트레이션, LiveKit = WebRTC 미디어, AI = 추론 전용 |
 | AI 내부망 격리 | AI 서버는 외부 직접 노출 금지. React → AI 직접 호출 금지 |
 | AI 분리 배포 | DEV/PROD 공통으로 AI 추론은 별도 GPU 서버에서 실행. 메인 서버 Compose에 AI 컨테이너를 포함하지 않음 |
-| AI 프로토콜 분리 | IDV/OCR = REST multipart, 실시간 STT/문진 = WebSocket |
+| AI 프로토콜 분리 | IDV/OCR = REST multipart |
 | 파일 전달 표준화 | IDV/OCR 이미지 전달은 DEV/PROD 공통 multipart 전송. 공유 디렉터리 방식 미사용 |
 | 환자 무계정 정책 | 환자는 로그인 계정 없음. 본인확인 완료 후 room token만 발급 |
 | TURN 전제 WebRTC | NAT/방화벽 환경 대비 TURN 릴레이 필수 구성. 품질 저하 시 비디오 off → 오디오 전용 fallback |
@@ -55,18 +52,17 @@
 │   │ PostgreSQL │ │ Redis │ │ Kafka + ZK │              │
 │   └────────────┘ └───────┘ └─────────────┘              │
 └───────────────────────────┬─────────────────────────────┘
-                            │ REST multipart / WebSocket / REST JSON
+                            │ REST multipart
 ┌───────────────────────────┴─────────────────────────────┐
 │                  GPU Server (AI Inference)              │
-│              ┌─────────┐   ┌────────────────┐           │
-│              │ IDV AI  │   │ STT AI         │           │
-│              └─────────┘   └────────────────┘           │
+│              ┌─────────┐                                │
+│              │ IDV AI  │                                │
+│              └─────────┘                                │
 └─────────────────────────────────────────────────────────┘
 ```
 
 - DEV와 PROD 모두 `Spring Boot -> GPU Server` 경로로만 AI 추론을 호출한다.
 - `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
-- `Spring Boot <-> STT AI` 는 WebSocket 스트리밍으로 partial/final transcript를 주고받는다.
 - `Spring Boot -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
 - React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
 
@@ -115,10 +111,9 @@
 ### 3.1 구성 원칙
 
 - 메인 애플리케이션 스택만 로컬 Docker Compose로 실행한다.
-- IDV AI, STT AI는 **별도 GPU 서버**에서 실행한다.
+- IDV AI는 **별도 GPU 서버**에서 실행한다.
 - DEV와 PROD 모두 Spring Boot는 GPU 서버의 AI 엔드포인트를 직접 호출한다.
 - 본인확인(IDV/OCR)은 **REST multipart**를 사용한다.
-- 실시간 문진/STT는 **WebSocket 스트리밍**을 사용한다.
 - 로컬 개발에서도 React → AI 직접 호출은 금지하고, 반드시 Spring Boot를 경유한다.
 
 ### 3.2 컨테이너 구성
@@ -254,7 +249,6 @@ Nginx 내부 라우팅:
 원격 의존성:
   - spring-api → kafka:29092 (SMS / 알림 / 텔레메트리 / 배차 이벤트)
   - spring-api → http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (기본값, 필요 시 AI_IDV_URL override)
-  - spring-api ↔ wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe (STT AI WebSocket)
 ```
 
 ### 3.4 파일 저장 방식 (개발)
@@ -266,8 +260,6 @@ Spring Boot 로컬 저장소: ./local-storage/uploads → /data/uploads
   /data/uploads/
     ├── patient-reference/    # 사전 등록 환자 얼굴 사진
     ├── verification-probe/   # 본인확인 촬영 사진
-    ├── audio/
-    │   └── intake/           # STT용 오디오
     └── temp/                 # 임시 파일
 
 ※ AI 서버와의 bind mount 공유는 하지 않는다.
@@ -291,27 +283,13 @@ Parts:
   - faceImage: (binary)
   - idCardImage: (binary)
 
-Spring Boot ↔ STT AI
-Connect: wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe
-
-Client → Server:
-  {"type":"start","requestId":"stt_001","language":"ko","sampleRate":16000}
-  [binary audio chunk #1]
-  [binary audio chunk #2]
-  {"type":"end","requestId":"stt_001"}
-
-Server → Client:
-  {"type":"partial","requestId":"stt_001","text":"머리가"}
-  {"type":"partial","requestId":"stt_001","text":"머리가 아프고"}
-  {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
-
 ## 4. 배포 환경 (Production)
 
 ### 4.1 구성 원칙
 
 - **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, Kafka, Zookeeper, LiveKit
-- **AI 서버 (별도)**: IDV AI, STT AI
-- 서버 간 통신: **REST + WebSocket**
+- **AI 서버 (별도)**: IDV AI
+- 서버 간 통신: **REST multipart**
 - 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
 - AI 서버는 메인 서버에서만 접근 가능 (외부 직접 노출 금지)
 
@@ -343,7 +321,7 @@ Server → Client:
 │  │  └────────────┘  └──────────┘  └───────────┘  │  │
 │  │        │                                       │  │
 │  └────────┼───────────────────────────────────────┘  │
-│           │ REST multipart + WS + REST JSON         │
+│           │ REST multipart                            │
 └───────────┼──────────────────────────────────────────┘
             │ HTTPS (내부 네트워크 or VPN)
 ┌───────────┴──────────────────────────────────────────┐
@@ -352,10 +330,10 @@ Server → Client:
 │  Docker Compose                                       │
 │  ┌─────────────────────────────────────────────────┐ │
 │  │                                                  │ │
-│  │  ┌───────────┐          ┌────────────┐          │ │
-│  │  │  IDV AI   │          │ STT AI     │          │ │
-│  │  │  :8000    │          │  :8001     │          │ │
-│  │  └───────────┘          └────────────┘          │ │
+│  │  ┌───────────┐                                  │ │
+│  │  │  IDV AI   │                                  │ │
+│  │  │  :8000    │                                  │ │
+│  │  └───────────┘                                  │ │
 │  │                                                  │ │
 │  │  /data/uploads/ (AI 서버 로컬 저장)              │ │
 │  │    ├── received/       # 수신된 파일             │ │
@@ -526,15 +504,10 @@ GPU Server
   - reverse proxy (nginx 등)
       - listen 443 ssl
       - /idv/*    -> 127.0.0.1:8000
-      - /stt/*    -> 127.0.0.1:8001
 
   - idv-ai process
       - bind 127.0.0.1:8000
       - 역할: 얼굴 비교 / OCR
-
-  - stt-ai process
-      - bind 127.0.0.1:8001
-      - 역할: 실시간 STT WebSocket
 
   - process manager
       - systemd, supervisor, pm2, 또는 전용 ML serving runtime 사용
@@ -543,12 +516,12 @@ GPU Server
 운영 원칙:
 
 - 메인 서버는 GPU 서버의 `443`만 호출한다.
-- 내부 서비스 포트 `8000`, `8001`은 loopback 또는 내부망에서만 바인딩한다.
+- 내부 서비스 포트 `8000`은 loopback 또는 내부망에서만 바인딩한다.
 - TLS 종료와 경로 라우팅은 GPU 서버 reverse proxy가 담당한다.
 
 ### 4.5 AI 통신 방식 (배포)
 
-배포 환경에서도 작업 유형별로 프로토콜을 분리한다.
+배포 환경에서도 IDV/OCR은 REST multipart를 사용한다.
 
 ```
 Spring Boot → IDV AI (POST https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify)
@@ -570,34 +543,15 @@ Response (JSON):
   "similarityScore": 0.93,
   "reasonCodes": []
 }
-Spring Boot ↔ STT AI (WS wss://<PROD_GPU_SERVER_HOST>/stt/ws/transcribe)
-
-Client → Server:
-  {"type":"start","requestId":"stt_001","language":"ko","sampleRate":16000}
-  [binary audio chunks ...]
-  {"type":"end","requestId":"stt_001"}
-
-Server → Client:
-  {"type":"partial","requestId":"stt_001","text":"머리가"}
-  {"type":"final","requestId":"stt_001","text":"머리가 아프고 어지러워요","confidence":0.87}
-
 ## 5. AI 통신 추상화 레이어
 
-현재 표준 운영 모델은 **역할별 프로토콜 분리**다.
-- IDV/OCR: multipart REST
-- 실시간 STT: WebSocket
+현재 표준 운영 모델은 **IDV/OCR: multipart REST**다.
 
 과거의 공유 디렉터리(JSON 경로 전달) 전략은 더 이상 기본 아키텍처에 포함하지 않는다.
 
 ```
 interface IdvAiClient {
     VerificationResult verify(VerificationRequest request);
-}
-
-interface RealtimeSttClient {
-    void openSession(SttSessionRequest request);
-    void sendAudioChunk(byte[] chunk);
-    void closeSession(String requestId);
 }
 ```
 
@@ -615,9 +569,7 @@ ai:
 
 ## 6. AI API 스펙
 
-AI 서버는 **업무 성격에 따라 프로토콜을 분리**한다.
-- 본인확인/신분증 OCR: multipart REST
-- 실시간 STT: WebSocket
+AI 서버는 본인확인/신분증 OCR을 **multipart REST**로 제공한다.
 
 ### 6.1 IDV AI API
 
@@ -705,52 +657,11 @@ Spring Boot는 위 응답을 받아 다음을 수행한다.
 - 응답에는 `rrnMasked` 또는 해시 비교 결과만 포함한다.
 - 원본 신분증 이미지는 기본적으로 요청 처리 후 즉시 폐기하고, 실패 케이스 또는 운영자 수동 요청 시에만 예외 저장 후 TTL 정리한다.
 
-### 6.2 실시간 STT AI API
+### 6.2 추천/분류 AI API
 
 | Endpoint | Method | 설명 |
 |----------|--------|------|
-| `/ws/transcribe` | WS | 음성 스트리밍 → partial/final transcript |
-| `/api/v1/health` | GET | 헬스체크 |
-
-**연결**
-```text
-wss://<GPU_SERVER_HOST>/stt/ws/transcribe
-```
-
-**클라이언트 → 서버**
-```json
-{ "type": "start", "requestId": "stt_001", "language": "ko", "sampleRate": 16000 }
-```
-
-```text
-[binary audio chunk...]
-```
-
-```json
-{ "type": "end", "requestId": "stt_001" }
-```
-
-**서버 → 클라이언트**
-```json
-{ "type": "partial", "requestId": "stt_001", "text": "머리가" }
-```
-
-```json
-{
-  "type": "final",
-  "requestId": "stt_001",
-  "text": "머리가 아프고 어지러워요",
-  "confidence": 0.87,
-  "language": "ko",
-  "durationMs": 3200
-}
-```
-
-### 6.3 추천/분류 AI API
-
-| Endpoint | Method | 설명 |
-|----------|--------|------|
-| `/api/v1/recommend` | POST | STT 결과 기반 최종 증상 분류 및 추천 |
+| `/api/v1/recommend` | POST | 증상 텍스트 기반 최종 분류 및 추천 |
 | `/api/v1/health` | GET | 헬스체크 |
 
 **요청**
@@ -1286,7 +1197,7 @@ AI 서버:
   외부 공개: 443 (TLS reverse proxy)
   메인 서버에서만 접근: 443
   방화벽: 메인 서버 IP만 허용 (iptables/ufw)
-  내부 전용: 8000 (IDV), 8001 (STT)
+  내부 전용: 8000 (IDV)
 
 서버 간 통신:
   - 같은 VPC/내부 네트워크 내에서 private IP 사용
@@ -1322,8 +1233,7 @@ sudo ufw enable
 | 프로세스 | Memory Limit | CPU Limit | 비고 |
 |-----------|-------------|-----------|------|
 | idv-ai process | 4G | 4.0 | 얼굴 비교 / OCR 모델 |
-| stt-ai process | 4G | 4.0 | 실시간 음성 인식 |
-| **합계** | **8G** | **8.0** | GPU 있으면 CPU 부담 감소 |
+| **합계** | **4G** | **4.0** | GPU 있으면 CPU 부담 감소 |
 
 ---
 
@@ -1332,15 +1242,10 @@ sudo ufw enable
 | 항목 | 타임아웃 | 재시도 | 실패 시 |
 |------|---------|--------|---------|
 | Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
-| Spring ↔ STT AI (WS 연결) | 3초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
-| STT final 응답 대기 | 12초 | 1회 자동 | STT_FAILED 기록, 수동 입력 전환 |
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |
 | WebRTC 재연결 | 30초 | 3회 (SDK 자동) | ABANDONED 판정 |
-
-> [!NOTE]
-> STT UX 목표는 10초 이내 응답 (MVP_Requirements §9.2). 서버 hard timeout은 12초로 네트워크 오버헤드를 포함한다.
 
 ---
 
@@ -1352,8 +1257,6 @@ sudo ufw enable
 /data/uploads/
   ├── patient-reference/      # 사전 등록 환자 사진 (Spring write)
   ├── verification-probe/     # 본인확인 촬영 사진 (Spring write)
-  ├── audio/
-  │   └── intake/             # 인테이크 오디오 (Spring write)
   └── temp/                   # 임시 파일
 ```
 
@@ -1369,7 +1272,6 @@ sudo ufw enable
 |----------|-----|----------|
 | temp/ | 24시간 | Spring @Scheduled |
 | verification-probe/ | 실패 케이스 또는 운영자 요청 저장분만 7일 | Spring @Scheduled |
-| audio/intake/ | STT 완료 후 30일 | Spring @Scheduled |
 | patient-reference/ | 환자 탈퇴 시까지 유지 | 관리자 수동 |
 
 ---
@@ -1403,7 +1305,6 @@ sudo systemctl restart nginx
 
 # AI 프로세스 재시작 예시
 sudo systemctl restart idv-ai
-sudo systemctl restart stt-ai
 ```
 
 ---
@@ -1415,9 +1316,8 @@ sudo systemctl restart stt-ai
 | Compose 파일 | `docker-compose.yml` (메인 스택) + 원격 GPU 서버 | `docker-compose.prod.yml` (메인 스택) + 원격 GPU 서버 |
 | AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
 | Spring → IDV AI | `AI_IDV_URL` 또는 기본값 `http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify` | `AI_IDV_URL` 또는 기본값 `https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify` |
-| Spring ↔ STT AI | wss://\<DEV_GPU_SERVER_HOST\>/stt/ws/transcribe | wss://\<PROD_GPU_SERVER_HOST\>/stt/ws/transcribe |
-| 프로토콜 모델 | IDV=REST multipart, STT=WebSocket | IDV=REST multipart, STT=WebSocket |
-| AI 파일 접근 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 |
+| 프로토콜 모델 | IDV=REST multipart | IDV=REST multipart |
+| AI 파일 접근 | IDV/OCR 수신 파일은 로컬 저장 | IDV/OCR 수신 파일은 로컬 저장 |
 | Spring Profile | `local` | `prod` |
 | DB 비밀번호 | 하드코딩 (dev) | 환경 변수 / secrets |
 | TLS | 없음 | Nginx에서 종료 |

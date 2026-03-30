@@ -41,9 +41,6 @@
     ```bash
     xhost +local:docker
     ```
-4. **Zenoh 도메인 확인**
-   - 운영 표준 endpoint는 `tcp/zenoh.waddoc.site:8081` 입니다.
-   - 더 이상 `tcp/<공인IP>:8081`을 직접 사용하지 않습니다.
 ### 자동 초기 환경 세팅 스크립트 (추천)
 우분투를 갓 설치했거나(순정) 필수 패키지 설치가 번거롭다면, 함께 제공되는 쉘 스크립트를 통해 한 번에 세팅할 수 있습니다.
 
@@ -61,8 +58,6 @@ docker compose up -d
 ```
 > *최초 실행 시 이미지를 다운로드하고 패키지를 설치하므로 일정 시간이 소요될 수 있습니다.*
 > *이 환경은 CycloneDDS discovery 충돌을 피하기 위해 `ROS_LOCALHOST_ONLY=1` 로 동작합니다. Unity는 ROS TCP(10000)로 붙기 때문에 이 설정과 충돌하지 않습니다.*
-> *Zenoh 브리지는 `tcp/zenoh.waddoc.site:8081` 로 접속합니다.*
-
 ### YOLO 사용 시 추가 설치
 `vision_detect.py` 의 사람/경운기 ROI e-stop 기능은 `ultralytics` 와 PyTorch가 필요합니다. 최신 `Dockerfile`로 이미지를 다시 빌드하면 함께 설치됩니다. 이미 실행 중인 컨테이너에서 바로 테스트하려면 아래를 실행하세요.
 
