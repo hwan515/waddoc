@@ -2068,7 +2068,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                 ),
                 new PatientSeed(
                         "gim_wp_142",
-                        "정복순",
+                        "이복순",
                         LocalDate.of(1955, 1, 24),
                         PatientGender.FEMALE,
                         "GIMCHEON",
