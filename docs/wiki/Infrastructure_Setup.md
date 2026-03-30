@@ -7,7 +7,7 @@ infra/
 ├── .env.example              # 환경 변수 템플릿
 ├── Jenkinsfile               # Jenkins CI/CD 파이프라인 정의
 ├── docker-compose.yml        # 개발 메인 스택 (AI, coturn 제외)
-├── docker-compose.prod.yml   # 배포 메인 서버 (coturn + ROS2 bridge/FastAPI 포함)
+├── docker-compose.prod.yml   # 배포 메인 서버 (coturn + Mosquitto MQTT 포함)
 ├── docker-compose.monitoring.prod.yml # 배포 monitoring 스택 (Prometheus/Grafana/exporter)
 ├── monitoring/
 │   ├── prometheus/
@@ -47,15 +47,15 @@ docker compose up -d --build spring-api  # 특정 서비스 재빌드
 docker compose down                # 종료
 ```
 
-- `.env` 에 `DEV_GPU_SERVER_HOST` 를 반드시 설정해야 한다.
-- `.env` 에 `DEV_ROBOT_API_PROXY_TARGET` 를 설정하면 `/api/minimap`, `/api/odom`, `/api/cmd/*` 요청을 로컬이 아닌 원격 EC2 robot API로 프록시한다. 기본값은 `https://www.waddoc.site`다.
-- 개발 환경의 `spring-api` 는 GPU 서버의 `443` 포트만 사용한다.
-- 호출 경로는 `https://<DEV_GPU_SERVER_HOST>/idv/...` 기준이다.
+- 기본 host 조합을 쓸 경우 `.env` 에 `DEV_GPU_SERVER_HOST` 를 설정한다. 커스텀 포트나 스킴을 쓰면 `AI_IDV_URL` 을 직접 지정한다.
+- 로봇 통신은 운영 MQTT 브로커(`wss://<DOMAIN>/mqtt`)를 통해 이루어진다. 로컬 개발 환경에서도 운영 브로커를 참조하거나 로컬 Mosquitto를 띄울 수 있다.
+- 개발 compose의 기본값은 `AI_IDV_URL=http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify` 이다.
+- 커스텀 포트나 `https` 스킴이 필요하면 `AI_IDV_URL` 환경변수로 전체 URL을 override 한다.
 - 진료/LiveKit/webhook 검증은 이 전체 compose 구성을 기본 경로로 사용한다.
 - 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
 - 로컬 compose는 monitoring stack을 포함하지 않으며 `VITE_ENABLE_MONITORING_TAB=false` 기본값으로 관제의 `시스템 모니터링` 탭도 숨긴다.
-- 로컬 개발 compose는 더 이상 `ros2_app_ec2`나 `zenoh_bridge_ec2`를 띄우지 않는다. 차량/ROS API는 EC2 쪽을 기준으로 본다.
+- 로컬 개발 compose는 로봇/차량 관련 컨테이너를 포함하지 않는다. 로봇 통신 테스트는 운영 MQTT 브로커를 참조한다.
 
 ### 개발 환경 (고급: DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
 
@@ -67,7 +67,7 @@ docker compose up -d postgres redis zookeeper kafka
 - Backend는 `src/BE/src/main/resources/application.yml`에서 기본 프로파일이 `local`로 설정되어 있으므로 IntelliJ 실행 시 별도 `SPRING_PROFILES_ACTIVE` 지정이 없어도 된다.
 - `application-local.yml`과 `application.yml` 기본값으로 Postgres/Redis/Kafka는 각각 `localhost:5432`, `localhost:6379`, `localhost:9092`에 연결된다.
 - 이 방식은 Backend만 로컬 JVM으로 띄우는 용도다. `spring-api` 컨테이너와 동시에 실행하지 않는다.
-- AI 연동까지 확인하려면 `AI_IDV_URL` 환경변수로 GPU 서버의 `443` 경로 기반 주소를 맞춰야 한다.
+- AI 연동까지 확인하려면 기본값(`http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify`) 또는 `AI_IDV_URL` 직접 지정값이 실제 GPU 서버를 가리키도록 맞춘다.
 - Kafka listener가 활성화된 상태로 Backend를 띄우므로, `zookeeper`/`kafka` 없이 로컬 JVM을 실행하면 이벤트 소비 기능이 비정상 동작한다.
 - 진료/LiveKit 검증은 이 혼합 실행 대신 위의 전체 compose 구성을 권장한다. `spring-api`가 컨테이너 밖에서 뜨면 LiveKit webhook 경로를 별도로 맞추지 않는 한 기본 설정과 어긋날 수 있다.
 - 로컬 더미데이터가 필요하면 `APP_SEED_ENABLED=true`로 Backend를 실행한다. 기본 로그인 비밀번호는 `APP_SEED_DEFAULT_PASSWORD` 또는 기본값 `Passw0rd!`를 사용한다.
@@ -84,22 +84,20 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml 
 
 - `.env` 에 `PROD_GPU_SERVER_HOST` 와 `SERVER_DOMAIN` 을 반드시 설정해야 한다.
 - `.env` 에 `MONITORING_COOKIE_SECRET`, `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD` 도 설정해야 한다.
-- 운영 compose에는 `zenoh_bridge_ec2`, `ros2_app_ec2`가 기본 포함된다.
+- 운영 compose에는 `mosquitto` (MQTT 브로커)가 기본 포함된다. 차량/로봇 통신은 MQTT over WebSocket을 사용한다.
 - frontend runtime-config의 `VITE_ENABLE_MONITORING_TAB` 기본값은 `true`이며, 별도 override가 없으면 운영 관제에서 `시스템 모니터링` 탭이 노출된다.
 - 운영 monitoring UI는 `https://<DOMAIN>/grafana/` 경로를 사용한다.
 - Prometheus는 외부 공개 경로를 두지 않고 Docker 내부 네트워크에서만 접근한다.
 - Kafka exporter는 Docker 내부 네트워크에서만 노출되며, Prometheus가 `kafka-exporter:9308`을 scrape한다.
 - LiveKit은 `prometheus_port: 6789`를 통해 내부 metrics endpoint를 노출하며, Prometheus가 `livekit:6789`를 scrape한다.
-- 운영 브라우저는 `https://<DOMAIN>:8000`을 직접 호출하지 않고, Nginx가 `/api/minimap`, `/api/odom`, `/api/cmd/*`를 내부 프록시한다.
-- 운영 Zenoh transport는 웹 Nginx를 거치지 않고 `tcp://zenoh.waddoc.site:8081`을 직접 사용한다.
-- `zenoh.waddoc.site` DNS A/AAAA 레코드는 운영 EC2 public address를 가리켜야 한다.
-- 운영 보안그룹은 `8081/TCP`를 Zenoh 클라이언트가 붙는 소스 대역으로만 제한해야 한다.
+- 로봇/차량 텔레메트리는 MQTT over WSS(`wss://<DOMAIN>/mqtt`)를 통해 수신하며, Nginx가 `/mqtt` 경로를 mosquitto(9001)로 프록시한다.
+- 운영 콘솔은 `/api/v1/robots/stream` SSE를 통해 로봇 상태를 수신하고, `/api/v1/robots/cmd/*`를 통해 명령을 전달한다.
 - `livekit.yaml`, `entrypoint.sh` 같은 bind mount 파일을 수정한 배포라면 아래 재시작까지 수행해야 한다.
 
 ```bash
 docker compose -f docker-compose.prod.yml restart livekit coturn
 ```
-- 배포 환경의 `spring-api` 도 GPU 서버 `443`만 사용한다.
+- 배포 환경의 `spring-api` 기본값은 `https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify` 이며, 필요하면 `AI_IDV_URL` 로 전체 URL을 override 한다.
 
 #### Monitoring V1 검증 순서
 
@@ -118,10 +116,53 @@ docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.y
 8. `operator-overview`에서 `컨테이너 CPU 사용률`과 `컨테이너 메모리 사용량` 패널의 범례가 `docker-<id>`가 아니라 `spring-api`, `redis`, `postgres`, `kafka` 또는 실제 컨테이너명으로 보이는지 확인한다.
 9. `operator-overview`에서 Kafka broker/topic lag, Kafka consumer 처리 결과, LiveKit 상태/방 수/참여자 수, token/webhook 플로우 패널이 수치 또는 `0`으로 표시되는지 확인한다.
 
+#### 애플리케이션 커스텀 메트릭
+
+Spring Boot(`global/monitoring/`)에서 Micrometer를 통해 등록하는 커스텀 메트릭이다. Prometheus가 `actuator/prometheus`를 scrape하면 자동 수집되며, `operator-overview` 대시보드에서 사용한다.
+
+**Kafka 메트릭** (`KafkaMonitoringMetrics`)
+
+| 메트릭 | 타입 | 태그 | 설명 |
+|--------|------|------|------|
+| `waddoc.kafka.consumer.processed` | Counter | `topic`, `consumer_group`, `result` | 컨슈머 메시지 처리 건수 |
+| `waddoc.kafka.consumer.duration` | Timer | `topic`, `consumer_group`, `result` | 컨슈머 메시지 처리 소요 시간 |
+
+**LiveKit 메트릭** (`LiveKitMonitoringMetrics`)
+
+| 메트릭 | 타입 | 태그 | 설명 |
+|--------|------|------|------|
+| `waddoc.livekit.room.operations` | Counter | `operation`, `result` | 방 생성/종료 등 room 오퍼레이션 횟수 |
+| `waddoc.livekit.token.issued` | Counter | `participant_type`, `result` | 참여자 토큰 발급 횟수 |
+| `waddoc.livekit.webhook.events` | Counter | `event`, `result` | webhook 이벤트 처리 횟수 |
+| `waddoc.livekit.api.duration` | Timer | `operation`, `result` | LiveKit API 호출 소요 시간 |
+
+**MQTT 메트릭** (`MqttMonitoringMetrics`)
+
+| 메트릭 | 타입 | 태그 | 설명 |
+|--------|------|------|------|
+| `waddoc.mqtt.inbound.processed` | Counter | `topic`, `result` | 인바운드 MQTT 메시지 처리 건수 (`success`/`fail`/`ignored`) |
+| `waddoc.mqtt.inbound.duration` | Timer | `topic`, `result` | 인바운드 MQTT 메시지 처리 소요 시간 |
+| `waddoc.mqtt.inbound.last.received.epoch` | Gauge | `topic` | 토픽별 마지막 메시지 수신 epoch(초). 장시간 갱신 없으면 로봇 연결 끊김 의심 |
+
+> `result` 태그 값은 `success`, `fail`, `ignored` 중 하나이다.
+
+#### 관제 시스템 모니터링 탭 (FE)
+
+관리자 관제 화면(`ControlCenter`)의 `시스템 모니터링` 탭은 Grafana 대시보드를 iframe으로 임베딩한다.
+
+- **진입 조건**: `VITE_ENABLE_MONITORING_TAB=true` (운영 기본값)일 때 탭이 노출된다.
+- **부트스트랩 흐름**:
+  1. 탭 진입 시 `POST /api/v1/admin/monitoring/session` 호출 → Spring이 HMAC-SHA JWT 기반 `monitoring_access` 쿠키를 발급한다 (HttpOnly, Secure, SameSite=Lax, maxAge=8시간).
+  2. 쿠키 발급 후 iframe `src`를 `/grafana/d/operator-overview/operator-overview?orgId=1&kiosk=tv`로 설정한다.
+  3. Nginx `auth_request`가 매 요청마다 `/_monitoring_auth` → `spring-api:8080/api/v1/admin/monitoring/authorize`로 쿠키를 검증한다.
+- **에러 처리**: 세션 부트스트랩 실패 시 에러 메시지와 `다시 시도` 버튼을 표시한다.
+- **로컬 개발**: `docker-compose.yml`에 monitoring stack이 없으므로 `VITE_ENABLE_MONITORING_TAB=false`(기본)로 탭이 숨겨진다. `MONITORING_COOKIE_SECRET` 환경변수도 dev compose에 미설정이므로, 로컬에서 모니터링을 테스트하려면 별도 Grafana 인스턴스와 해당 환경변수를 수동 구성해야 한다.
+
 #### Monitoring V1 제외 범위
 
 - Alertmanager
 - Mattermost/Slack/Discord 알림
+- Loki 로깅 스택 (중앙 집중 로그 수집 미적용, `docker compose logs`로 대체)
 - 로컬 개발 compose용 monitoring stack
 
 #### 참고
@@ -144,9 +185,9 @@ GitLab (dev push) → Checkout → 변경 감지 → 테스트 → Docker buildx
 | 스테이지 | 설명 |
 |----------|------|
 | Checkout | GitLab deploy token으로 소스 checkout (shallow clone) |
-| Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `src/zenoh-server/`, `infra/` 경로별 변경 감지 |
+| Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `infra/`, `infra/nginx/`, `infra/monitoring/` 경로별 변경 감지 |
 | Quality Gate | BE 변경 시 단위 테스트 실행 (`-PskipIntegrationTests=true`) |
-| Build & Push | 변경된 이미지 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 (`ros2_app_ec2`는 배포 서버 로컬 build) |
+| Build & Push | 변경된 이미지 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 |
 | Deploy | 메인 compose + monitoring compose를 함께 참조하여 배포. `infra/monitoring/**` 변경 시 monitoring 서비스만 교체하고, spring-api는 항상 3개로 보정 |
 
 #### 빌더 아키텍처
@@ -257,19 +298,20 @@ cp /etc/letsencrypt/live/your-domain.com/fullchain.pem infra/certs/
 cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 ```
 
-## Zenoh 도메인 배치
+## MQTT 브로커 (로봇/차량 통신)
 
-운영 Zenoh 브리지는 웹용 Nginx 443과 별도로 `tcp://zenoh.waddoc.site:8081`을 직접 listen한다.
+운영 환경의 로봇·차량 통신은 Mosquitto MQTT 브로커를 사용한다. Nginx가 `/mqtt` 경로를 WSS → `mosquitto:9001`로 프록시하며, ROS2 노드와 Spring Boot 모두 이 브로커에 연결한다.
 
-- `zenoh.waddoc.site` DNS A/AAAA 레코드는 운영 EC2 public address를 가리켜야 한다.
-- 로컬 ROS/Unity 측 `src/ros2_docker/docker-compose.yml`도 같은 도메인 endpoint를 사용한다.
+- ROS2 측 `src/ros2_docker/docker-compose.yml`은 `MQTT_BROKER_HOST=www.waddoc.site`, `MQTT_BROKER_PORT=443`, `MQTT_WS_PATH=/mqtt`로 WSS 연결한다.
+- Spring Boot는 `MQTT_BROKER_URL=ws://mosquitto:9001`로 Docker 내부 네트워크에서 직접 연결한다.
+- MQTT 토픽: `robot/odom`, `robot/minimap`, `robot/state`, `robot/status`, `robot/cmd/estop`, `robot/cmd/waypoint`, `robot/cmd/dispatch`
 
 검증 예시:
 
 ```bash
-nslookup zenoh.waddoc.site
-nc -vz zenoh.waddoc.site 8081
-docker logs zenoh_bridge | tail -n 50
+docker logs mosquitto | tail -n 50
+# WSS 연결 테스트 (외부)
+wscat -c wss://<DOMAIN>/mqtt
 ```
 
 ## 포트 매핑
@@ -295,7 +337,7 @@ docker logs zenoh_bridge | tail -n 50
 | 80 | 80 | nginx | HTTP → HTTPS 리다이렉트 |
 | 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS, `/grafana/`) |
 | 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
-| 8081 | 8081 | zenoh_bridge_ec2 | Zenoh TCP bridge |
+| (없음) | 9001 | mosquitto | MQTT over WS (Docker 내부 전용, Nginx `/mqtt`로 프록시) |
 | 8881 | 7881 | livekit | ICE/TCP |
 | 8882/udp | 7882/udp | livekit | ICE/UDP mux |
 | 8478/udp | 8478/udp | coturn | TURN listener |
@@ -303,10 +345,8 @@ docker logs zenoh_bridge | tail -n 50
 
 > LiveKit signaling(7880)은 Nginx가 `/livekit` 경로로 WSS 프록시한다.
 > 클라이언트는 `wss://<DOMAIN>/livekit`으로 접속한다.
-> 로컬 개발에서는 `/api/minimap`, `/api/odom`, `/api/cmd/*`를 로컬 Nginx가 `${DEV_ROBOT_API_PROXY_TARGET}`으로 프록시한다.
-> 브라우저는 로컬이든 운영이든 `:8000`으로 직접 접근하지 않는다.
+> `/mqtt`는 Nginx가 mosquitto(9001)로 WSS 프록시한다. ROS2 노드는 `wss://<DOMAIN>/mqtt`로 연결한다.
 > `/grafana/`는 Waddoc ADMIN 기반 monitoring 쿠키가 있어야만 접근된다.
-> ROS/Zenoh transport는 브라우저 API와 별개이며 `tcp://zenoh.waddoc.site:8081`로 직접 연결된다.
 > 운영에서는 `rtc.use_external_ip: false`와 `LIVEKIT_NODE_IP=<EC2 공인 IP>` 조합으로 공인 IP를 고정한다.
 > TURN 릴레이는 LiveKit 내장 TURN이 아니라 `coturn` 컨테이너가 담당한다.
 > `livekit.yaml`, `entrypoint.sh`는 bind mount 파일이므로 수정 후 `docker compose restart livekit coturn`이 필요하다.

@@ -81,6 +81,33 @@
 - `dispatch.retry` → `DispatchRetryConsumer` → 동일 권역 배차 재평가 트리거
 - `dispatch_outbox` 테이블은 예약 확정과 Kafka publish 사이를 느슨하게 연결하는 outbox 역할을 담당한다.
 
+### 2.2 MQTT 로봇/차량 통신
+
+로봇·차량 통신은 Mosquitto MQTT 브로커를 통해 이루어진다. Spring Boot는 Spring Integration MQTT를 사용하여 브로커에 연결하며, ROS2 노드는 WSS(`wss://<DOMAIN>/mqtt`)를 통해 같은 브로커에 연결한다.
+
+**토픽 구조:**
+
+| 토픽 | 방향 | 설명 |
+|------|------|------|
+| `robot/odom` | ROS2 → Spring | 로봇 오도메트리 (위치/자세) |
+| `robot/minimap` | ROS2 → Spring | 미니맵 데이터 |
+| `robot/state` | ROS2 → Spring | 로봇 상태 (배터리, 센서 등) |
+| `robot/status` | ROS2 → Spring | 로봇 운영 상태 |
+| `robot/cmd/waypoint` | Spring → ROS2 | 웨이포인트 이동 명령 |
+| `robot/cmd/dispatch` | Spring → ROS2 | 미션 출동 명령 (missionId, vehicleId, waypoint, destination) |
+| `robot/cmd/estop` | Spring → ROS2 | 비상정지 명령 |
+
+**Spring Boot 내부 흐름:**
+- `RobotMqttSubscriber` → 수신 메시지를 `RobotMqttPayloadService`로 전달 → `RobotStateCache` 갱신
+- `MqttMissionLocationUpdater`, `MqttMissionPhaseUpdater` → 수신 데이터로 미션 위치/단계 자동 갱신
+- `RobotSseService` → 캐시된 로봇 상태를 `GET /api/v1/robots/stream` SSE로 운영 콘솔에 중계
+- `RobotCommandController` → 운영 콘솔 명령을 MQTT 토픽으로 publish
+- `RobotWaypointCommandClient` → 배차 서비스에서 호출하여 `robot/cmd/dispatch`로 출동 명령 publish
+
+**네트워크 경로:**
+- 운영: ROS2 → `wss://<DOMAIN>/mqtt` → Nginx → `mosquitto:9001`
+- Spring Boot → `ws://mosquitto:9001` (Docker 내부 네트워크)
+
 ---
 
 ## 3. 개발 환경 (Dev)
@@ -97,7 +124,7 @@
 ### 3.2 컨테이너 구성
 
 ```yaml
-# docker-compose.yml (개발 환경 - 메인 스택만)
+# docker-compose.yml (개발 환경 - 메인 스택 발췌)
 services:
   # === Reverse Proxy ===
   nginx:
@@ -107,17 +134,23 @@ services:
     depends_on:
       - spring-api
       - frontend
+      - frontend-phone
       - livekit
 
   # === Frontend ===
   frontend:
-    build: ./src/FE
+    build: ../src/FE
     expose:
       - "3000"
 
+  frontend-phone:
+    build: ../src/FE-phone
+    expose:
+      - "3001"
+
   # === Backend ===
   spring-api:
-    build: ./src/BE
+    build: ../src/BE
     expose:
       - "8080"
     environment:
@@ -126,9 +159,12 @@ services:
       - REDIS_HOST=redis
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - LIVEKIT_HOST=http://livekit:7880
-      - AI_IDV_URL=https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
+      - AI_IDV_URL=http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
+      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-20000}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart
+      - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-wss://www.waddoc.site/mqtt}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
@@ -217,7 +253,7 @@ Nginx 내부 라우팅:
 
 원격 의존성:
   - spring-api → kafka:29092 (SMS / 알림 / 텔레메트리 / 배차 이벤트)
-  - spring-api → https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (IDV AI REST)
+  - spring-api → http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (기본값, 필요 시 AI_IDV_URL override)
   - spring-api ↔ wss://<DEV_GPU_SERVER_HOST>/stt/ws/transcribe (STT AI WebSocket)
 ```
 
@@ -244,7 +280,7 @@ Spring Boot 로컬 저장소: ./local-storage/uploads → /data/uploads
 개발 환경에서도 GPU 서버를 직접 호출한다.
 다만 작업 유형에 따라 프로토콜을 분리한다.
 
-Spring Boot → IDV AI (POST https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify)
+Spring Boot → IDV AI (POST http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify, 기본값)
 Content-Type: multipart/form-data
 
 Parts:
@@ -332,7 +368,7 @@ Server → Client:
 ### 4.3 메인 서버 Docker Compose
 
 ```yaml
-# docker-compose.prod.yml (메인 서버)
+# docker-compose.prod.yml (메인 서버 - 주요 서비스 발췌)
 services:
   nginx:
     image: nginx:alpine
@@ -341,22 +377,25 @@ services:
       - "443:443"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
-      - ./certs:/etc/nginx/certs:ro
+      - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro
     depends_on:
       - spring-api
       - frontend
+      - frontend-phone
       - livekit
 
   frontend:
-    build:
-      context: ./src/FE
-      args:
-        - VITE_API_URL=/api
+    image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest}
     expose:
       - "3000"
 
+  frontend-phone:
+    image: ${DOCKER_IMAGE_FP:-waddoc-phone}:${FP_IMAGE_TAG:-latest}
+    expose:
+      - "3001"
+
   spring-api:
-    build: ./src/BE
+    image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest}
     expose:
       - "8080"
     environment:
@@ -364,7 +403,7 @@ services:
       - DB_HOST=postgres
       - REDIS_HOST=redis
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-      - AI_IDV_URL=https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
+      - AI_IDV_URL=${AI_IDV_URL:-https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify}
       - FILE_STORAGE_ROOT=/data/uploads
       - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
     volumes:
@@ -461,10 +500,21 @@ services:
       --no-cli
       --fingerprint
 
+  mosquitto:
+    image: eclipse-mosquitto:2
+    expose:
+      - "9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
 volumes:
   pg_data:
   redis_data:
   uploads:
+  mosquitto_data:
+  mosquitto_log:
 ```
 
 ### 4.4 GPU 서버 런타임 구성 (DEV/PROD 공통)
@@ -554,11 +604,11 @@ interface RealtimeSttClient {
 ```yaml
 # application-local.yml
 ai:
-  idv-url: https://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
+  idv-url: ${AI_IDV_URL:http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify}
 
 # application-prod.yml
 ai:
-  idv-url: https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify
+  idv-url: ${AI_IDV_URL}
 ```
 
 ---
@@ -1338,7 +1388,7 @@ docker compose logs -f spring-api
 docker compose up -d --build spring-api
 
 # 원격 GPU 서버 헬스체크 예시
-curl https://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
+curl http://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
 ```
 
 ### 배포 환경 — 메인 서버
@@ -1364,7 +1414,7 @@ sudo systemctl restart stt-ai
 |------|------------|-------------|
 | Compose 파일 | `docker-compose.yml` (메인 스택) + 원격 GPU 서버 | `docker-compose.prod.yml` (메인 스택) + 원격 GPU 서버 |
 | AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
-| Spring → IDV AI | https://\<DEV_GPU_SERVER_HOST\>/idv/api/v1/verify | https://\<PROD_GPU_SERVER_HOST\>/idv/api/v1/verify |
+| Spring → IDV AI | `AI_IDV_URL` 또는 기본값 `http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify` | `AI_IDV_URL` 또는 기본값 `https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify` |
 | Spring ↔ STT AI | wss://\<DEV_GPU_SERVER_HOST\>/stt/ws/transcribe | wss://\<PROD_GPU_SERVER_HOST\>/stt/ws/transcribe |
 | 프로토콜 모델 | IDV=REST multipart, STT=WebSocket | IDV=REST multipart, STT=WebSocket |
 | AI 파일 접근 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 | IDV/OCR 수신 파일은 로컬 저장, STT는 스트림 처리 후 필요 시 임시 저장 |

@@ -93,7 +93,7 @@ erDiagram
         varchar selection_reason "선택 사유"
         enum selection_confidence_level "HIGH | MEDIUM | LOW"
         boolean selection_is_emergency "응급 여부"
-        jsonb offered_slot_ids_json "안내된 슬롯 ID 스냅샷"
+        text offered_slot_ids_json "안내된 슬롯 ID 스냅샷 (JSON 문자열)"
         timestamp selection_updated_at "진료과 선택 갱신 시각"
     }
 
@@ -159,7 +159,7 @@ erDiagram
         bigint case_id FK
         varchar vehicle_id "차량 public_id (논리 참조)"
         text destination "목적지 주소"
-        int target_waypoint_number "ROS/FastAPI 출동 대상 waypoint 번호 (nullable)"
+        int target_waypoint_number "MQTT 출동 대상 waypoint 번호 (nullable)"
         timestamp dispatched_at
         timestamp estimated_arrival_time
         enum phase "CREATED | DISPATCHED | EN_ROUTE | ARRIVED | VERIFYING | CONSULTING | RETURNING | COMPLETED | FAILED | INCIDENT(임시)"
@@ -288,7 +288,7 @@ erDiagram
 | `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED` |
 | `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
 | `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
-| `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리한다. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조하고, `target_waypoint_number`는 ROS/FastAPI로 전달할 waypoint 번호를 저장한다 |
+| `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리한다. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조하고, `target_waypoint_number`는 MQTT 토픽(`robot/cmd/dispatch`)으로 전달할 waypoint 번호를 저장한다 |
 | `VITAL_MEASUREMENT` | 진료 케이스별 최신 생체데이터 1건. 로봇 측정 단계마다 같은 `case_id` row를 partial upsert 하며, 체온/혈압/심박수/SpO2와 측정 시점 ECG sample, `measured_at`, `created_at`, `updated_at`을 함께 관리 |
 
 ### 2.6 화상진료 세션 도메인
