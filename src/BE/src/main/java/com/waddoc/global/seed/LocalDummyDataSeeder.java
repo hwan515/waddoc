@@ -91,7 +91,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private static final int SYNTHETIC_ADDRESS_BUILDING_NUMBER_OFFSET = 3;
     private static final String PRIMARY_PATIENT_KEY = "gim_wp_059";
     private static final String PRIMARY_PATIENT_NAME = "김원준";
-    private static final String PRIMARY_PATIENT_PHONE = "01049163720";
+    private static final String PRIMARY_PATIENT_PHONE = "01067984260";
     private static final String PRIMARY_PATIENT_ADDRESS = "경상북도 김천시 증산면 장전4길 14";
     private static final String PRIMARY_PATIENT_DOCTOR_USERNAME = "seed_prod_doc_im_01";
     private static final String PRIMARY_PATIENT_CONSULTATION_SUMMARY =
@@ -156,7 +156,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     );
     private static final int TARGET_HISTORICAL_MISSION_COUNT = 50;
     private static final int PENDING_GUARDIAN_LINK_COUNT = 5;
-    private static final int OUTPATIENT_BOOKING_COUNT = 6;
+    private static final int OUTPATIENT_BOOKINGS_PER_DOCTOR = 5;
 
     private static final List<DoctorSeed> DOCTOR_SEEDS = List.of(
             new DoctorSeed("seed_prod_doc_im_01", "김도현", "INTERNAL_MEDICINE", "내과"),
@@ -709,29 +709,33 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             return;
         }
 
-        int outpatientBookingCount = Math.min(
-                OUTPATIENT_BOOKING_COUNT,
-                Math.max(0, Math.min(patientSeeds.size() - DOCTOR_SEEDS.size(), DOCTOR_SEEDS.size()))
-        );
-        if (outpatientBookingCount <= 0) {
+        int availablePatientCount = Math.max(0, patientSeeds.size() - DOCTOR_SEEDS.size());
+        int outpatientBookingsPerDoctor = DOCTOR_SEEDS.isEmpty()
+                ? 0
+                : Math.min(OUTPATIENT_BOOKINGS_PER_DOCTOR, availablePatientCount / DOCTOR_SEEDS.size());
+        if (outpatientBookingsPerDoctor <= 0) {
             return;
         }
 
-        for (int index = 0; index < outpatientBookingCount; index++) {
-            PatientSeed seed = patientSeeds.get(DOCTOR_SEEDS.size() + index);
-            Patient patient = getPatient(patientsByKey, seed.key());
-            DoctorProfile doctor = getDoctor(doctorsByUsername, DOCTOR_SEEDS.get(index).username());
-            LocalDate appointmentDate = outpatientWindowEnd.minusDays((outpatientBookingCount - 1L - index) / 3L);
-            if (appointmentDate.isBefore(historyStart)) {
-                appointmentDate = historyStart;
-            }
-            LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(8 + index);
-            LocalTime endTime = startTime.plusMinutes(30);
+        int patientSeedStartIndex = DOCTOR_SEEDS.size();
+        for (int doctorIndex = 0; doctorIndex < DOCTOR_SEEDS.size(); doctorIndex++) {
+            DoctorProfile doctor = getDoctor(doctorsByUsername, DOCTOR_SEEDS.get(doctorIndex).username());
+            for (int bookingIndex = 0; bookingIndex < outpatientBookingsPerDoctor; bookingIndex++) {
+                int patientSeedIndex = patientSeedStartIndex + (doctorIndex * outpatientBookingsPerDoctor) + bookingIndex;
+                PatientSeed seed = patientSeeds.get(patientSeedIndex);
+                Patient patient = getPatient(patientsByKey, seed.key());
+                LocalDate appointmentDate = outpatientWindowEnd.minusDays(bookingIndex / 2L);
+                if (appointmentDate.isBefore(historyStart)) {
+                    appointmentDate = historyStart;
+                }
+                LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(4 + bookingIndex);
+                LocalTime endTime = startTime.plusMinutes(30);
 
-            ScheduleSlot slot = ensureSlot(doctor, appointmentDate, startTime, endTime);
-            Booking booking = ensureBooking(patient, slot, OUTPATIENT_CHANNEL, BookingStatus.COMPLETED, null, null);
-            CareCase careCase = ensureCareCase(booking, null);
-            syncCaseStatus(careCase, CaseStatus.COMPLETED);
+                ScheduleSlot slot = ensureSlot(doctor, appointmentDate, startTime, endTime);
+                Booking booking = ensureBooking(patient, slot, OUTPATIENT_CHANNEL, BookingStatus.COMPLETED, null, null);
+                CareCase careCase = ensureCareCase(booking, null);
+                syncCaseStatus(careCase, CaseStatus.COMPLETED);
+            }
         }
     }
 
