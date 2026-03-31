@@ -6,6 +6,7 @@ import com.waddoc.domain.dispatch.service.RobotWaypointCommandClient;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -48,6 +49,7 @@ public class AdminDemoMissionService {
     private final MissionRepository missionRepository;
     private final DispatchOutboxRepository dispatchOutboxRepository;
     private final RobotWaypointCommandClient robotWaypointCommandClient;
+    private final DispatchAssignmentPolicy dispatchAssignmentPolicy;
     private final DemoModePolicy demoModePolicy;
 
     public AdminDemoMissionActionResponse dispatchMission(
@@ -63,6 +65,8 @@ public class AdminDemoMissionService {
         boolean waypointCommandSent = false;
         boolean dummyCompleted = false;
 
+        // 데모 호출로 먼저 생성된 mission은 vehicleId 없이 남을 수 있어 수동 배차 직전에 기본 차량을 보정한다.
+        assignDefaultVehicleIfMissing(mission);
         completeOtherActiveMissionsOnSameVehicle(mission);
 
         if (mission.getTargetWaypointNumber() != null) {
@@ -146,6 +150,13 @@ public class AdminDemoMissionService {
                         outbox.markCompleted();
                     }
                 });
+    }
+
+    private void assignDefaultVehicleIfMissing(Mission mission) {
+        if (mission.getVehicleId() != null && !mission.getVehicleId().isBlank()) {
+            return;
+        }
+        mission.assignVehicle(dispatchAssignmentPolicy.getDefaultVehicleId());
     }
 
     private void advanceMissionTo(Mission mission, MissionPhase targetPhase) {
