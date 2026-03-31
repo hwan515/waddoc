@@ -157,7 +157,7 @@ const Temperature = () => {
                                 <img src={temp1} alt="체온계 전원 작동" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
-                                “전원/측정” 버튼을 누르면<br /><span className="text-secondary">전원이 켜집니다</span>
+                                “측정” 버튼을 누르면<br /><span className="text-secondary">전원이 켜집니다</span>
                             </p>
                         </div>
 
@@ -166,7 +166,7 @@ const Temperature = () => {
                                 <img src={temp2} alt="체온 측정" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
-                                눈썹 위로 2~3cm 떨어져<br /><span className="text-secondary">“전원/측정” 버튼</span>을 누릅니다
+                                이마 가까이에서<br /><span className="text-secondary">“전원/측정” 버튼</span>을 누릅니다
                             </p>
                         </div>
 

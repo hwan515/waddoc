@@ -164,7 +164,7 @@ const Blood = () => {
                                 <img src={blood1} alt="혈압계 전원 작동" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
-                                커프 부분에 팔을 넣고<br /><span className="text-secondary">검정색 시작 버튼을 누릅니다</span>
+                                커프에 팔을 넣고<br /><span className="text-secondary">검정색 시작 버튼을 누릅니다</span>
                             </p>
                         </div>
 
@@ -173,7 +173,7 @@ const Blood = () => {
                                 <img src={blood2} alt="혈압 측정" className="w-full h-full object-contain p-2" />
                             </div>
                             <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
-                                측정이 완료될 때까지<br /><span className="text-secondary">움직이거나 말하지 않습니다</span>
+                                측정이 끝날 때까지<br /><span className="text-secondary">움직이거나 말하지 않습니다</span>
                             </p>
                         </div>
 
