@@ -26,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -189,6 +190,15 @@ class LocalDummyDataSeederTest {
     }
 
     @Test
+    void resolveSeedScheduleStartDateAlwaysSkipsToday() {
+        LocalDate today = LocalDate.of(2026, 3, 31);
+
+        LocalDate result = LocalDummyDataSeeder.resolveSeedScheduleStartDate(today);
+
+        assertThat(result).isEqualTo(LocalDate.of(2026, 4, 1));
+    }
+
+    @Test
     void resolveHistoricalSeedEndDateUsesYesterdayInMarch() {
         LocalDate today = LocalDate.of(2026, 3, 29);
 
@@ -217,5 +227,27 @@ class LocalDummyDataSeederTest {
         );
 
         assertThat(result).isEqualTo(LocalDate.of(2026, 3, 22));
+    }
+
+    @Test
+    void buildHistoricalBookingPlansKeepsOnlyOnePrimaryPatientVisit() {
+        @SuppressWarnings("unchecked")
+        List<Object> patientSeeds = (List<Object>) ReflectionTestUtils.invokeMethod(seeder, "buildPatientSeeds");
+        @SuppressWarnings("unchecked")
+        List<Object> bookingPlans = (List<Object>) ReflectionTestUtils.invokeMethod(
+                seeder,
+                "buildHistoricalBookingPlans",
+                patientSeeds
+        );
+
+        long primaryPatientVisitCount = bookingPlans.stream()
+                .filter(plan -> {
+                    Object patientSeed = ReflectionTestUtils.invokeMethod(plan, "patientSeed");
+                    String patientKey = (String) ReflectionTestUtils.invokeMethod(patientSeed, "key");
+                    return "gim_wp_059".equals(patientKey);
+                })
+                .count();
+
+        assertThat(primaryPatientVisitCount).isEqualTo(1);
     }
 }
