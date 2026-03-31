@@ -1,4 +1,4 @@
-import { Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
+import { Navigation, Truck, Video, AlertOctagon, Play } from 'lucide-react';
 import MinimapPanel from './MinimapPanel';
 import apiClient from '../../utils/api';
 
@@ -56,16 +56,32 @@ const MapMonitoring = ({
     minimapRouteAlert = null,
     useMockMinimapData = false,
 }) => {
-    
+    const normalizedVehicleState = typeof vehicleState === 'string' ? vehicleState.trim() : '';
+    const isEmergencyStopped = (
+        normalizedVehicleState === '긴급 정지'
+        || normalizedVehicleState === '긴급정지'
+    );
+
     // E-Stop REST API POST 요청 핸들러
     const handleEStop = async () => {
-        if (!window.confirm('정말로 E-Stop을 발동하시겠습니까?')) return;
+        const nextEstopState = isEmergencyStopped ? 0 : 1;
+        const confirmationMessage = isEmergencyStopped
+            ? '정말로 주행을 재개하시겠습니까?'
+            : '정말로 E-Stop을 발동하시겠습니까?';
+        const successMessage = isEmergencyStopped
+            ? '주행 재개 명령을 전송했습니다.'
+            : 'E-Stop 명령을 전송했습니다.';
+        const failureMessage = isEmergencyStopped
+            ? '주행 재개 명령 전송에 실패했습니다.'
+            : 'E-Stop 명령 전송에 실패했습니다.';
+
+        if (!window.confirm(confirmationMessage)) return;
 
         try {
-            await apiClient.post('/robots/cmd/estop/1');
-            window.alert('E-Stop 명령을 전송했습니다.');
+            await apiClient.post(`/robots/cmd/estop/${nextEstopState}`);
+            window.alert(successMessage);
         } catch {
-            window.alert('E-Stop 명령 전송에 실패했습니다.');
+            window.alert(failureMessage);
         }
     };
 
@@ -91,10 +107,18 @@ const MapMonitoring = ({
             <div className="flex w-[clamp(22rem,28vw,26rem)] shrink-0 flex-col gap-4">
                 <button
                     onClick={handleEStop}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-600/30 transition-transform hover:bg-red-700 active:scale-100"
+                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-white shadow-lg transition-transform active:scale-100 ${
+                        isEmergencyStopped
+                            ? 'bg-green-600 shadow-green-600/30 hover:bg-green-700'
+                            : 'bg-red-600 shadow-red-600/30 hover:bg-red-700'
+                    }`}
                 >
-                    <AlertOctagon className="h-5 w-5 animate-pulse" />
-                    EMERGENCY STOP
+                    {isEmergencyStopped ? (
+                        <Play className="h-5 w-5" />
+                    ) : (
+                        <AlertOctagon className="h-5 w-5 animate-pulse" />
+                    )}
+                    {isEmergencyStopped ? 'START' : 'EMERGENCY STOP'}
                 </button>
 
                 <div className="flex flex-3 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

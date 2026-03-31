@@ -204,6 +204,8 @@ class HybridDijkstraVisionFollower(Node):
         self.has_odom = False
         self.estop_active = False
         self.estop_reason = ''
+        self.manual_estop_resume_goal_wp_id = None
+        self.manual_estop_resume_state_value = None
 
         self.has_image = False
         self.vision_has_target = False
@@ -527,6 +529,40 @@ class HybridDijkstraVisionFollower(Node):
         self.pending_goal_id = None
         self.pending_goal_state_value = None
 
+    def remember_manual_estop_resume_goal(self):
+        goal_id = self.goal_wp_id
+        if not goal_id:
+            self.clear_manual_estop_resume_goal()
+            return False
+
+        state_value = self.active_route_state_value
+        if state_value is None:
+            state_value = self.pending_goal_state_value
+        if state_value is None:
+            state_value = self.goal_id_to_state_value(goal_id)
+
+        self.manual_estop_resume_goal_wp_id = goal_id
+        self.manual_estop_resume_state_value = int(state_value)
+        return True
+
+    def clear_manual_estop_resume_goal(self):
+        self.manual_estop_resume_goal_wp_id = None
+        self.manual_estop_resume_state_value = None
+
+    def resume_manual_estop_goal(self):
+        goal_id = self.manual_estop_resume_goal_wp_id
+        if not goal_id:
+            return False
+
+        state_value = self.manual_estop_resume_state_value
+        if state_value is None:
+            state_value = self.goal_id_to_state_value(goal_id)
+
+        resumed = self.plan_path_to_goal(goal_id, state_value)
+        if resumed:
+            self.clear_manual_estop_resume_goal()
+        return resumed
+
     def clear_navigation(self, clear_goal=False, clear_pending=False, clear_reason='navigation_cleared'):
         self.path = []
         self.trajectory = []
@@ -602,6 +638,7 @@ class HybridDijkstraVisionFollower(Node):
             if not was_active:
                 self.get_logger().warn(self.estop_reason)
                 if not is_yolo_estop:
+                    self.remember_manual_estop_resume_goal()
                     self.clear_navigation(
                         clear_goal=True,
                         clear_pending=True,
@@ -619,6 +656,14 @@ class HybridDijkstraVisionFollower(Node):
 
         if was_active:
             self.get_logger().info('EMERGENCY STOP 해제')
+            resumed = self.resume_manual_estop_goal()
+            if (
+                not resumed
+                and not self.trajectory
+                and self.goal_wp_id is None
+                and self.current_state_label == '긴급 정지'
+            ):
+                self.publish_state_if_changed('대기')
 
         self.estop_reason = ''
         self.yolo_last_reason = ''
@@ -779,6 +824,7 @@ class HybridDijkstraVisionFollower(Node):
             self.display_path,
             self.display_trajectory,
         )
+        self.clear_manual_estop_resume_goal()
         self.clear_pending_goal()
         self.cancel_pending_state_timer()
         self.publish_state_if_changed('출발')
