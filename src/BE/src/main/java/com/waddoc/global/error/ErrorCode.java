@@ -68,6 +68,8 @@ public enum ErrorCode {
     CONSULTATION_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "CONSULTATION_SUMMARY_NOT_FOUND", "진료 요약을 찾을 수 없습니다."),
     LIVEKIT_WEBHOOK_INVALID_SIGNATURE(HttpStatus.UNAUTHORIZED, "LIVEKIT_WEBHOOK_INVALID_SIGNATURE", "유효하지 않은 LiveKit Webhook 서명입니다."),
     BOOKING_SLOT_CONFLICT(HttpStatus.CONFLICT, "BOOKING_SLOT_CONFLICT", "이미 예약된 슬롯입니다."),
+    BOOKING_SLOT_EXPIRED(HttpStatus.CONFLICT, "BOOKING_SLOT_EXPIRED", "이미 시작되었거나 지난 시간의 슬롯은 예약할 수 없습니다."),
+    BOOKING_VEHICLE_CONFLICT(HttpStatus.CONFLICT, "BOOKING_VEHICLE_CONFLICT", "해당 지역 차량은 같은 시간에 하나의 예약만 받을 수 있습니다."),
     BOOKING_ALREADY_CANCELLED(HttpStatus.BAD_REQUEST, "BOOKING_ALREADY_CANCELLED", "이미 취소된 예약입니다."),
     BOOKING_NOT_CANCELLABLE(HttpStatus.BAD_REQUEST, "BOOKING_NOT_CANCELLABLE", "취소할 수 없는 상태의 예약입니다."),
     SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "SLOT_NOT_FOUND", "유효하지 않은 슬롯입니다."),
