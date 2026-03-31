@@ -113,37 +113,40 @@ const Temperature = () => {
     const [retryKey, setRetryKey] = useState(0);
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-dark font-sans relative overflow-y-auto text-white">
+        <div className="relative flex min-h-screen w-full flex-col items-center overflow-y-auto bg-dark px-6 py-8 font-sans text-white">
             <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
             <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
-            <main className="relative z-10 w-full max-w-6xl flex flex-col items-center">
-                <div className="w-full flex items-center justify-between relative bg-white/10 px-4 py-3 rounded-3xl backdrop-blur-md border border-white/20 mb-8">
+            <div className="relative z-10 w-full max-w-6xl shrink-0">
+                <div className="w-full flex items-center justify-between relative bg-white/10 px-4 py-3 rounded-3xl backdrop-blur-md border border-white/20">
                     <div className="flex items-center justify-center flex-1 relative">
-                        <div className="bg-secondary text-dark px-4 py-1.5 rounded-full font-bold text-base md:text-lg shadow-md whitespace-nowrap">
+                        <div className="bg-secondary text-dark px-4 py-1.5 rounded-full font-bold text-xl md:text-2xl shadow-md whitespace-nowrap">
                             1. 체온
                         </div>
                     </div>
                     <div className="flex items-center justify-center flex-1 opacity-50 relative">
-                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-base md:text-lg whitespace-nowrap border border-slate-500">
+                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-xl md:text-2xl whitespace-nowrap border border-slate-500">
                             2. 혈압
                         </div>
                     </div>
                     <div className="flex items-center justify-center flex-1 opacity-50 relative">
-                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-base md:text-lg whitespace-nowrap border border-slate-500">
+                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-xl md:text-2xl whitespace-nowrap border border-slate-500">
                             3. 산소포화도
                         </div>
                     </div>
                     <div className="flex items-center justify-center flex-1 opacity-50 relative">
-                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-base md:text-lg whitespace-nowrap border border-slate-500">
+                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-xl md:text-2xl whitespace-nowrap border border-slate-500">
                             4. 심전도
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <main className="relative z-10 flex w-full max-w-6xl flex-1 flex-col items-center justify-center py-8">
 
                 <TemperatureMeasurementCard key={retryKey} onRetry={() => setRetryKey((prev) => prev + 1)} />
 
-                <h1 className="mt-10 mb-3 text-4xl font-bold tracking-tight">
+                <h1 className="mt-10 mb-3 text-5xl md:text-6xl font-bold tracking-tight">
                     <span className="text-secondary">체온계</span> 사용 방법
                 </h1>
 
@@ -153,8 +156,8 @@ const Temperature = () => {
                             <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
                                 <img src={temp1} alt="체온계 전원 작동" className="w-full h-full object-contain p-2" />
                             </div>
-                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                “전원/측정” 버튼을 누르면<br /><span className="text-secondary">전원이 켜집니다</span>
+                            <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
+                                “측정” 버튼을 누르면<br /><span className="text-secondary">전원이 켜집니다</span>
                             </p>
                         </div>
 
@@ -162,8 +165,8 @@ const Temperature = () => {
                             <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
                                 <img src={temp2} alt="체온 측정" className="w-full h-full object-contain p-2" />
                             </div>
-                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
-                                눈썹 위로 2~3cm 떨어져<br /><span className="text-secondary">“전원/측정” 버튼</span>을 누릅니다
+                            <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
+                                이마 가까이에서<br /><span className="text-secondary">“전원/측정” 버튼</span>을 누릅니다
                             </p>
                         </div>
 
@@ -171,7 +174,7 @@ const Temperature = () => {
                             <div className="w-full aspect-video mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
                                 <img src={temp3} alt="체온 결과 확인" className="w-full h-full object-contain p-2" />
                             </div>
-                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
+                            <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
                                 액정화면에 측정된<br /><span className="text-secondary">체온 값을 확인</span>합니다
                             </p>
                         </div>

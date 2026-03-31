@@ -115,35 +115,38 @@ const Ecg = () => {
     const [retryKey, setRetryKey] = useState(0);
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center px-6 pt-8 pb-10 bg-dark font-sans relative overflow-y-auto text-white">
+        <div className="relative flex min-h-screen w-full flex-col items-center overflow-y-auto bg-dark px-6 py-8 font-sans text-white">
             <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full mix-blend-screen filter blur-[150px] opacity-30"></div>
             <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary rounded-full mix-blend-screen filter blur-[150px] opacity-10"></div>
 
-            <main className="relative z-10 w-full max-w-6xl flex flex-col items-center">
-                <div className="w-full flex items-center justify-between relative bg-white/10 px-4 py-3 rounded-3xl backdrop-blur-md border border-white/20 mb-4">
+            <div className="relative z-10 w-full max-w-6xl shrink-0">
+                <div className="w-full flex items-center justify-between relative bg-white/10 px-4 py-3 rounded-3xl backdrop-blur-md border border-white/20">
                     <div className="flex items-center justify-center flex-1 opacity-50 relative">
-                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-base md:text-lg whitespace-nowrap border border-slate-500">
+                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-xl md:text-2xl whitespace-nowrap border border-slate-500">
                             1. 체온
                         </div>
                     </div>
                     <div className="flex items-center justify-center flex-1 opacity-50 relative">
-                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-base md:text-lg whitespace-nowrap border border-slate-500">
+                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-xl md:text-2xl whitespace-nowrap border border-slate-500">
                             2. 혈압
                         </div>
                     </div>
                     <div className="flex items-center justify-center flex-1 opacity-50 relative">
-                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-base md:text-lg whitespace-nowrap border border-slate-500">
+                        <div className="bg-slate-700/50 text-white px-4 py-1.5 rounded-full font-semibold text-xl md:text-2xl whitespace-nowrap border border-slate-500">
                             3. 산소포화도
                         </div>
                     </div>
                     <div className="flex items-center justify-center flex-1 relative">
-                        <div className="bg-secondary text-dark px-4 py-1.5 rounded-full font-bold text-base md:text-lg shadow-md whitespace-nowrap">
+                        <div className="bg-secondary text-dark px-4 py-1.5 rounded-full font-bold text-xl md:text-2xl shadow-md whitespace-nowrap">
                             4. 심전도
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <h1 className="mt-10 text-4xl font-bold tracking-tight">
+            <main className="relative z-10 flex w-full max-w-6xl flex-1 flex-col items-center justify-center py-8">
+
+                <h1 className="mt-10 text-5xl md:text-6xl font-bold tracking-tight">
                     <span className="text-secondary">심전도 측정기</span> 사용 방법
                 </h1>
 
@@ -153,7 +156,7 @@ const Ecg = () => {
                             <div className="w-full h-72 mb-6 overflow-hidden rounded-2xl border border-white/20 bg-white">
                                 <img src={ecg} alt="심전도 측정" className="w-full h-full object-contain p-2" />
                             </div>
-                            <p className="text-lg md:text-xl font-semibold leading-snug break-keep">
+                            <p className="text-3xl md:text-4xl font-semibold leading-snug break-keep">
                                 화면에 보이는 것과 같이 손을 올려주세요
                             </p>
                         </div>
