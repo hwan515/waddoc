@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Mic, MicOff, Video, VideoOff,
     Eye, EyeOff
@@ -14,6 +14,14 @@ import {
     hasSummaryNote,
 } from '../../utils/consultationSummary';
 import EcgWaveform from './EcgWaveform';
+
+const DEFAULT_LOCAL_VIDEO_SIZE = { width: 240, height: 160 };
+const MIN_LOCAL_VIDEO_WIDTH = 180;
+const MAX_LOCAL_VIDEO_WIDTH = 420;
+const MIN_LOCAL_VIDEO_HEIGHT = 120;
+const MAX_LOCAL_VIDEO_HEIGHT = 280;
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const ConsultationRoom = ({
     details,
@@ -42,6 +50,9 @@ const ConsultationRoom = ({
     const [consultationNote, setConsultationNote] = useState('');
     const [needsFollowUp, setNeedsFollowUp] = useState(false);
     const [validationMessage, setValidationMessage] = useState('');
+    const [localVideoSize, setLocalVideoSize] = useState(DEFAULT_LOCAL_VIDEO_SIZE);
+    const [isResizingLocalVideo, setIsResizingLocalVideo] = useState(false);
+    const localVideoResizeStartRef = useRef(null);
 
     // 진료 시간 타이머 & 상단 시계
     useEffect(() => {
@@ -52,6 +63,47 @@ const ConsultationRoom = ({
             clearInterval(timer2);
         };
     }, []);
+
+    useEffect(() => {
+        if (!isResizingLocalVideo) {
+            return undefined;
+        }
+
+        const previousCursor = document.body.style.cursor;
+        const previousUserSelect = document.body.style.userSelect;
+
+        const handleMouseMove = (event) => {
+            const resizeStart = localVideoResizeStartRef.current;
+            if (!resizeStart) {
+                return;
+            }
+
+            const deltaX = event.clientX - resizeStart.startX;
+            const deltaY = event.clientY - resizeStart.startY;
+
+            setLocalVideoSize({
+                width: clamp(resizeStart.startWidth + deltaX, MIN_LOCAL_VIDEO_WIDTH, MAX_LOCAL_VIDEO_WIDTH),
+                height: clamp(resizeStart.startHeight - deltaY, MIN_LOCAL_VIDEO_HEIGHT, MAX_LOCAL_VIDEO_HEIGHT),
+            });
+        };
+
+        const handleMouseUp = () => {
+            setIsResizingLocalVideo(false);
+            localVideoResizeStartRef.current = null;
+        };
+
+        document.body.style.cursor = 'nesw-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.body.style.cursor = previousCursor;
+            document.body.style.userSelect = previousUserSelect;
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizingLocalVideo]);
 
     const formatTime = (sec) => {
         const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -66,6 +118,18 @@ const ConsultationRoom = ({
     const remoteTrack = remoteVideoTracks.length > 0 ? remoteVideoTracks[0] : null;
 
     const handleSearchChange = (e) => setSearchQuery(e.target.value);
+
+    const handleLocalVideoResizeStart = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        localVideoResizeStartRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            startWidth: localVideoSize.width,
+            startHeight: localVideoSize.height,
+        };
+        setIsResizingLocalVideo(true);
+    };
     
     const handleMedToggle = (medCode) => {
         setSelectedMeds(prev => 
@@ -306,8 +370,24 @@ const ConsultationRoom = ({
 
                     {/* 좌측 하단 오버레이: 내 화면 (Local PIP) */}
                     {showLocalVideo && (
-                        <div className="absolute bottom-3 left-3 z-20 h-40 w-60 overflow-hidden border-2 border-slate-400 bg-slate-900 shadow-xl">
+                        <div
+                            className="absolute bottom-3 left-3 z-20 overflow-hidden border-2 border-slate-400 bg-slate-900 shadow-xl"
+                            style={{
+                                width: `${localVideoSize.width}px`,
+                                height: `${localVideoSize.height}px`,
+                            }}
+                        >
                             <div className="absolute top-1.5 left-1.5 z-30 bg-black/50 px-1.5 py-0.5 text-xs text-white">내 화면 (의사)</div>
+                            <button
+                                type="button"
+                                aria-label="의사 화면 크기 조절"
+                                onMouseDown={handleLocalVideoResizeStart}
+                                className={`absolute top-1.5 right-1.5 z-30 flex h-5 w-5 cursor-nesw-resize items-center justify-center rounded-sm border border-white/50 bg-black/50 text-white/90 transition-colors ${
+                                    isResizingLocalVideo ? 'bg-blue-600/70' : 'hover:bg-black/70'
+                                }`}
+                            >
+                                <span className="translate-y-[-1px] text-[10px] font-bold">↗</span>
+                            </button>
                             {videoEnabled && localVideoTrack ? (
                                 <VideoTrack
                                     trackRef={localVideoTrack}
