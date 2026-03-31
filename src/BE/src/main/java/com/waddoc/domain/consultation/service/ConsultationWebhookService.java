@@ -9,6 +9,7 @@ import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.monitoring.LiveKitMonitoringMetrics;
+import com.waddoc.global.util.KstTime;
 import io.livekit.server.WebhookReceiver;
 import livekit.LivekitWebhook;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -41,6 +43,7 @@ public class ConsultationWebhookService {
     private final DisconnectTimerService disconnectTimerService;
     private final StringRedisTemplate redisTemplate;
     private final LiveKitMonitoringMetrics liveKitMonitoringMetrics;
+    private final Clock clock;
 
     @Transactional
     public void handleWebhook(String body, String authorizationHeader) {
@@ -84,10 +87,11 @@ public class ConsultationWebhookService {
         ConsultationSession session = findSessionByRoom(event);
         ParticipantRole participantRole = resolveParticipantRole(session, event);
         disconnectTimerService.cancel(session.getPublicId(), participantRole.name());
+        LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
 
         switch (participantRole) {
-            case DOCTOR -> session.connectDoctor();
-            case PATIENT -> session.connectPatient();
+            case DOCTOR -> session.connectDoctor(now);
+            case PATIENT -> session.connectPatient(now);
             case UNKNOWN -> {
                 log.info("Ignoring participant_joined with unknown identity. sessionId={}, identity={}",
                         session.getPublicId(), event.hasParticipant() ? event.getParticipant().getIdentity() : null);
@@ -95,7 +99,7 @@ public class ConsultationWebhookService {
             }
         }
 
-        syncMissionPhaseWhenConsultationStarts(session);
+        syncMissionPhaseWhenConsultationStarts(session, now);
 
         auditLogService.log(
                 "LIVEKIT_PARTICIPANT_JOINED",
@@ -110,7 +114,7 @@ public class ConsultationWebhookService {
         );
     }
 
-    private void syncMissionPhaseWhenConsultationStarts(ConsultationSession session) {
+    private void syncMissionPhaseWhenConsultationStarts(ConsultationSession session, LocalDateTime now) {
         if (session.getStatus() != ConsultationSessionStatus.IN_PROGRESS) {
             return;
         }
@@ -118,7 +122,7 @@ public class ConsultationWebhookService {
         missionRepository.findByCareCase(session.getCareCase())
                 .ifPresentOrElse(mission -> {
                     if (mission.getPhase() == MissionPhase.VERIFYING) {
-                        mission.updatePhase(MissionPhase.CONSULTING);
+                        mission.updatePhase(MissionPhase.CONSULTING, now);
                         missionRepository.save(mission);
                         log.info(
                                 "Mission phase updated to CONSULTING after consultation start. sessionId={}, missionId={}",
@@ -176,7 +180,8 @@ public class ConsultationWebhookService {
 
         // 진료가 실제 시작된 세션만 room_finished 시 완료 처리한다.
         if (session.getStatus() == ConsultationSessionStatus.IN_PROGRESS) {
-            session.complete(calculateDurationMinutes(session, LocalDateTime.now()));
+            LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
+            session.complete(calculateDurationMinutes(session, now), now);
         }
 
         auditLogService.log(

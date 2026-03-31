@@ -2,6 +2,7 @@ package com.waddoc.domain.patient.entity;
 
 import com.waddoc.domain.user.entity.User;
 import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.util.KstTime;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -87,9 +88,13 @@ public class Patient extends BaseTimeEntity {
     }
 
     public void updateReferenceImage(String referenceImagePath, User uploadedBy) {
+        updateReferenceImage(referenceImagePath, uploadedBy, KstTime.now());
+    }
+
+    public void updateReferenceImage(String referenceImagePath, User uploadedBy, LocalDateTime now) {
         this.referenceImagePath = referenceImagePath;
         this.referenceImageUploadedBy = uploadedBy;
-        this.referenceImageUpdatedAt = LocalDateTime.now();
+        this.referenceImageUpdatedAt = now;
     }
 
     public boolean hasReferenceImage() {

@@ -6,14 +6,13 @@ import com.waddoc.domain.intake.entity.IntakeStatus;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class CreateIntakeSessionResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String intakeSessionId;
     private IntakeStatus status;
@@ -25,7 +24,7 @@ public class CreateIntakeSessionResponse {
                 .intakeSessionId(session.getPublicId())
                 .status(session.getStatus())
                 .channel(session.getChannel())
-                .createdAt(session.getCreatedAt().atZone(KST).toOffsetDateTime())
+                .createdAt(session.getCreatedAt().atZone(KstTime.ZONE).toOffsetDateTime())
                 .build();
     }
 }

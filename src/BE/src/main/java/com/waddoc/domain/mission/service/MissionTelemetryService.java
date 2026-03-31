@@ -6,13 +6,14 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 /**
  * 차량 telemetry의 인증, 최신성 판단, 위치/단계 반영을 담당한다.
@@ -22,9 +23,8 @@ import java.time.ZoneId;
 @Transactional
 public class MissionTelemetryService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final MissionRepository missionRepository;
+    private final Clock clock;
 
     @Value("${telemetry.api-key}")
     private String telemetryApiKey;
@@ -51,7 +51,7 @@ public class MissionTelemetryService {
             return;
         }
 
-        LocalDateTime telemetryTimestamp = request.getTimestamp().atZoneSameInstant(KST).toLocalDateTime();
+        LocalDateTime telemetryTimestamp = request.getTimestamp().atZoneSameInstant(KstTime.ZONE).toLocalDateTime();
         if (isOutdated(mission, request.getSeqNo(), telemetryTimestamp)) {
             return;
         }
@@ -59,7 +59,7 @@ public class MissionTelemetryService {
         mission.updateLocation(request.getLatitude(), request.getLongitude());
 
         if (shouldUpdatePhase(mission, request.getPhase())) {
-            mission.updatePhase(request.getPhase());
+            mission.updatePhase(request.getPhase(), LocalDateTime.now(KstTime.resolve(clock)));
         }
 
         mission.recordTelemetry(request.getSourceEventId(), request.getSeqNo(), telemetryTimestamp);

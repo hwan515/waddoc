@@ -12,10 +12,13 @@ import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -51,6 +54,7 @@ public class AdminDemoMissionService {
     private final RobotWaypointCommandClient robotWaypointCommandClient;
     private final DispatchAssignmentPolicy dispatchAssignmentPolicy;
     private final DemoModePolicy demoModePolicy;
+    private final Clock clock;
 
     public AdminDemoMissionActionResponse dispatchMission(
             AuthenticatedUser authenticatedUser,
@@ -165,7 +169,7 @@ public class AdminDemoMissionService {
             if (nextPhase == null) {
                 throw new BusinessException(ErrorCode.MISSION_PHASE_TRANSITION_INVALID);
             }
-            mission.updatePhase(nextPhase);
+            mission.updatePhase(nextPhase, LocalDateTime.now(KstTime.resolve(clock)));
         }
     }
 

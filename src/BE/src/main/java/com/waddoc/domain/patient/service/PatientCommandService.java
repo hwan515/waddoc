@@ -10,10 +10,14 @@ import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.time.Clock;
+import java.time.LocalDateTime;
 
 /**
  * 환자 생성과 기준 이미지 연결 같은 쓰기 작업을 처리한다.
@@ -26,6 +30,7 @@ public class PatientCommandService {
     private final PatientRepository patientRepository;
     private final UserRepository userRepository;
     private final PatientReferenceImageStorageService patientReferenceImageStorageService;
+    private final Clock clock;
 
     @Transactional
     public CreatePatientResponse createPatient(AuthenticatedUser authenticatedUser, CreatePatientRequest request) {
@@ -50,7 +55,7 @@ public class PatientCommandService {
         MultipartFile referenceImage = request.getReferenceImage();
         if (referenceImage != null && !referenceImage.isEmpty()) {
             String referenceImagePath = patientReferenceImageStorageService.save(patient.getPublicId(), referenceImage);
-            patient.updateReferenceImage(referenceImagePath, adminUser);
+            patient.updateReferenceImage(referenceImagePath, adminUser, LocalDateTime.now(KstTime.resolve(clock)));
         }
 
         return CreatePatientResponse.from(patient);

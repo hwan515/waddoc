@@ -14,12 +14,14 @@ import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.monitoring.KafkaMonitoringMetrics;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.Optional;
@@ -39,6 +41,7 @@ public class DispatchConsumer {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final DemoModePolicy demoModePolicy;
     private final KafkaMonitoringMetrics kafkaMonitoringMetrics;
+    private final Clock clock;
 
     @KafkaListener(topics = KafkaTopics.DISPATCH_REQUESTS_TOPIC, groupId = CONSUMER_GROUP)
     @Transactional
@@ -85,15 +88,16 @@ public class DispatchConsumer {
             }
 
             boolean wasRetryPending = outbox.isRetryPending();
+            LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
             Mission dispatchedMission = missionCommandService.createMissionForDispatch(
                     outbox.getCareCase(),
                     vehicle.getPublicId(),
                     outbox.getDestination(),
-                    LocalDateTime.now(),
+                    now,
                     missionOptional.map(Mission::getTargetWaypointNumber).orElse(null)
             );
             if (dispatchedMission.getPhase() == MissionPhase.CREATED) {
-                dispatchedMission.updatePhase(MissionPhase.DISPATCHED);
+                dispatchedMission.updatePhase(MissionPhase.DISPATCHED, now);
                 missionRepository.save(dispatchedMission);
             }
             outbox.markCompleted();

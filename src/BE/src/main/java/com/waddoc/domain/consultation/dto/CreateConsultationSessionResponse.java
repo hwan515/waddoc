@@ -5,14 +5,13 @@ import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class CreateConsultationSessionResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String sessionId;
     private String caseId;
@@ -32,7 +31,7 @@ public class CreateConsultationSessionResponse {
                         .build())
                 .doctorToken(doctorToken)
                 .createdAt(session.getCreatedAt() != null
-                        ? session.getCreatedAt().atZone(KST).toOffsetDateTime()
+                        ? session.getCreatedAt().atZone(KstTime.ZONE).toOffsetDateTime()
                         : null)
                 .build();
     }

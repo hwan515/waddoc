@@ -12,11 +12,14 @@ import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -29,6 +32,7 @@ public class VehicleStatusService {
     private final VehicleRepository vehicleRepository;
     private final DispatchOutboxRepository dispatchOutboxRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public List<VehicleResponse> getVehicles() {
@@ -47,7 +51,11 @@ public class VehicleStatusService {
         Vehicle vehicle = findVehicle(vehicleId);
         OperationalStatus previousStatus = vehicle.getOperationalStatus();
 
-        vehicle.updateOperationalStatus(request.getOperationalStatus(), request.getStatusReason());
+        vehicle.updateOperationalStatus(
+                request.getOperationalStatus(),
+                request.getStatusReason(),
+                LocalDateTime.now(KstTime.resolve(clock))
+        );
 
         if (previousStatus != OperationalStatus.OPERATIONAL
                 && request.getOperationalStatus() == OperationalStatus.OPERATIONAL) {

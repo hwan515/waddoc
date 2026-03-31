@@ -6,15 +6,14 @@ import com.waddoc.domain.consultation.entity.ConsultationSessionStatus;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class ConsultationSessionStatusResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String sessionId;
     private String caseId;
@@ -55,7 +54,7 @@ public class ConsultationSessionStatusResponse {
 
     private static OffsetDateTime toOffsetDateTime(LocalDateTime value) {
         // 엔티티는 LocalDateTime(KST 기준)으로 저장하고 있어 API 응답에서는 offset 정보를 명시한다.
-        return value != null ? value.atZone(KST).toOffsetDateTime() : null;
+        return value != null ? value.atZone(KstTime.ZONE).toOffsetDateTime() : null;
     }
 
     @Getter

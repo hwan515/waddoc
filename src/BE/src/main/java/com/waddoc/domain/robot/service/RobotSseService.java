@@ -6,8 +6,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.waddoc.global.util.KstTime;
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,10 +22,9 @@ public class RobotSseService {
     static final long DEFAULT_RECONNECT_DELAY_MILLIS = 3_000L;
     static final long HEARTBEAT_INTERVAL_MILLIS = 25_000L;
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final RobotStateCache stateCache;
     private final RobotSnapshotAssembler robotSnapshotAssembler;
+    private final Clock clock;
 
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
@@ -51,7 +51,7 @@ public class RobotSseService {
                             "odom",    stateCache.getLastOdomJson(),
                             "status",  stateCache.getLastStatusJson(),
                             "snapshot", robotSnapshotAssembler.fromCache(stateCache),
-                            "connectedAt", OffsetDateTime.now(KST).toString()
+                            "connectedAt", OffsetDateTime.now(KstTime.resolve(clock)).toString()
                     )));
         } catch (Exception e) {
             removeEmitter(connectionId);
@@ -86,7 +86,7 @@ public class RobotSseService {
         if (emitters.isEmpty()) {
             return;
         }
-        String ping = "{\"ts\":\"" + OffsetDateTime.now(KST) + "\"}";
+        String ping = "{\"ts\":\"" + OffsetDateTime.now(KstTime.resolve(clock)) + "\"}";
         emitters.forEach((connectionId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event()

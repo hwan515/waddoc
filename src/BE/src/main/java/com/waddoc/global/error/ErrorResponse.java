@@ -1,9 +1,11 @@
 package com.waddoc.global.error;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.waddoc.global.util.KstTime;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,10 +24,14 @@ public class ErrorResponse {
     private final List<FieldError> details;
 
     public static ErrorResponse of(ErrorCode code) {
+        return of(code, Clock.system(KstTime.ZONE));
+    }
+
+    public static ErrorResponse of(ErrorCode code, Clock clock) {
         return ErrorResponse.builder()
                 .errorCode(code.getCode())
                 .message(code.getMessage())
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now(clock))
                 .build();
     }
 

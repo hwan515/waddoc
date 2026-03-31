@@ -41,6 +41,7 @@ import com.waddoc.domain.vehicle.entity.OperationalStatus;
 import com.waddoc.domain.vehicle.entity.Vehicle;
 import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.global.type.ApprovalStatus;
+import com.waddoc.global.util.KstTime;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -189,7 +190,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         assertSeedDefaultPasswordConfigured();
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstTime.now().toLocalDate();
         User adminUser = ensureUser(ADMIN_USERNAME, ADMIN_NAME, Role.ADMIN, null, ApprovalStatus.APPROVED);
         Map<String, DoctorProfile> doctorsByUsername = seedDoctors(adminUser);
         Map<String, Vehicle> vehiclesByCode = seedVehicles();
@@ -1256,7 +1257,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             return;
         }
 
-        LocalTime currentTime = LocalTime.now();
+        LocalTime currentTime = KstTime.now().toLocalTime();
         pruneTodayFutureSeedSlots(today, currentTime, doctorsByUsername);
 
         for (LocalDate slotDate = today; !slotDate.isAfter(FUTURE_SLOT_END_DATE); slotDate = slotDate.plusDays(1)) {
@@ -1353,12 +1354,13 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         if (user.getApprovalStatus() == targetStatus) {
             return;
         }
+        LocalDateTime now = KstTime.now();
         if (targetStatus == ApprovalStatus.APPROVED) {
-            user.approve(approver);
+            user.approve(approver, now);
             return;
         }
         if (targetStatus == ApprovalStatus.REJECTED) {
-            user.reject(approver);
+            user.reject(approver, now);
             return;
         }
 
@@ -1421,7 +1423,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                         .displayName(seed.displayName())
                         .isActive(true)
                         .operationalStatus(OperationalStatus.OPERATIONAL)
-                        .statusChangedAt(LocalDateTime.now())
+                        .statusChangedAt(KstTime.now())
                         .build()));
 
         if (!Objects.equals(vehicle.getPublicId(), seed.publicId())
@@ -1445,7 +1447,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
                     .setParameter("regionCode", seed.regionCode())
                     .setParameter("displayName", seed.displayName())
                     .setParameter("operationalStatus", OperationalStatus.OPERATIONAL)
-                    .setParameter("statusChangedAt", LocalDateTime.now())
+                    .setParameter("statusChangedAt", KstTime.now())
                     .setParameter("id", vehicle.getId())
                     .executeUpdate();
             entityManager.flush();
@@ -1486,7 +1488,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         if (referenceImagePath != null
                 && (!patient.hasReferenceImage()
                         || !Objects.equals(patient.getReferenceImagePath(), referenceImagePath))) {
-            patient.updateReferenceImage(referenceImagePath, uploadedBy);
+            patient.updateReferenceImage(referenceImagePath, uploadedBy, KstTime.now());
         }
 
         return patient;
@@ -1517,11 +1519,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         }
 
         if (targetStatus == GuardianLinkStatus.APPROVED && link.getStatus() != GuardianLinkStatus.APPROVED) {
-            link.approve(approver);
+            link.approve(approver, KstTime.now());
             return;
         }
         if (targetStatus == GuardianLinkStatus.REJECTED && link.getStatus() != GuardianLinkStatus.REJECTED) {
-            link.reject(approver);
+            link.reject(approver, KstTime.now());
             return;
         }
         if (targetStatus == GuardianLinkStatus.PENDING && link.getStatus() != GuardianLinkStatus.PENDING) {
@@ -1616,13 +1618,13 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         if (intakeSession.getPatient() == null
                 || !Objects.equals(intakeSession.getPatient().getId(), patient.getId())) {
-            intakeSession.bindPatient(patient);
+            intakeSession.bindPatient(patient, KstTime.now());
         }
 
         intakeSession.recordSelection(department, departmentName, ConfidenceLevel.HIGH, false, selectionReason,
-                offeredSlotIds);
+                offeredSlotIds, KstTime.now());
         if (intakeSession.isActive()) {
-            intakeSession.complete(completionReason);
+            intakeSession.complete(completionReason, KstTime.now());
         }
         return intakeSession;
     }
