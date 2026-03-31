@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, FileText, Printer } from 'lucide-react';
 import { parsePrescriptionNote } from '../../utils/prescriptionNote';
 
@@ -14,7 +15,7 @@ const BARCODE_WIDTHS = [
  * 실제 병원 처방전 양식과 유사한 느낌으로 디자인되었습니다.
  */
 const PrescriptionModal = ({ isOpen, onClose, record, patientName }) => {
-    if (!isOpen || !record) return null;
+    if (!isOpen || !record || typeof document === 'undefined') return null;
 
     const prescription = record.prescription ?? parsePrescriptionNote(record.prescriptionNote);
 
@@ -25,7 +26,7 @@ const PrescriptionModal = ({ isOpen, onClose, record, patientName }) => {
         }
     };
 
-    return (
+    const modalContent = (
         <div 
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
             onClick={handleBackdropClick}
@@ -185,6 +186,8 @@ const PrescriptionModal = ({ isOpen, onClose, record, patientName }) => {
             </div>
         </div>
     );
+
+    return createPortal(modalContent, document.body);
 };
 
 export default PrescriptionModal;
