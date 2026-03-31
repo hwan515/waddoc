@@ -561,7 +561,7 @@ const LegacyEMRDashboard = () => {
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto bg-white" style={{ scrollbarGutter: 'stable' }}>
+                    <div className="flex-1 overflow-y-auto bg-white">
                         <div className="sticky top-0 z-10 bg-[#4472C4] text-white flex border-b border-slate-400 text-sm text-center font-bold">
                             <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1.5">번호</div>
                             <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1.5">환자명</div>
