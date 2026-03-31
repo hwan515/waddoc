@@ -100,6 +100,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             "[\"M022\"]";
     private static final int PRIMARY_PATIENT_HISTORY_MONTH = 3;
     private static final int PRIMARY_PATIENT_HISTORY_DAY = 22;
+    private static final int PRIMARY_PATIENT_HISTORICAL_VISIT_COUNT = 1;
+    private static final int PRIORITY_PATIENT_HISTORICAL_VISIT_COUNT = 3;
 
     private static final List<String> SYNTHETIC_ROAD_NAMES = List.of(
             "황항길",
@@ -631,14 +633,18 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         List<DoctorProfile> doctors = List.copyOf(doctorsByUsername.values());
         Vehicle gimcheonVehicle = getVehicle(vehiclesByCode, "GIMCHEON-01");
+        LocalDate upcomingStartDate = resolveSeedScheduleStartDate(today);
         LocalDate upcomingEndDate = resolveUpcomingActiveBookingEndDate(today);
-        int upcomingDayCount = (int) today.datesUntil(upcomingEndDate.plusDays(1)).count();
+        if (upcomingEndDate.isBefore(upcomingStartDate)) {
+            return;
+        }
+        int upcomingDayCount = (int) upcomingStartDate.datesUntil(upcomingEndDate.plusDays(1)).count();
         int upcomingBookingCount = Math.min(patientSeeds.size(), upcomingDayCount * doctors.size());
 
         for (int index = 0; index < upcomingBookingCount; index++) {
             PatientSeed seed = patientSeeds.get(index);
             Patient patient = getPatient(patientsByKey, seed.key());
-            LocalDate appointmentDate = today.plusDays(index % upcomingDayCount);
+            LocalDate appointmentDate = upcomingStartDate.plusDays(index % upcomingDayCount);
             DoctorProfile doctor = doctors.get((index / upcomingDayCount) % doctors.size());
             LocalTime startTime = REALISTIC_SLOT_START_TIMES.get(index % REALISTIC_SLOT_START_TIMES.size());
             LocalTime endTime = startTime.plusMinutes(30);
@@ -747,6 +753,10 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return candidate.isAfter(FUTURE_SLOT_END_DATE) ? FUTURE_SLOT_END_DATE : candidate;
     }
 
+    static LocalDate resolveSeedScheduleStartDate(LocalDate today) {
+        return today.plusDays(1);
+    }
+
     static LocalDate resolveHistoricalSeedStartDate(LocalDate today) {
         return LocalDate.of(today.getYear(), 3, 1);
     }
@@ -790,13 +800,15 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         remainingBookingsByDoctor.put("seed_prod_doc_neuro_01", 8);
         remainingBookingsByDoctor.put("seed_prod_doc_eye_01", 8);
 
-        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_im_01", 3);
-        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_neuro_01", 3);
-        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_ortho_01", 3);
+        consumeDoctorQuota(remainingBookingsByDoctor, PRIMARY_PATIENT_DOCTOR_USERNAME, PRIMARY_PATIENT_HISTORICAL_VISIT_COUNT);
+        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_neuro_01", PRIORITY_PATIENT_HISTORICAL_VISIT_COUNT);
+        consumeDoctorQuota(remainingBookingsByDoctor, "seed_prod_doc_ortho_01", PRIORITY_PATIENT_HISTORICAL_VISIT_COUNT);
 
         List<PatientSeed> otherPatients = patientSeeds.stream()
                 .filter(seed -> !List.of("gim_wp_059", "gim_wp_092", "gim_wp_142").contains(seed.key()))
-                .limit(TARGET_HISTORICAL_MISSION_COUNT - 9L)
+                .limit(TARGET_HISTORICAL_MISSION_COUNT
+                        - PRIMARY_PATIENT_HISTORICAL_VISIT_COUNT
+                        - (2L * PRIORITY_PATIENT_HISTORICAL_VISIT_COUNT))
                 .toList();
         List<String> otherDoctorAssignments = buildDoctorAssignmentOrder(remainingBookingsByDoctor);
         if (otherPatients.size() != otherDoctorAssignments.size()) {
@@ -805,11 +817,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
         int firstOtherChunk = otherPatients.size() / 2;
         List<HistoricalBookingPlan> bookingPlans = new java.util.ArrayList<>(TARGET_HISTORICAL_MISSION_COUNT);
-        appendMainPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 1);
+        appendPriorityPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 1);
         appendOtherPatientVisits(bookingPlans, otherPatients, otherDoctorAssignments, 0, firstOtherChunk);
-        appendMainPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 2);
+        appendPriorityPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 2);
         appendOtherPatientVisits(bookingPlans, otherPatients, otherDoctorAssignments, firstOtherChunk, otherPatients.size());
-        appendMainPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 3);
+        appendPriorityPatientVisits(bookingPlans, kwonMiSoon, jeongJiHwan, kimJuDeok, 3);
 
         if (bookingPlans.size() != TARGET_HISTORICAL_MISSION_COUNT) {
             throw new IllegalStateException("Historical seed booking count mismatch: " + bookingPlans.size());
@@ -821,9 +833,11 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         return PRIMARY_PATIENT_KEY.equals(bookingPlan.patientSeed().key()) && bookingPlan.visitSequence() == 1;
     }
 
-    private void appendMainPatientVisits(List<HistoricalBookingPlan> bookingPlans, PatientSeed kwonMiSoon,
+    private void appendPriorityPatientVisits(List<HistoricalBookingPlan> bookingPlans, PatientSeed kwonMiSoon,
             PatientSeed jeongJiHwan, PatientSeed kimJuDeok, int visitSequence) {
-        bookingPlans.add(new HistoricalBookingPlan(kwonMiSoon, "seed_prod_doc_im_01", visitSequence));
+        if (visitSequence <= PRIMARY_PATIENT_HISTORICAL_VISIT_COUNT) {
+            bookingPlans.add(new HistoricalBookingPlan(kwonMiSoon, PRIMARY_PATIENT_DOCTOR_USERNAME, visitSequence));
+        }
         bookingPlans.add(new HistoricalBookingPlan(jeongJiHwan, "seed_prod_doc_neuro_01", visitSequence));
         bookingPlans.add(new HistoricalBookingPlan(kimJuDeok, "seed_prod_doc_ortho_01", visitSequence));
     }
@@ -1269,13 +1283,42 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             return;
         }
 
+        LocalTime currentTime = LocalTime.now();
+        pruneTodayFutureSeedSlots(today, currentTime, doctorsByUsername);
+
         for (LocalDate slotDate = today; !slotDate.isAfter(FUTURE_SLOT_END_DATE); slotDate = slotDate.plusDays(1)) {
             for (DoctorProfile doctor : doctorsByUsername.values()) {
                 for (LocalTime startTime : REALISTIC_SLOT_START_TIMES) {
+                    if (slotDate.isEqual(today) && !startTime.isAfter(currentTime)) {
+                        continue;
+                    }
                     ensureSlot(doctor, slotDate, startTime, startTime.plusMinutes(30));
                 }
             }
         }
+    }
+
+    private void pruneTodayFutureSeedSlots(LocalDate today, LocalTime currentTime, Map<String, DoctorProfile> doctorsByUsername) {
+        List<Long> doctorIds = doctorsByUsername.values().stream()
+                .map(DoctorProfile::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (doctorIds.isEmpty()) {
+            return;
+        }
+
+        entityManager.createQuery("""
+                delete from ScheduleSlot s
+                 where s.doctor.id in :doctorIds
+                   and s.slotDate = :slotDate
+                   and s.booked = false
+                   and s.startTime <= :currentTime
+                """)
+                .setParameter("doctorIds", doctorIds)
+                .setParameter("slotDate", today)
+                .setParameter("currentTime", currentTime)
+                .executeUpdate();
+        entityManager.flush();
     }
 
     private User ensureUser(String username, String name, Role role, User approver, ApprovalStatus targetStatus) {

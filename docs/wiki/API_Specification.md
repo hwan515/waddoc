@@ -528,6 +528,7 @@
 ```
 
 > 별도 추천 리소스를 생성하지 않고, 응답에 포함된 선택 결과와 `availableSlots` 스냅샷을 동일한 `INTAKE_SESSION`에 인라인 저장한다.
+> `availableSlots`에는 같은 지역 차량 용량과 당일 현재 시각 이후 조건이 함께 반영된다. 즉, 오늘 날짜 슬롯은 아직 시작되지 않은 시간만 노출된다.
 
 ---
 
@@ -582,6 +583,8 @@
 > - `intakeSession.patient_id` 존재 (환자 바인딩 완료)
 > - `slotId`가 해당 세션에서 안내된 슬롯 목록에 포함되는지
 > - 세션 상태가 예약 생성 가능한 단계인지
+> - 당일 슬롯이면 현재 시각 이후 시작 슬롯인지
+> - 동일 `regionCode`에서는 같은 시간대 예약을 1건만 허용하는지
 > - `patientId`, `channel`은 서버가 세션에서 자동 추출하므로 body에 포함하지 않는다.
 
 **Request Body**
@@ -619,20 +622,26 @@
 >
 > 추가로 서버는 같은 트랜잭션 문맥에서 다음 리소스를 함께 준비한다.
 > - `CARE_CASE` 생성
-> - `MISSION` 생성 (`phase=CREATED`, `vehicleId=veh_GIMCHEON_01`)
+> - `MISSION` 생성 (`phase=CREATED`, `vehicleId=null`)
 > - `DISPATCH_OUTBOX` 생성
 >
 > 주소가 waypoint 매핑 대상이면 `MISSION.targetWaypointNumber`에 저장하고, 운영/데모 환경에서 이후 출동 트리거에 사용한다.
+> 이 시점에는 차량이 아직 배정되지 않았으므로 `MISSION.vehicleId`는 `null`이며, 실제 차량 `public_id`는 이후 배차 성공 시점에 채워진다.
 
 **Errors**
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 409 | `BOOKING_SLOT_CONFLICT` | 이미 예약된 슬롯 |
+| 409 | `BOOKING_SLOT_EXPIRED` | 이미 시작되었거나 지난 시간의 슬롯 |
+| 409 | `BOOKING_VEHICLE_CONFLICT` | 같은 지역 차량에 이미 같은 시간대 예약이 존재 |
 | 404 | `SLOT_NOT_FOUND` | 유효하지 않은 슬롯 ID |
-| 409 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
-| 400 | `SLOT_NOT_OFFERED` | 해당 세션에서 안내되지 않은 슬롯 |
-| 409 | `SESSION_STATE_INVALID` | 예약 생성 불가한 세션 상태 |
+| 400 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
+| 400 | `SLOT_NOT_IN_RECOMMENDATION` | 해당 세션에서 안내되지 않은 슬롯 |
+| 400 | `SESSION_STATE_INVALID` | 예약 생성 불가한 세션 상태 |
+
+> 추천 응답의 `availableSlots`는 같은 지역 차량 용량을 반영해 필터링된 결과다. 지역 용량 계산에서는 `status = CANCELLED`만 제외되며, `COMPLETED` 예약은 같은 지역/시간대 재예약을 계속 막는다.
+> 예약 취소 후에는 `status = CANCELLED` 예약이 지역 용량 계산에서 제외되므로 해당 시간대가 다시 노출될 수 있다.
 
 ---
 

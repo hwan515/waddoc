@@ -27,6 +27,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 문진 결과를 바탕으로 진료과를 정하고 예약 가능한 슬롯을 추천한다.
@@ -63,6 +64,8 @@ public class RecommendationService {
                     .findByDoctorInAndSlotDateGreaterThanEqualAndBookedFalseOrderBySlotDateAscStartTimeAsc(
                             doctors, LocalDate.now()), preferredDoctor);
         }
+        slots = filterStartedSlots(slots, LocalDate.now(), LocalTime.now());
+        slots = filterRegionCapacitySlots(patient, slots);
 
         String reason = buildRecommendationReason(selection.reason, preferredDoctor, slots);
 
@@ -221,6 +224,63 @@ public class RecommendationService {
                 .filter(slot -> !slot.getDoctor().getPublicId().equals(preferredDoctor.getPublicId()))
                 .forEach(prioritized::add);
         return prioritized;
+    }
+
+    private List<ScheduleSlot> filterRegionCapacitySlots(Patient patient, List<ScheduleSlot> slots) {
+        if (slots.isEmpty()) {
+            return slots;
+        }
+
+        if (patient.getRegionCode() == null || patient.getRegionCode().isBlank()) {
+            return collapseSlotsByTimeWindow(slots);
+        }
+
+        Map<LocalDate, List<Booking>> bookingsByDate = bookingRepository
+                .findActiveRegionBookingsFromDate(patient.getRegionCode(), LocalDate.now(), BookingStatus.CANCELLED)
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        Booking::getAppointmentDate,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+
+        List<ScheduleSlot> filteredSlots = slots.stream()
+                .filter(slot -> bookingsByDate.getOrDefault(slot.getSlotDate(), List.of()).stream()
+                        .noneMatch(booking -> booking.getStatus() != BookingStatus.CANCELLED && overlaps(slot, booking)))
+                .toList();
+
+        return collapseSlotsByTimeWindow(filteredSlots);
+    }
+
+    private List<ScheduleSlot> filterStartedSlots(List<ScheduleSlot> slots, LocalDate today, LocalTime currentTime) {
+        return slots.stream()
+                .filter(slot -> isSlotBookable(slot, today, currentTime))
+                .toList();
+    }
+
+    private List<ScheduleSlot> collapseSlotsByTimeWindow(List<ScheduleSlot> slots) {
+        Map<String, ScheduleSlot> uniqueSlots = new LinkedHashMap<>();
+        for (ScheduleSlot slot : slots) {
+            String key = slot.getSlotDate() + "|" + slot.getStartTime() + "|" + slot.getEndTime();
+            uniqueSlots.putIfAbsent(key, slot);
+        }
+        return new ArrayList<>(uniqueSlots.values());
+    }
+
+    private boolean overlaps(ScheduleSlot slot, Booking booking) {
+        return Objects.equals(slot.getSlotDate(), booking.getAppointmentDate())
+                && slot.getStartTime().isBefore(booking.getEndTime())
+                && slot.getEndTime().isAfter(booking.getStartTime());
+    }
+
+    static boolean isSlotBookable(ScheduleSlot slot, LocalDate today, LocalTime currentTime) {
+        if (slot.getSlotDate().isAfter(today)) {
+            return true;
+        }
+        if (slot.getSlotDate().isBefore(today)) {
+            return false;
+        }
+        return slot.getStartTime().isAfter(currentTime);
     }
 
     private String buildRecommendationReason(String baseReason, DoctorProfile preferredDoctor, List<ScheduleSlot> slots) {

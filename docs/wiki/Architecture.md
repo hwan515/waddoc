@@ -15,6 +15,7 @@
 | 이중 ID | 내부 PK는 bigint 자동 증가, 외부 API에는 `public_id`(접두사 + nanoid) 노출. PK 추론 방지, API 가독성 향상 |
 | 이벤트 버스 분리 | SMS, 의사 SSE 알림, 미션 텔레메트리, 배차 재시도는 Kafka 토픽으로 비동기 분리 |
 | 환자 SMS 알림 | 환자는 계정이 없으므로 예약 결과/취소 알림은 SOLAPI SMS 게이트웨이로 발송. 개발환경은 Mock |
+| 지역 차량 용량 우선 | 예약 가능 시간은 의사 슬롯만이 아니라 `regionCode + 시간대` 기준으로도 제한한다. 지역당 차량 1대 정책상 같은 시간대 활성 예약은 1건만 허용한다. |
 
 ---
 
@@ -73,7 +74,7 @@
 - `sms.requests` → `SmsConsumer` → `SmsService` (실패 시 `sms.requests.DLT`에 적재)
 - `doctor.notifications` → `DoctorNotificationConsumer` → Redis Pub/Sub publish → `RedisMessageListenerContainer` → 활성 SSE 연결에 전달 (다중 인스턴스 대응)
 - `mission.telemetry` → `MissionTelemetryConsumer` → `MISSION` 위치/단계 반영
-- `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 `MISSION` 자동 생성
+- `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 기존 `MISSION`에 `vehicleId` 반영 및 출동 상태 전이
 - `dispatch.retry` → `DispatchRetryConsumer` → 동일 권역 배차 재평가 트리거
 - `dispatch_outbox` 테이블은 예약 확정과 Kafka publish 사이를 느슨하게 연결하는 outbox 역할을 담당한다.
 

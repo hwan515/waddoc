@@ -24,6 +24,37 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     @Query("""
             select b
             from Booking b
+            where b.regionCode = :regionCode
+              and b.appointmentDate >= :fromDate
+              and b.status <> :excludedStatus
+            order by b.appointmentDate asc, b.startTime asc
+            """)
+    List<Booking> findActiveRegionBookingsFromDate(
+            @Param("regionCode") String regionCode,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("excludedStatus") BookingStatus excludedStatus
+    );
+
+    @Query("""
+            select (count(b) > 0)
+            from Booking b
+            where b.regionCode = :regionCode
+              and b.appointmentDate = :appointmentDate
+              and b.status <> :excludedStatus
+              and b.startTime < :endTime
+              and b.endTime > :startTime
+            """)
+    boolean existsActiveRegionBookingConflict(
+            @Param("regionCode") String regionCode,
+            @Param("appointmentDate") LocalDate appointmentDate,
+            @Param("startTime") LocalTime startTime,
+            @Param("endTime") LocalTime endTime,
+            @Param("excludedStatus") BookingStatus excludedStatus
+    );
+
+    @Query("""
+            select b
+            from Booking b
             where b.patient = :patient
               and b.doctor.department = :department
               and b.status <> :excludedStatus
