@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 const EcgWaveform = ({
     waveform = [],
     samplingHz = 25,
@@ -5,6 +7,8 @@ const EcgWaveform = ({
     className = '',
     compact = false,
 }) => {
+    const svgId = useId().replace(/:/g, '');
+
     if (!waveform.length) {
         return (
             <div className={`rounded-3xl border border-white/10 bg-slate-950/60 p-6 text-center text-sm text-slate-300 ${className}`}>
@@ -14,18 +18,25 @@ const EcgWaveform = ({
     }
 
     const width = 960;
-    const height = compact ? 168 : 240;
-    const padding = compact ? 12 : 16;
+    const height = compact ? 300 : 320;
+    const padding = compact ? 10 : 12;
+    const plotWidth = width - padding * 2;
+    const plotHeight = height - padding * 2;
+    const minorGridSize = compact ? 10 : 12;
+    const majorGridStep = minorGridSize * 5;
     const minValue = Math.min(...waveform);
     const maxValue = Math.max(...waveform);
     const safeMin = minValue === maxValue ? minValue - 1 : minValue;
     const safeMax = minValue === maxValue ? maxValue + 1 : maxValue;
     const amplitude = safeMax - safeMin;
+    const baselineY = padding + plotHeight / 2;
+    const minorPatternId = `ecg-minor-${svgId}`;
+    const majorPatternId = `ecg-major-${svgId}`;
 
     const points = waveform.map((value, index) => {
-        const x = padding + (index / Math.max(waveform.length - 1, 1)) * (width - padding * 2);
+        const x = padding + (index / Math.max(waveform.length - 1, 1)) * plotWidth;
         const normalized = (value - safeMin) / amplitude;
-        const y = height - padding - normalized * (height - padding * 2);
+        const y = height - padding - normalized * plotHeight;
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
 
@@ -36,39 +47,70 @@ const EcgWaveform = ({
                 <span>{samplingHz}Hz · {durationSeconds}초 · {waveform.length}개 샘플</span>
             </div>
 
-            <svg viewBox={`0 0 ${width} ${height}`} className={`${compact ? 'h-36' : 'h-56'} w-full rounded-2xl bg-[#020817]`}>
-                {Array.from({ length: 7 }).map((_, index) => {
-                    const x = padding + (index / 6) * (width - padding * 2);
-                    return (
-                        <line
-                            key={`grid-x-${index}`}
-                            x1={x}
-                            y1={padding}
-                            x2={x}
-                            y2={height - padding}
-                            stroke="rgba(148, 163, 184, 0.12)"
+            <svg
+                viewBox={`0 0 ${width} ${height}`}
+                preserveAspectRatio="none"
+                className={`w-full rounded-2xl bg-[#fcfdff] ${compact ? 'aspect-[16/5]' : 'aspect-[3/1]'}`}
+            >
+                <defs>
+                    <pattern
+                        id={minorPatternId}
+                        width={minorGridSize}
+                        height={minorGridSize}
+                        patternUnits="userSpaceOnUse"
+                    >
+                        <path
+                            d={`M ${minorGridSize} 0 L 0 0 0 ${minorGridSize}`}
+                            fill="none"
+                            stroke="rgba(59, 130, 246, 0.18)"
                             strokeWidth="1"
                         />
-                    );
-                })}
-                {Array.from({ length: 5 }).map((_, index) => {
-                    const y = padding + (index / 4) * (height - padding * 2);
-                    return (
-                        <line
-                            key={`grid-y-${index}`}
-                            x1={padding}
-                            y1={y}
-                            x2={width - padding}
-                            y2={y}
-                            stroke="rgba(148, 163, 184, 0.12)"
-                            strokeWidth="1"
+                    </pattern>
+                    <pattern
+                        id={majorPatternId}
+                        width={majorGridStep}
+                        height={majorGridStep}
+                        patternUnits="userSpaceOnUse"
+                    >
+                        <rect width={majorGridStep} height={majorGridStep} fill={`url(#${minorPatternId})`} />
+                        <path
+                            d={`M ${majorGridStep} 0 L 0 0 0 ${majorGridStep}`}
+                            fill="none"
+                            stroke="rgba(37, 99, 235, 0.3)"
+                            strokeWidth="1.4"
                         />
-                    );
-                })}
+                    </pattern>
+                </defs>
+                <rect
+                    x={padding}
+                    y={padding}
+                    width={plotWidth}
+                    height={plotHeight}
+                    rx="10"
+                    fill="#fdfefe"
+                    stroke="rgba(37, 99, 235, 0.12)"
+                    strokeWidth="1"
+                />
+                <rect
+                    x={padding}
+                    y={padding}
+                    width={plotWidth}
+                    height={plotHeight}
+                    rx="10"
+                    fill={`url(#${majorPatternId})`}
+                />
+                <line
+                    x1={padding}
+                    y1={baselineY}
+                    x2={width - padding}
+                    y2={baselineY}
+                    stroke="rgba(29, 78, 216, 0.24)"
+                    strokeWidth="1.4"
+                />
                 <polyline
                     fill="none"
-                    stroke="#67E8F9"
-                    strokeWidth="3"
+                    stroke="#111827"
+                    strokeWidth={compact ? '2.8' : '3.2'}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     points={points}

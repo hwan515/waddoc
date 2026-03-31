@@ -344,7 +344,7 @@ const ConsultationRoom = ({
                         <div className="flex shrink-0 border-b border-slate-400 bg-[#4472C4] text-center text-sm font-bold text-white">
                             <div className="w-10 border-r border-[#3B62A4] py-1.5">선택</div>
                             <div className="w-20 border-r border-[#3B62A4] py-1.5">코드</div>
-                            <div className="w-36 border-r border-[#3B62A4] px-3 py-1.5 text-left">약품명</div>
+                            <div className="w-44 border-r border-[#3B62A4] px-3 py-1.5 text-left">약품명</div>
                             <div className="flex-1 px-3 py-1.5 text-left">용법 / 용량</div>
                         </div>
 
@@ -373,7 +373,7 @@ const ConsultationRoom = ({
                                             />
                                         </div>
                                         <div className="w-20 border-r border-slate-200 py-1.5 text-center text-slate-500">{med.code}</div>
-                                        <div className="w-36 truncate border-r border-slate-200 px-3 py-1.5 text-left text-slate-800" title={med.name}>
+                                        <div className="w-44 truncate border-r border-slate-200 px-3 py-1.5 text-left text-slate-800" title={med.name}>
                                             <div className="flex items-center gap-1">
                                                 <span className="truncate">{med.name}</span>
                                                 {isPrescribed ? (
