@@ -4,17 +4,16 @@ import com.waddoc.domain.vital.entity.VitalMeasurement;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 @Getter
 @Builder
 public class VitalMeasurementResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String caseId;
     private BigDecimal temperature;
@@ -51,6 +50,6 @@ public class VitalMeasurementResponse {
     }
 
     private static OffsetDateTime toOffsetDateTime(LocalDateTime value) {
-        return value != null ? value.atZone(KST).toOffsetDateTime() : null;
+        return value != null ? value.atZone(KstTime.ZONE).toOffsetDateTime() : null;
     }
 }

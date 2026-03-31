@@ -24,6 +24,7 @@ import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -32,7 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +62,7 @@ public class BookingService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final VehicleRepository vehicleRepository;
     private final WaypointAddressResolver waypointAddressResolver;
+    private final Clock clock;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -82,7 +87,7 @@ public class BookingService {
             throw new BusinessException(ErrorCode.SLOT_NOT_IN_RECOMMENDATION);
         }
 
-        if (!isSlotBookable(slot, java.time.LocalDate.now(), java.time.LocalTime.now())) {
+        if (!isSlotBookable(slot, LocalDate.now(KstTime.resolve(clock)), LocalTime.now(KstTime.resolve(clock)))) {
             throw new BusinessException(ErrorCode.BOOKING_SLOT_EXPIRED);
         }
 
@@ -129,7 +134,7 @@ public class BookingService {
                 .build());
         ensureCreatedMission(careCase, patient);
 
-        session.touch();
+        session.touch(LocalDateTime.now(KstTime.resolve(clock)));
 
         // TTS 메시지 생성
         String doctorName = slot.getDoctor().getUser().getName();
@@ -275,7 +280,7 @@ public class BookingService {
         }
 
         String reason = request != null ? request.getCancelReason() : null;
-        booking.cancel(reason);
+        booking.cancel(reason, LocalDateTime.now(KstTime.resolve(clock)));
         booking.getSlot().markAvailable();
 
         careCaseRepository.findByBooking(booking).ifPresent(CareCase::cancel);

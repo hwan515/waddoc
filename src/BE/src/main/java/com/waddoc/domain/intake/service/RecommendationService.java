@@ -16,6 +16,7 @@ import com.waddoc.domain.intake.repository.IntakeSessionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,7 @@ public class RecommendationService {
     private final ScheduleSlotRepository scheduleSlotRepository;
     private final BookingRepository bookingRepository;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     /**
      * DTMF 진료과 선택 또는 증상 입력을 기반으로 추천 → 가용 슬롯 조회.
@@ -54,6 +58,9 @@ public class RecommendationService {
         }
 
         RecommendationSelection selection = resolveSelection(request);
+        LocalDate today = LocalDate.now(KstTime.resolve(clock));
+        LocalTime currentTime = LocalTime.now(KstTime.resolve(clock));
+        LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
 
         // 1. 진료과 매칭 의사 조회 + 가용 슬롯
         List<DoctorProfile> doctors = doctorProfileRepository.findByDepartment(selection.department);
@@ -62,9 +69,9 @@ public class RecommendationService {
         if (!doctors.isEmpty()) {
             slots = prioritizeSlotsByPreferredDoctor(scheduleSlotRepository
                     .findByDoctorInAndSlotDateGreaterThanEqualAndBookedFalseOrderBySlotDateAscStartTimeAsc(
-                            doctors, LocalDate.now()), preferredDoctor);
+                            doctors, today), preferredDoctor);
         }
-        slots = filterStartedSlots(slots, LocalDate.now(), LocalTime.now());
+        slots = filterStartedSlots(slots, today, currentTime);
         slots = filterRegionCapacitySlots(patient, slots);
 
         String reason = buildRecommendationReason(selection.reason, preferredDoctor, slots);
@@ -80,10 +87,11 @@ public class RecommendationService {
                 selection.confidenceLevel,
                 selection.emergency,
                 reason,
-                slotPublicIds
+                slotPublicIds,
+                now
         );
 
-        session.touch();
+        session.touch(now);
 
         // 3. 감사 로그
         String correlationId = "corr_ints_" + session.getPublicId();
@@ -199,8 +207,8 @@ public class RecommendationService {
                         patient,
                         department,
                         BookingStatus.CANCELLED,
-                        LocalDate.now(),
-                        LocalTime.now(),
+                        LocalDate.now(KstTime.resolve(clock)),
+                        LocalTime.now(KstTime.resolve(clock)),
                         PageRequest.of(0, 1))
                 .stream()
                 .findFirst()
@@ -236,7 +244,11 @@ public class RecommendationService {
         }
 
         Map<LocalDate, List<Booking>> bookingsByDate = bookingRepository
-                .findActiveRegionBookingsFromDate(patient.getRegionCode(), LocalDate.now(), BookingStatus.CANCELLED)
+                .findActiveRegionBookingsFromDate(
+                        patient.getRegionCode(),
+                        LocalDate.now(KstTime.resolve(clock)),
+                        BookingStatus.CANCELLED
+                )
                 .stream()
                 .collect(java.util.stream.Collectors.groupingBy(
                         Booking::getAppointmentDate,

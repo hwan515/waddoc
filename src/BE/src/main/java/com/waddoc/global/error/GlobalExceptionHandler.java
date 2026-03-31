@@ -1,6 +1,7 @@
 package com.waddoc.global.error;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.validation.BindingResult;
@@ -8,8 +9,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import com.waddoc.global.util.KstTime;
 
 /**
  * 전역 예외 처리. BusinessException과 Validation 에러를 공통 형식으로 변환.
@@ -18,11 +22,17 @@ import java.util.List;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private final Clock clock;
+
+    public GlobalExceptionHandler(@Autowired(required = false) Clock clock) {
+        this.clock = clock != null ? clock : Clock.system(KstTime.ZONE);
+    }
+
     @ExceptionHandler(BusinessException.class)
     protected ResponseEntity<ErrorResponse> handleBusinessException(BusinessException e) {
         log.warn("BusinessException: {}", e.getMessage());
         ErrorCode errorCode = e.getErrorCode();
-        return ResponseEntity.status(errorCode.getStatus()).body(ErrorResponse.of(errorCode));
+        return ResponseEntity.status(errorCode.getStatus()).body(ErrorResponse.of(errorCode, clock));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -46,7 +56,7 @@ public class GlobalExceptionHandler {
         return ErrorResponse.builder()
                 .errorCode("INVALID_INPUT")
                 .message("입력값이 올바르지 않습니다.")
-                .timestamp(LocalDateTime.now())
+                .timestamp(LocalDateTime.now(clock))
                 .details(details)
                 .build();
     }

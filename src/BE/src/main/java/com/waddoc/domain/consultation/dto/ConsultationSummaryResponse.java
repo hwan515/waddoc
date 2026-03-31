@@ -7,14 +7,13 @@ import com.waddoc.domain.consultation.entity.ConsultationSummary;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class ConsultationSummaryResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String sessionId;
     private String caseId;
@@ -29,7 +28,7 @@ public class ConsultationSummaryResponse {
                 .caseId(session.getCareCase().getPublicId())
                 .status(session.getStatus())
                 .summary(SummaryDetail.from(summary))
-                .endedAt(session.getEndedAt() != null ? session.getEndedAt().atZone(KST).toOffsetDateTime() : null)
+                .endedAt(session.getEndedAt() != null ? session.getEndedAt().atZone(KstTime.ZONE).toOffsetDateTime() : null)
                 .durationMinutes(session.getDurationMinutes())
                 .build();
     }

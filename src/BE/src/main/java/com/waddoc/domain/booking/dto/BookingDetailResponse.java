@@ -4,16 +4,15 @@ import com.waddoc.domain.booking.entity.Booking;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class BookingDetailResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String bookingId;
     private String status;
@@ -72,13 +71,13 @@ public class BookingDetailResponse {
                 .channel(booking.getChannel())
                 .cancelReason(booking.getCancelReason())
                 .cancelledAt(booking.getCancelledAt() != null
-                        ? booking.getCancelledAt().atZone(KST).toOffsetDateTime()
+                        ? booking.getCancelledAt().atZone(KstTime.ZONE).toOffsetDateTime()
                         : null)
                 .createdAt(booking.getCreatedAt() != null
-                        ? booking.getCreatedAt().atZone(KST).toOffsetDateTime()
+                        ? booking.getCreatedAt().atZone(KstTime.ZONE).toOffsetDateTime()
                         : null)
                 .updatedAt(booking.getUpdatedAt() != null
-                        ? booking.getUpdatedAt().atZone(KST).toOffsetDateTime()
+                        ? booking.getUpdatedAt().atZone(KstTime.ZONE).toOffsetDateTime()
                         : null)
                 .build();
     }

@@ -8,15 +8,14 @@ import com.waddoc.domain.intake.entity.IntakeStatus;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public class IntakeSessionDetailResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String intakeSessionId;
     private String patientId;
@@ -36,10 +35,10 @@ public class IntakeSessionDetailResponse {
                 .channel(session.getChannel())
                 .status(session.getStatus())
                 .completionReason(session.getCompletionReason())
-                .createdAt(session.getCreatedAt().atZone(KST).toOffsetDateTime())
+                .createdAt(session.getCreatedAt().atZone(KstTime.ZONE).toOffsetDateTime())
                 .endedAt(session.getEndedAt() != null
-                        ? session.getEndedAt().atZone(KST).toOffsetDateTime() : null)
-                .lastActivityAt(session.getLastActivityAt().atZone(KST).toOffsetDateTime())
+                        ? session.getEndedAt().atZone(KstTime.ZONE).toOffsetDateTime() : null)
+                .lastActivityAt(session.getLastActivityAt().atZone(KstTime.ZONE).toOffsetDateTime())
                 .build();
     }
 }

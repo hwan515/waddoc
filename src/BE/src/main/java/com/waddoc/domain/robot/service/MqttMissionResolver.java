@@ -4,12 +4,13 @@ import com.waddoc.domain.booking.entity.BookingStatus;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -19,9 +20,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class MqttMissionResolver {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final MissionRepository missionRepository;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public Optional<Mission> resolveMission(
@@ -43,7 +43,7 @@ public class MqttMissionResolver {
 
         List<Mission> candidates = missionRepository.findCurrentVehicleMissions(
                 normalizedVehicleId,
-                LocalDate.now(KST),
+                LocalDate.now(KstTime.resolve(clock)),
                 BookingStatus.CONFIRMED,
                 allowedPhases
         ).stream()

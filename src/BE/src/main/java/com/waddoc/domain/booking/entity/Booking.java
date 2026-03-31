@@ -5,6 +5,7 @@ import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.util.KstTime;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -93,9 +94,13 @@ public class Booking extends BaseTimeEntity {
 
     /** 예약 취소 처리 */
     public void cancel(String reason) {
+        cancel(reason, KstTime.now());
+    }
+
+    public void cancel(String reason, LocalDateTime now) {
         this.status = BookingStatus.CANCELLED;
         this.cancelReason = reason;
-        this.cancelledAt = LocalDateTime.now();
+        this.cancelledAt = now;
     }
 
     public void complete() {

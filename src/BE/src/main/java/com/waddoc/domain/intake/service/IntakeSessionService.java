@@ -8,10 +8,13 @@ import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -24,6 +27,7 @@ public class IntakeSessionService {
     private final IntakeSessionRepository intakeSessionRepository;
     private final PatientRepository patientRepository;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     /**
      * 문진/전화 접수의 시작점을 만들고 감사 로그를 남긴다.
@@ -74,7 +78,7 @@ public class IntakeSessionService {
             throw new BusinessException(ErrorCode.PATIENT_ALREADY_BOUND);
         }
 
-        session.bindPatient(patient);
+        session.bindPatient(patient, LocalDateTime.now(KstTime.resolve(clock)));
 
         String correlationId = "corr_ints_" + session.getPublicId();
         auditLogService.log(
@@ -100,7 +104,7 @@ public class IntakeSessionService {
             throw new BusinessException(ErrorCode.SESSION_STATE_INVALID);
         }
 
-        session.complete(request.getCompletionReason());
+        session.complete(request.getCompletionReason(), LocalDateTime.now(KstTime.resolve(clock)));
 
         String correlationId = "corr_ints_" + session.getPublicId();
         auditLogService.log(

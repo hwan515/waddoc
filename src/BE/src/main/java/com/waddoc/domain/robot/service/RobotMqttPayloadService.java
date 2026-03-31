@@ -10,31 +10,40 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.waddoc.domain.robot.config.MqttTopics;
-import lombok.RequiredArgsConstructor;
+import com.waddoc.global.util.KstTime;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RobotMqttPayloadService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final ObjectMapper objectMapper;
+    private final Clock clock;
+
+    @Autowired
+    public RobotMqttPayloadService(ObjectMapper objectMapper, Clock clock) {
+        this.objectMapper = objectMapper;
+        this.clock = KstTime.resolve(clock);
+    }
+
+    public RobotMqttPayloadService(ObjectMapper objectMapper) {
+        this(objectMapper, KstTime.clock());
+    }
 
     public String buildWaypointCommandPayload(int waypointNumber) {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("command", "waypoint");
         payload.put("waypoint", waypointNumber);
         payload.put("target_waypoint", waypointNumber);
-        payload.put("requested_at", OffsetDateTime.now(KST).toString());
+        payload.put("requested_at", OffsetDateTime.now(KstTime.resolve(clock)).toString());
         return write(payload);
     }
 
@@ -43,7 +52,7 @@ public class RobotMqttPayloadService {
         payload.put("command", "estop");
         payload.put("enabled", enabled);
         payload.put("state", enabled ? 1 : 0);
-        payload.put("requested_at", OffsetDateTime.now(KST).toString());
+        payload.put("requested_at", OffsetDateTime.now(KstTime.resolve(clock)).toString());
         return write(payload);
     }
 
@@ -113,7 +122,7 @@ public class RobotMqttPayloadService {
 
         ObjectNode normalized = objectMapper.createObjectNode();
         normalized.put("state", trimmed);
-        normalized.put("updated_at", OffsetDateTime.now(KST).toString());
+        normalized.put("updated_at", OffsetDateTime.now(KstTime.resolve(clock)).toString());
         return Optional.of(write(normalized));
     }
 
@@ -141,7 +150,7 @@ public class RobotMqttPayloadService {
         }
 
         if (!normalized.has("updated_at")) {
-            normalized.put("updated_at", OffsetDateTime.now(KST).toString());
+            normalized.put("updated_at", OffsetDateTime.now(KstTime.resolve(clock)).toString());
         }
 
         return Optional.of(write(normalized));

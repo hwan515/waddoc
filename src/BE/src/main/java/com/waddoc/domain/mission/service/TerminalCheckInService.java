@@ -16,13 +16,14 @@ import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.DeviceTerminalPrincipal;
 import com.waddoc.global.security.authorization.AccessControlService;
 import com.waddoc.global.security.jwt.DeviceTerminalScopes;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -37,7 +38,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TerminalCheckInService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final EnumSet<MissionPhase> CLAIMABLE_PHASES =
             EnumSet.of(MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
     private static final EnumSet<MissionPhase> CURRENT_MISSION_PHASES =
@@ -50,6 +50,7 @@ public class TerminalCheckInService {
     private final AccessControlService accessControlService;
     private final MissionTerminalTokenService missionTerminalTokenService;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public TerminalCurrentMissionResponse getCurrentMission(Authentication authentication) {
@@ -233,7 +234,7 @@ public class TerminalCheckInService {
             return Optional.empty();
         }
 
-        LocalDate today = LocalDate.now(KST);
+        LocalDate today = LocalDate.now(KstTime.resolve(clock));
         return missionRepository.findCurrentVehicleMissions(
                         principal.vehicleId(),
                         today,

@@ -3,6 +3,7 @@ package com.waddoc.domain.notification.service;
 import com.waddoc.domain.doctor.entity.DoctorProfile;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,8 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,9 +30,8 @@ public class DoctorNotificationSseService {
     static final long DEFAULT_RECONNECT_DELAY_MILLIS = 3_000L;
     static final long HEARTBEAT_INTERVAL_MILLIS = 25_000L;
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final AccessControlService accessControlService;
+    private final Clock clock;
 
     private final ConcurrentMap<String, ConcurrentMap<String, SseEmitter>> emittersByDoctorId =
             new ConcurrentHashMap<>();
@@ -60,7 +60,7 @@ public class DoctorNotificationSseService {
                     .id(connectionId)
                     .name("connected")
                     .reconnectTime(DEFAULT_RECONNECT_DELAY_MILLIS)
-                    .data(new ConnectedEvent(OffsetDateTime.now(KST))));
+                    .data(new ConnectedEvent(OffsetDateTime.now(KstTime.resolve(clock)))));
         } catch (Exception e) {
             removeEmitter(doctorProfileId, connectionId);
             emitter.completeWithError(e);
@@ -104,7 +104,7 @@ public class DoctorNotificationSseService {
                         emitter.send(SseEmitter.event()
                                 .id(UUID.randomUUID().toString())
                                 .name("ping")
-                                .data(new ConnectedEvent(OffsetDateTime.now(KST))));
+                                .data(new ConnectedEvent(OffsetDateTime.now(KstTime.resolve(clock)))));
                     } catch (Exception e) {
                         log.warn("Doctor SSE heartbeat failed. doctorId={}, connectionId={}",
                                 doctorProfileId, connectionId, e);

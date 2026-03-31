@@ -25,6 +25,7 @@ import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,7 +33,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,7 @@ public class AdminService {
     private final PatientGuardianLinkRepository patientGuardianLinkRepository;
     private final UserRepository userRepository;
     private final RefreshTokenService refreshTokenService;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public AdminBookingListResponse getBookings(
@@ -203,8 +207,9 @@ public class AdminService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.GUARDIAN_LINK_REQUEST_NOT_FOUND));
 
         validatePending(link);
-        link.approve(adminUser);
-        link.getGuardianUser().approve(adminUser);
+        LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
+        link.approve(adminUser, now);
+        link.getGuardianUser().approve(adminUser, now);
 
         return GuardianLinkApprovalResponse.from(link);
     }
@@ -219,14 +224,15 @@ public class AdminService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.GUARDIAN_LINK_REQUEST_NOT_FOUND));
 
         validatePending(link);
-        link.reject(adminUser);
+        LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
+        link.reject(adminUser, now);
 
         boolean hasApprovedLink = patientGuardianLinkRepository.existsByGuardianUserIdAndStatus(
                 link.getGuardianUser().getId(),
                 GuardianLinkStatus.APPROVED
         );
         if (!hasApprovedLink) {
-            link.getGuardianUser().reject(adminUser);
+            link.getGuardianUser().reject(adminUser, now);
             refreshTokenService.deleteAllByUserId(link.getGuardianUser().getPublicId());
         }
 

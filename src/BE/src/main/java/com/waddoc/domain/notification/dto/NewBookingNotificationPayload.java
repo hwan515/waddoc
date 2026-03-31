@@ -8,18 +8,17 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class NewBookingNotificationPayload {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String type;
     private String bookingId;
@@ -55,7 +54,7 @@ public class NewBookingNotificationPayload {
                 .startTime(booking.getStartTime())
                 .bookingChannel(booking.getChannel())
                 .location(booking.getPatient().getAddress())
-                .createdAt(booking.getCreatedAt().atZone(KST).toOffsetDateTime())
+                .createdAt(booking.getCreatedAt().atZone(KstTime.ZONE).toOffsetDateTime())
                 .build();
     }
 }

@@ -13,12 +13,13 @@ import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 /**
  * 미션 생성과 단계 전이처럼 상태를 바꾸는 명령성 작업을 담당한다.
@@ -28,11 +29,10 @@ import java.time.ZoneId;
 @Transactional
 public class MissionCommandService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final MissionRepository missionRepository;
     private final CareCaseRepository careCaseRepository;
     private final AccessControlService accessControlService;
+    private final Clock clock;
 
     /**
      * 케이스별 미션 중복 생성을 막고, 배차 시간을 KST 기준으로 정규화해 저장한다.
@@ -54,7 +54,7 @@ public class MissionCommandService {
                 careCase,
                 request.getVehicleId(),
                 request.getDestination(),
-                request.getScheduledTime().atZoneSameInstant(KST).toLocalDateTime(),
+                request.getScheduledTime().atZoneSameInstant(KstTime.ZONE).toLocalDateTime(),
                 null
         );
         return CreateMissionResponse.from(savedMission);
@@ -104,7 +104,7 @@ public class MissionCommandService {
         validatePhaseTransition(mission, request.getPhase());
 
         MissionPhase previousPhase = mission.getPhase();
-        mission.updatePhase(request.getPhase());
+        mission.updatePhase(request.getPhase(), LocalDateTime.now(KstTime.resolve(clock)));
 
         Mission savedMission = missionRepository.save(mission);
         return UpdateMissionPhaseResponse.of(savedMission, previousPhase);
