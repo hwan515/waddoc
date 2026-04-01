@@ -1,15 +1,11 @@
 import { Navigation, Truck, Video, AlertOctagon, Play } from 'lucide-react';
 import MinimapPanel from './MinimapPanel';
 import apiClient from '../../utils/api';
+import { formatGpsCoordinate, getDisplayGps } from '../../utils/displayGps';
 
 const formatSpeed = (value) => {
     if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
     return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
-};
-
-const formatCoordinate = (value) => {
-    if (typeof value !== 'number' || Number.isNaN(value)) return '-';
-    return value.toFixed(4);
 };
 
 const getStatusBadge = (status) => {
@@ -118,7 +114,7 @@ const MapMonitoring = ({
                     ) : (
                         <AlertOctagon className="h-5 w-5 animate-pulse" />
                     )}
-                    {isEmergencyStopped ? 'START' : 'EMERGENCY STOP'}
+                    {isEmergencyStopped ? 'RESUMING' : 'EMERGENCY STOP'}
                 </button>
 
                 <div className="flex flex-3 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -139,7 +135,13 @@ const MapMonitoring = ({
                             const displaySpeed = isSelectedVehicle && typeof vehicleSpeed === 'number'
                                 ? vehicleSpeed
                                 : vehicle.speed;
-                            const displayLocation = isPrimaryServiceVehicle ? vehicle.location : null;
+                            const displayLocation = isPrimaryServiceVehicle
+                                ? (isSelectedVehicle ? (vehicleLocation || vehicle.location) : vehicle.location)
+                                : null;
+                            const displayGps = getDisplayGps({
+                                vehiclePose: isSelectedVehicle ? minimapVehiclePose : null,
+                                vehicleLocation: displayLocation
+                            });
                             const displayBattery = typeof vehicle.battery === 'number' ? `${vehicle.battery}%` : '-';
 
                             return (
@@ -172,7 +174,7 @@ const MapMonitoring = ({
                                         <div className="flex items-center gap-2">
                                             <Navigation className="h-3.5 w-3.5 text-slate-400" />
                                             <span className="font-mono">
-                                                {formatCoordinate(displayLocation?.lat)}, {formatCoordinate(displayLocation?.lng)}
+                                                {formatGpsCoordinate(displayGps?.lat)}, {formatGpsCoordinate(displayGps?.lng)}
                                             </span>
                                         </div>
                                         <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2">

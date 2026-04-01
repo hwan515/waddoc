@@ -343,7 +343,7 @@ class HybridDijkstraVisionFollower(Node):
         return self.lane_processor.weighted_average(pairs)
 
     def speed_ms_to_kmh(self, speed_ms):
-        return float(speed_ms) * 3.6
+        return float(speed_ms) * 1.8
 
     def build_speed_snapshot(self):
         return self.route_exporter.build_speed_snapshot(self.current_speed_state())
