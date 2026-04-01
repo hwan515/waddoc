@@ -260,6 +260,7 @@ const LegacyEMRDashboard = () => {
     const [reservations, setReservations] = useState([]);
     const [patientDB, setPatientDB] = useState({});
     const [historyDB, setHistoryDB] = useState({});
+    const [expandedHistoryRows, setExpandedHistoryRows] = useState({});
 
     // 3. 현재 선택된 예약
     const [selectedReservationId, setSelectedReservationId] = useState(null);
@@ -496,6 +497,10 @@ const LegacyEMRDashboard = () => {
     const selectedPatientInfo = patientDB[effectiveSelectedPatientId] || null;
     const selectedHistory = historyDB[effectiveSelectedPatientId] || [];
 
+    useEffect(() => {
+        setExpandedHistoryRows({});
+    }, [effectiveSelectedPatientId]);
+
     const handleLogout = async () => {
         await logoutSession();
         navigate('/emr/login');
@@ -504,6 +509,13 @@ const LegacyEMRDashboard = () => {
     const handleStartConsultation = (resId) => {
         // 비대면 화상진료 화면으로 이동 (resId = caseId)
         navigate(`/doctor/consultation/${resId}`);
+    };
+
+    const toggleHistoryRowExpansion = (historyId) => {
+        setExpandedHistoryRows((prev) => ({
+            ...prev,
+            [historyId]: !prev[historyId]
+        }));
     };
 
     return (
@@ -688,14 +700,14 @@ const LegacyEMRDashboard = () => {
                         </div>
 
                         {/* 과거 내역 데이터 테이블 */}
-                        <div className="flex-1 flex flex-col overflow-x-auto bg-white">
-                            <div className="min-w-[52rem] flex flex-col min-h-0 flex-1">
-                                <div className="bg-[#4472C4] text-white flex border-b border-slate-400 text-center">
-                                    <div className={`w-12 ${historyHeaderCellClass}`}>순번</div>
-                                    <div className={`w-28 ${historyHeaderCellClass}`}>진료일자</div>
-                                    <div className={`w-20 ${historyHeaderCellClass}`}>담당의</div>
-                                    <div className={`w-56 ${historyHeaderCellClass} text-left`}>진단명(상병)</div>
-                                    <div className="flex-1 px-2.5 py-1.5 text-left text-sm font-bold">처방 내역</div>
+                        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                            <div className="flex flex-col min-h-0 flex-1">
+                                <div className="grid w-full grid-cols-[3.25rem_7.5rem_4.5rem_minmax(0,1.35fr)_minmax(0,1.05fr)] bg-[#4472C4] text-white border-b border-slate-400 text-center">
+                                    <div className={historyHeaderCellClass}>순번</div>
+                                    <div className={historyHeaderCellClass}>진료일자</div>
+                                    <div className={historyHeaderCellClass}>담당의</div>
+                                    <div className={`${historyHeaderCellClass} min-w-0 text-left`}>진단명(상병)</div>
+                                    <div className="min-w-0 px-2.5 py-1.5 text-left text-sm font-bold">처방 내역</div>
                                 </div>
 
                                 <div className="flex-1 overflow-y-auto bg-white">
@@ -704,15 +716,38 @@ const LegacyEMRDashboard = () => {
                                             등록된 과거 진료 내역이 없습니다.
                                         </div>
                                     ) : (
-                                        selectedHistory.map((hist, idx) => (
-                                            <div key={hist.id} className="flex border-b border-slate-200 hover:bg-slate-50 cursor-default">
-                                                <div className={`w-12 ${historyBodyCellClass} text-center text-slate-500`}>{idx + 1}</div>
-                                                <div className={`w-28 ${historyBodyCellClass} text-center`}>{hist.date}</div>
-                                                <div className={`w-20 ${historyBodyCellClass} text-center`}>{hist.doctor}</div>
-                                                <div className={`w-56 ${historyBodyCellClass} text-left font-semibold text-blue-700 truncate`}>{hist.dx}</div>
-                                                <div className="flex-1 px-2.5 py-2 text-left text-sm truncate">{hist.rx}</div>
-                                            </div>
-                                        ))
+                                        selectedHistory.map((hist, idx) => {
+                                            const historyRowId = hist.id || `${hist.date}-${hist.doctor}-${idx}`;
+                                            const isHistoryExpanded = Boolean(expandedHistoryRows[historyRowId]);
+
+                                            return (
+                                                <div
+                                                    key={historyRowId}
+                                                    className={`grid w-full grid-cols-[3.25rem_7.5rem_4.5rem_minmax(0,1.35fr)_minmax(0,1.05fr)] border-b border-slate-200 transition-colors ${isHistoryExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'} cursor-pointer`}
+                                                    onClick={() => toggleHistoryRowExpansion(historyRowId)}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === 'Enter' || event.key === ' ') {
+                                                            event.preventDefault();
+                                                            toggleHistoryRowExpansion(historyRowId);
+                                                        }
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-expanded={isHistoryExpanded}
+                                                    title={isHistoryExpanded ? '클릭하면 접습니다.' : '클릭하면 전체 내용을 펼칩니다.'}
+                                                >
+                                                    <div className={`${historyBodyCellClass} text-center text-slate-500 whitespace-nowrap`}>{idx + 1}</div>
+                                                    <div className={`${historyBodyCellClass} text-center whitespace-nowrap`}>{hist.date}</div>
+                                                    <div className={`${historyBodyCellClass} text-center truncate`}>{hist.doctor}</div>
+                                                    <div className={`${historyBodyCellClass} min-w-0 text-left font-semibold text-blue-700`}>
+                                                        <div className={isHistoryExpanded ? 'break-words whitespace-normal leading-snug' : 'truncate'}>{hist.dx}</div>
+                                                    </div>
+                                                    <div className="min-w-0 px-2.5 py-2 text-left text-sm">
+                                                        <div className={isHistoryExpanded ? 'break-words whitespace-normal leading-snug' : 'truncate'}>{hist.rx}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>
