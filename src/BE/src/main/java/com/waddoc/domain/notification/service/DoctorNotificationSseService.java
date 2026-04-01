@@ -9,10 +9,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,7 +65,10 @@ public class DoctorNotificationSseService {
                     .data(new ConnectedEvent(OffsetDateTime.now(KstTime.resolve(clock)))));
         } catch (Exception e) {
             removeEmitter(doctorProfileId, connectionId);
-            emitter.completeWithError(e);
+            emitter.complete();
+            if (isClientDisconnect(e)) {
+                return emitter;
+            }
             throw new IllegalStateException("Failed to initialize doctor notification SSE stream", e);
         }
 
@@ -84,10 +89,11 @@ public class DoctorNotificationSseService {
                         .name(eventName)
                         .data(payload));
             } catch (Exception e) {
-                log.warn("Doctor SSE delivery failed. doctorId={}, connectionId={}, eventName={}",
-                        doctorProfileId, connectionId, eventName, e);
-                removeEmitter(doctorProfileId, connectionId);
-                emitter.completeWithError(e);
+                if (!isClientDisconnect(e)) {
+                    log.warn("Doctor SSE delivery failed. doctorId={}, connectionId={}, eventName={}",
+                            doctorProfileId, connectionId, eventName, e);
+                }
+                closeEmitter(doctorProfileId, connectionId, emitter);
             }
         });
     }
@@ -106,10 +112,11 @@ public class DoctorNotificationSseService {
                                 .name("ping")
                                 .data(new ConnectedEvent(OffsetDateTime.now(KstTime.resolve(clock)))));
                     } catch (Exception e) {
-                        log.warn("Doctor SSE heartbeat failed. doctorId={}, connectionId={}",
-                                doctorProfileId, connectionId, e);
-                        removeEmitter(doctorProfileId, connectionId);
-                        emitter.completeWithError(e);
+                        if (!isClientDisconnect(e)) {
+                            log.warn("Doctor SSE heartbeat failed. doctorId={}, connectionId={}",
+                                    doctorProfileId, connectionId, e);
+                        }
+                        closeEmitter(doctorProfileId, connectionId, emitter);
                     }
                 }));
     }
@@ -123,18 +130,51 @@ public class DoctorNotificationSseService {
         return countConnections(doctorProfileId) > 0;
     }
 
+    private void closeEmitter(String doctorProfileId, String connectionId, SseEmitter emitter) {
+        removeEmitter(doctorProfileId, connectionId);
+        emitter.complete();
+    }
+
     private void removeEmitter(String doctorProfileId, String connectionId) {
         ConcurrentMap<String, SseEmitter> connections = emittersByDoctorId.get(doctorProfileId);
         if (connections == null) {
             return;
         }
 
-        connections.remove(connectionId);
+        SseEmitter removed = connections.remove(connectionId);
         if (connections.isEmpty()) {
             emittersByDoctorId.remove(doctorProfileId, connections);
         }
 
-        log.info("Doctor SSE disconnected. doctorId={}, connectionId={}", doctorProfileId, connectionId);
+        if (removed != null) {
+            log.info("Doctor SSE disconnected. doctorId={}, connectionId={}", doctorProfileId, connectionId);
+        }
+    }
+
+    private boolean isClientDisconnect(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof AsyncRequestNotUsableException) {
+                return true;
+            }
+
+            String simpleName = current.getClass().getSimpleName();
+            if ("ClientAbortException".equals(simpleName) || "EOFException".equals(simpleName)) {
+                return true;
+            }
+
+            String message = current.getMessage();
+            if (message != null) {
+                String normalizedMessage = message.toLowerCase(Locale.ROOT);
+                if (normalizedMessage.contains("broken pipe")
+                        || normalizedMessage.contains("connection reset by peer")) {
+                    return true;
+                }
+            }
+
+            current = current.getCause();
+        }
+        return false;
     }
 
     private record ConnectedEvent(OffsetDateTime connectedAt) {

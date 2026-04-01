@@ -9,9 +9,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.waddoc.global.util.KstTime;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 @Slf4j
 @Service
@@ -55,7 +57,10 @@ public class RobotSseService {
                     )));
         } catch (Exception e) {
             removeEmitter(connectionId);
-            emitter.completeWithError(e);
+            emitter.complete();
+            if (isClientDisconnect(e)) {
+                return emitter;
+            }
             throw new IllegalStateException("Failed to initialize robot SSE stream", e);
         }
 
@@ -74,9 +79,10 @@ public class RobotSseService {
                         .name(eventName)
                         .data(payload));
             } catch (Exception e) {
-                log.warn("Robot SSE delivery failed. connectionId={}, event={}", connectionId, eventName, e);
-                removeEmitter(connectionId);
-                emitter.completeWithError(e);
+                if (!isClientDisconnect(e)) {
+                    log.warn("Robot SSE delivery failed. connectionId={}, event={}", connectionId, eventName, e);
+                }
+                closeEmitter(connectionId, emitter);
             }
         });
     }
@@ -94,15 +100,48 @@ public class RobotSseService {
                         .name("ping")
                         .data(ping));
             } catch (Exception e) {
-                log.warn("Robot SSE heartbeat failed. connectionId={}", connectionId, e);
-                removeEmitter(connectionId);
-                emitter.completeWithError(e);
+                if (!isClientDisconnect(e)) {
+                    log.warn("Robot SSE heartbeat failed. connectionId={}", connectionId, e);
+                }
+                closeEmitter(connectionId, emitter);
             }
         });
     }
 
+    private void closeEmitter(String connectionId, SseEmitter emitter) {
+        removeEmitter(connectionId);
+        emitter.complete();
+    }
+
     private void removeEmitter(String connectionId) {
-        emitters.remove(connectionId);
-        log.info("Robot SSE disconnected. connectionId={}, remaining={}", connectionId, emitters.size());
+        if (emitters.remove(connectionId) != null) {
+            log.info("Robot SSE disconnected. connectionId={}, remaining={}", connectionId, emitters.size());
+        }
+    }
+
+    private boolean isClientDisconnect(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof AsyncRequestNotUsableException) {
+                return true;
+            }
+
+            String simpleName = current.getClass().getSimpleName();
+            if ("ClientAbortException".equals(simpleName) || "EOFException".equals(simpleName)) {
+                return true;
+            }
+
+            String message = current.getMessage();
+            if (message != null) {
+                String normalizedMessage = message.toLowerCase(Locale.ROOT);
+                if (normalizedMessage.contains("broken pipe")
+                        || normalizedMessage.contains("connection reset by peer")) {
+                    return true;
+                }
+            }
+
+            current = current.getCause();
+        }
+        return false;
     }
 }
