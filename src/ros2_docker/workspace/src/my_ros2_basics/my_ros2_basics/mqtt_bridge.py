@@ -230,7 +230,7 @@ class MqttBridgeNode(Node):
                 'y': round(pos.y, 3),
                 'z': round(pos.z, 3),
                 'speed_ms': round(speed_ms, 4),
-                'speed_kmh': round(speed_ms * 3.6, 4),
+                'speed_kmh': round(speed_ms * 1.8, 4),
                 'minimap_pose': {
                     'x': round(-pos.y, 3),
                     'z': round(pos.x, 3),
