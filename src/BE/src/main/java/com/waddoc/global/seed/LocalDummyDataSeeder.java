@@ -136,6 +136,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             "현", "원", "진", "서", "은", "아", "호", "혁", "윤", "찬",
             "경", "림", "우", "빈", "영");
 
+    private static final LocalTime REALISTIC_SLOT_OPEN_TIME = LocalTime.of(9, 0);
+    private static final LocalTime REALISTIC_SLOT_CLOSE_TIME = LocalTime.of(23, 0);
     private static final List<LocalTime> REALISTIC_SLOT_START_TIMES = buildRealisticSlotStartTimes();
     private static final List<String> SYNTHETIC_MALE_PATIENT_GIVEN_NAMES = List.of(
             "영수", "영호", "상철", "병철", "종수", "춘식", "만수", "기태", "동식", "재덕",
@@ -2128,8 +2130,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private static List<LocalTime> buildRealisticSlotStartTimes() {
         List<LocalTime> slotStartTimes = new java.util.ArrayList<>();
-        for (LocalTime startTime = LocalTime.of(9, 0); !startTime.isAfter(LocalTime.of(17, 30)); startTime = startTime
-                .plusMinutes(30)) {
+        for (LocalTime startTime = REALISTIC_SLOT_OPEN_TIME; !startTime.isAfter(REALISTIC_SLOT_CLOSE_TIME); startTime =
+                startTime.plusMinutes(30)) {
             slotStartTimes.add(startTime);
         }
         return List.copyOf(slotStartTimes);

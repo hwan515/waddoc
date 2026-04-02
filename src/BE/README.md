@@ -50,7 +50,7 @@ docker compose up -d postgres redis zookeeper kafka
 - Spring profile: `local`
 - DB 계정: `waddoc / waddoc_dev`
 - 더미 데이터 seed: 기본 활성화
-- 더미 슬롯 seed: 기본 시간대는 `09:00`~`17:30` 30분 단위이며, 오늘 날짜는 현재 시각 이후 슬롯만 유지하고 이미 지난 오늘 슬롯은 정리
+- 더미 슬롯 seed: 기본 시간대는 `09:00`~`23:00` 30분 단위이며, 오늘 날짜는 현재 시각 이후 슬롯만 유지하고 이미 지난 오늘 슬롯은 정리
 - 더미 예약 seed: 당일 활성 비대면 예약은 생성하지 않음
 - 파일 업로드 경로: `src/BE/local-storage/uploads`
 

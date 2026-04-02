@@ -26,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -249,5 +250,18 @@ class LocalDummyDataSeederTest {
                 .count();
 
         assertThat(primaryPatientVisitCount).isEqualTo(1);
+    }
+
+    @Test
+    void buildRealisticSlotStartTimesExtendsSeedSlotsToElevenPm() {
+        @SuppressWarnings("unchecked")
+        List<LocalTime> slotStartTimes = (List<LocalTime>) ReflectionTestUtils.invokeMethod(
+                LocalDummyDataSeeder.class,
+                "buildRealisticSlotStartTimes"
+        );
+
+        assertThat(slotStartTimes).isNotEmpty();
+        assertThat(slotStartTimes.get(0)).isEqualTo(LocalTime.of(9, 0));
+        assertThat(slotStartTimes.get(slotStartTimes.size() - 1)).isEqualTo(LocalTime.of(23, 0));
     }
 }
