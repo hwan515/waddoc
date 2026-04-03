@@ -655,12 +655,13 @@
 
 > 공개 키오스크/시뮬레이터에서 예약을 조회할 때는 반드시 인테이크 세션 문맥 내에서 수행한다.
 > 서버는 `intakeSession.patient_id`로 해당 환자의 예약만 조회한다.
+> 기본 응답은 서버 KST 기준으로 아직 시작되지 않은 `CONFIRMED` 예약만 반환한다. 즉 `appointmentDate > today` 이거나, `appointmentDate = today` 이면서 `startTime > now` 인 예약만 포함된다.
 
 **Query Params**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |----------|------|------|------|
-| `status` | string | X | 필터 (`CONFIRMED`, `CANCELLED` 등) |
+| `status` | string | X | 상태 필터. 미지정 시 `CONFIRMED`로 동작하며, 시간 조건은 동일하게 적용된다. |
 
 **Response** `200 OK`
 ```json
