@@ -95,7 +95,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private static final String PRIMARY_PATIENT_PHONE = "01067984260";
     private static final String PRIMARY_PATIENT_ADDRESS = "경상북도 김천시 증산면 장전4길 14";
     private static final String PRIMARY_PATIENT_DOCTOR_USERNAME = "seed_prod_doc_im_01";
-    private static final String PRIMARY_PATIENT_CONSULTATION_SUMMARY = "혈압이 높게 유지되어 고혈압 약을 처방하고 염분 섭취를 줄이도록 안내함.";
+    private static final String PRIMARY_PATIENT_CONSULTATION_SUMMARY = "혈압이 높게 유지되어 기존 고혈압 약 복용을 이어가고 염분 섭취를 줄이도록 안내함.";
     private static final String PRIMARY_PATIENT_PRESCRIPTION_NOTE = "[\"M022\"]";
     private static final int PRIMARY_PATIENT_HISTORY_MONTH = 3;
     private static final int PRIMARY_PATIENT_HISTORY_DAY = 22;
@@ -909,7 +909,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
             case "NEUROLOGY" -> List.of(
                     "어지럼과 두통이 반복되어",
                     "손 저림과 감각 저하가 있어",
-                    "수면 중에 떨림과 두근거림이 있어").get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
+                    "수면 중에 떨림과 두근거림이 있음").get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
             case "OPHTHALMOLOGY" -> List.of(
                     "눈 충혈과 시야 흐림이 있어",
                     "눈꺼풀 이물감과 눈물이 심해",
