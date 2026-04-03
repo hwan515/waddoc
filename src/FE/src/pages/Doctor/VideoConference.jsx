@@ -7,6 +7,10 @@ import ConsultationRoom from '../../components/consultation/ConsultationRoom';
 import useConsultationSummarySave from '../../hooks/useConsultationSummarySave';
 import apiClient from '../../utils/api';
 import { sanitizeSelectionReason } from '../../utils/intakeSelectionReason';
+import {
+    LIVEKIT_HIGH_QUALITY_ROOM_OPTIONS,
+    LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS,
+} from '../../utils/livekitVideoConfig';
 
 const EMPTY_VITALS = {
     caseId: null,
@@ -250,10 +254,11 @@ const VideoConference = () => {
     return (
         <LiveKitRoom
             connect={!!livekitToken && livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
-            video={videoEnabled}
+            video={videoEnabled ? LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS : false}
             audio={micEnabled}
             token={livekitToken}
             serverUrl={livekitUrl}
+            options={LIVEKIT_HIGH_QUALITY_ROOM_OPTIONS}
             data-lk-theme="default"
             className="w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
             onDisconnected={() => {
