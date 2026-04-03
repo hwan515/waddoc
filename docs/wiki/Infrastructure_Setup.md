@@ -71,6 +71,9 @@ docker compose up -d postgres redis zookeeper kafka
 - Kafka listener가 활성화된 상태로 Backend를 띄우므로, `zookeeper`/`kafka` 없이 로컬 JVM을 실행하면 이벤트 소비 기능이 비정상 동작한다.
 - 진료/LiveKit 검증은 이 혼합 실행 대신 위의 전체 compose 구성을 권장한다. `spring-api`가 컨테이너 밖에서 뜨면 LiveKit webhook 경로를 별도로 맞추지 않는 한 기본 설정과 어긋날 수 있다.
 - 로컬 더미데이터가 필요하면 `APP_SEED_ENABLED=true`로 Backend를 실행한다. 기본 로그인 비밀번호는 `APP_SEED_DEFAULT_PASSWORD` 또는 기본값 `Passw0rd!`를 사용한다.
+- 로컬 seed는 오늘 날짜 전체를 막지 않는다. 슬롯 기본 시간대는 `09:00`~`23:00` 30분 단위이며, 오늘은 현재 시각 이후 슬롯만 유지하고 이미 지난 오늘 슬롯은 정리한다.
+- 로컬 seed는 당일 활성 비대면 예약을 만들지 않으므로, 오늘 예약 검증은 미래 시각 슬롯 기준으로 확인한다.
+- Backend 시간 처리 기준은 KST(`Asia/Seoul`)다. 서비스는 `Clock` Bean을 주입받아 현재 시각을 계산하고, JPA auditing(`@CreatedDate`, `@LastModifiedDate`)도 KST로 고정된다.
 - 시드 계정: `seed_admin`
 - 시드 의사 계정: `seed_doc_im_kim`, `seed_doc_im_park`, `seed_doc_derm_lee`, `seed_doc_ortho_choi`, `seed_doc_neuro_jung`, `seed_doc_eye_han`
 - 시드 환자 전화번호: 신규 예약/최근 진료 이력 확인용 `01012345678`, 기존 예약 조회용 `01055554444`

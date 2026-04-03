@@ -29,11 +29,13 @@ import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.mission.service.MissionCommandService;
+import com.waddoc.domain.vehicle.entity.Vehicle;
+import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.domain.user.entity.Role;
 import com.waddoc.domain.user.entity.User;
-import com.waddoc.global.config.DemoModePolicy;
-import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.KafkaTopics;
+import com.waddoc.global.error.BusinessException;
+import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,13 +48,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -100,10 +106,7 @@ class BookingServiceTest {
     private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Mock
-    private DemoModePolicy demoModePolicy;
-
-    @Mock
-    private DispatchAssignmentPolicy dispatchAssignmentPolicy;
+    private VehicleRepository vehicleRepository;
 
     @Mock
     private WaypointAddressResolver waypointAddressResolver;
@@ -113,7 +116,6 @@ class BookingServiceTest {
 
     @Test
     void createBooking_publishesKafkaMessagesAndCreatesDispatchOutbox() {
-        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
         when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
 
@@ -151,6 +153,11 @@ class BookingServiceTest {
                 .callerNumber("01012345678")
                 .channel(IntakeChannel.WEB_SIMULATOR)
                 .build();
+        Vehicle vehicle = Vehicle.builder()
+                .code("ULLEUNG-01")
+                .regionCode("ULLEUNG")
+                .displayName("Ulleung vehicle 1")
+                .build();
         session.recordSelection(
                 "INTERNAL_MEDICINE",
                 "Internal Medicine",
@@ -164,7 +171,10 @@ class BookingServiceTest {
         ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
 
         when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(vehicleRepository.findFirstByRegionCodeOrderByCreatedAtAsc("ULLEUNG")).thenReturn(Optional.of(vehicle));
         when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsActiveRegionBookingConflict("ULLEUNG", slot.getSlotDate(), slot.getStartTime(), slot.getEndTime(), com.waddoc.domain.booking.entity.BookingStatus.CANCELLED))
+                .thenReturn(false);
         when(smsService.getContactNumber()).thenReturn("01049163720");
         doAnswer(invocation -> {
             Booking booking = invocation.getArgument(0);
@@ -199,7 +209,7 @@ class BookingServiceTest {
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
         verify(missionCommandService).createMissionForDispatch(
                 any(CareCase.class),
-                eq("veh_GIMCHEON_01"),
+                eq(null),
                 eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
                 eq(null),
                 eq(null)
@@ -240,8 +250,72 @@ class BookingServiceTest {
     }
 
     @Test
-    void createBooking_sameDayDoesNotAutoProvisionMissionAndSession() {
-        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+    void createBooking_rejectsStartedTodaySlot() {
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now())
+                .startTime(LocalTime.MIDNIGHT)
+                .endTime(LocalTime.of(0, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("울릉군")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        Vehicle vehicle = Vehicle.builder()
+                .code("ULLEUNG-01")
+                .regionCode("ULLEUNG")
+                .displayName("Ulleung vehicle 1")
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(vehicleRepository.findFirstByRegionCodeOrderByCreatedAtAsc("ULLEUNG")).thenReturn(Optional.of(vehicle));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+
+        assertThatThrownBy(() -> bookingService.createBooking(session.getPublicId(), request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BOOKING_SLOT_EXPIRED);
+
+        verify(bookingRepository, never()).save(any(Booking.class));
+    }
+
+    @Test
+    void createBooking_doesNotAutoProvisionMissionAndSession() {
         when(waypointAddressResolver.resolve("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(null));
 
@@ -260,7 +334,7 @@ class BookingServiceTest {
 
         ScheduleSlot slot = ScheduleSlot.builder()
                 .doctor(doctor)
-                .slotDate(LocalDate.now())
+                .slotDate(LocalDate.now().plusDays(1))
                 .startTime(LocalTime.of(10, 0))
                 .endTime(LocalTime.of(10, 30))
                 .build();
@@ -279,6 +353,11 @@ class BookingServiceTest {
                 .callerNumber("01012345678")
                 .channel(IntakeChannel.WEB_SIMULATOR)
                 .build();
+        Vehicle vehicle = Vehicle.builder()
+                .code("ULLEUNG-01")
+                .regionCode("ULLEUNG")
+                .displayName("Ulleung vehicle 1")
+                .build();
         session.recordSelection(
                 "INTERNAL_MEDICINE",
                 "Internal Medicine",
@@ -292,7 +371,10 @@ class BookingServiceTest {
         ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
 
         when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(vehicleRepository.findFirstByRegionCodeOrderByCreatedAtAsc("ULLEUNG")).thenReturn(Optional.of(vehicle));
         when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsActiveRegionBookingConflict("ULLEUNG", slot.getSlotDate(), slot.getStartTime(), slot.getEndTime(), com.waddoc.domain.booking.entity.BookingStatus.CANCELLED))
+                .thenReturn(false);
         when(smsService.getContactNumber()).thenReturn("01049163720");
         doAnswer(invocation -> {
             Booking booking = invocation.getArgument(0);
@@ -321,7 +403,7 @@ class BookingServiceTest {
         verify(dispatchOutboxRepository).save(outboxCaptor.capture());
         verify(missionCommandService).createMissionForDispatch(
                 any(CareCase.class),
-                eq("veh_GIMCHEON_01"),
+                eq(null),
                 eq("Gyeongbuk Gimcheon-si Jeungsan-myeon Jangjeon 1-gil 69"),
                 eq(null),
                 eq(null)
@@ -335,7 +417,6 @@ class BookingServiceTest {
 
     @Test
     void createBooking_assignsMappedWaypointWhenAddressIsSupported() {
-        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
         when(waypointAddressResolver.resolve("경상북도 김천시 증산면 장전4길 14"))
                 .thenReturn(new WaypointAddressResolver.ResolvedTarget(59));
 
@@ -373,6 +454,11 @@ class BookingServiceTest {
                 .callerNumber("01012345678")
                 .channel(IntakeChannel.WEB_SIMULATOR)
                 .build();
+        Vehicle vehicle = Vehicle.builder()
+                .code("GIMCHEON-01")
+                .regionCode("GIMCHEON")
+                .displayName("Gimcheon vehicle 1")
+                .build();
         session.recordSelection(
                 "INTERNAL_MEDICINE",
                 "Internal Medicine",
@@ -386,7 +472,10 @@ class BookingServiceTest {
         ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
 
         when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(vehicleRepository.findFirstByRegionCodeOrderByCreatedAtAsc("GIMCHEON")).thenReturn(Optional.of(vehicle));
         when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsActiveRegionBookingConflict("GIMCHEON", slot.getSlotDate(), slot.getStartTime(), slot.getEndTime(), com.waddoc.domain.booking.entity.BookingStatus.CANCELLED))
+                .thenReturn(false);
         when(smsService.getContactNumber()).thenReturn("01049163720");
         doAnswer(invocation -> {
             Booking booking = invocation.getArgument(0);
@@ -399,7 +488,7 @@ class BookingServiceTest {
 
         verify(missionCommandService).createMissionForDispatch(
                 any(CareCase.class),
-                eq("veh_GIMCHEON_01"),
+                eq(null),
                 eq("경상북도 김천시 증산면 장전4길 14"),
                 eq(null),
                 eq(59)
@@ -468,5 +557,202 @@ class BookingServiceTest {
         assertThat(response.getCaseId()).isEqualTo(careCase.getPublicId());
         assertThat(response.getIntakeSessionId()).isEqualTo(session.getPublicId());
         assertThat(response.getPatient().getRegionCode()).isEqualTo("ULLEUNG");
+    }
+
+    @Test
+    void createBooking_rejectsConflictingRegionReservationBeforeSlotBooking() {
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(9, 0))
+                .endTime(LocalTime.of(9, 30))
+                .build();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("울릉군")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+        Vehicle vehicle = Vehicle.builder()
+                .code("ULLEUNG-01")
+                .regionCode("ULLEUNG")
+                .displayName("Ulleung vehicle 1")
+                .build();
+        session.recordSelection(
+                "INTERNAL_MEDICINE",
+                "Internal Medicine",
+                ConfidenceLevel.HIGH,
+                false,
+                "department selected",
+                List.of(slot.getPublicId())
+        );
+
+        CreateBookingRequest request = new CreateBookingRequest();
+        ReflectionTestUtils.setField(request, "slotId", slot.getPublicId());
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(vehicleRepository.findFirstByRegionCodeOrderByCreatedAtAsc("ULLEUNG")).thenReturn(Optional.of(vehicle));
+        when(scheduleSlotRepository.findByPublicId(slot.getPublicId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsActiveRegionBookingConflict("ULLEUNG", slot.getSlotDate(), slot.getStartTime(), slot.getEndTime(), com.waddoc.domain.booking.entity.BookingStatus.CANCELLED))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> bookingService.createBooking(session.getPublicId(), request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BOOKING_VEHICLE_CONFLICT);
+
+        assertThat(slot.isBooked()).isFalse();
+        verify(bookingRepository, never()).save(any(Booking.class));
+    }
+
+    @Test
+    void cancelBooking_releasesSlotForFutureRegionCapacityReuse() {
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(10, 30))
+                .build();
+        slot.markBooked();
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("울릉군")
+                .phone("01012345678")
+                .build();
+
+        Booking booking = Booking.builder()
+                .patient(patient)
+                .slot(slot)
+                .doctor(doctor)
+                .channel("WEB_SIMULATOR")
+                .appointmentDate(slot.getSlotDate())
+                .regionCode("ULLEUNG")
+                .startTime(slot.getStartTime())
+                .endTime(slot.getEndTime())
+                .build();
+
+        when(bookingRepository.findByPublicId(booking.getPublicId())).thenReturn(Optional.of(booking));
+        when(careCaseRepository.findByBooking(booking)).thenReturn(Optional.empty());
+
+        bookingService.cancelBooking(booking.getPublicId(), null, "usr_admin", "ADMIN");
+
+        assertThat(booking.getStatus()).isEqualTo(com.waddoc.domain.booking.entity.BookingStatus.CANCELLED);
+        assertThat(slot.isBooked()).isFalse();
+    }
+
+    @Test
+    void getExistingBookings_returnsOnlyUpcomingConfirmedBookingsByDefault() {
+        ReflectionTestUtils.setField(
+                bookingService,
+                "clock",
+                Clock.fixed(Instant.parse("2026-04-01T01:30:00Z"), ZoneId.of("Asia/Seoul"))
+        );
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("울릉군")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.of(2026, 4, 1))
+                .startTime(LocalTime.of(11, 0))
+                .endTime(LocalTime.of(11, 30))
+                .build();
+
+        Booking booking = Booking.builder()
+                .patient(patient)
+                .intakeSession(session)
+                .slot(slot)
+                .doctor(doctor)
+                .channel("WEB_SIMULATOR")
+                .appointmentDate(LocalDate.of(2026, 4, 1))
+                .regionCode("ULLEUNG")
+                .startTime(LocalTime.of(11, 0))
+                .endTime(LocalTime.of(11, 30))
+                .build();
+        ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 31, 9, 0));
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(bookingRepository.findUpcomingBookingsByPatientAndStatus(
+                patient,
+                com.waddoc.domain.booking.entity.BookingStatus.CONFIRMED,
+                LocalDate.of(2026, 4, 1),
+                LocalTime.of(10, 30)
+        )).thenReturn(List.of(booking));
+
+        var response = bookingService.getExistingBookings(session.getPublicId(), null);
+
+        assertThat(response.getTotalCount()).isEqualTo(1);
+        assertThat(response.getBookings()).hasSize(1);
+        assertThat(response.getBookings().get(0).getBookingId()).isEqualTo(booking.getPublicId());
+        verify(bookingRepository).findUpcomingBookingsByPatientAndStatus(
+                patient,
+                com.waddoc.domain.booking.entity.BookingStatus.CONFIRMED,
+                LocalDate.of(2026, 4, 1),
+                LocalTime.of(10, 30)
+        );
     }
 }

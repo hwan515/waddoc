@@ -5,6 +5,7 @@ import com.waddoc.domain.doctor.entity.ScheduleSlot;
 import com.waddoc.domain.intake.entity.IntakeSession;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.util.KstTime;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -55,6 +56,9 @@ public class Booking extends BaseTimeEntity {
     @Column(name = "appointment_date", nullable = false)
     private LocalDate appointmentDate;
 
+    @Column(name = "region_code", length = 30)
+    private String regionCode;
+
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
 
@@ -74,7 +78,7 @@ public class Booking extends BaseTimeEntity {
     @Builder
     public Booking(Patient patient, IntakeSession intakeSession,
                    ScheduleSlot slot, DoctorProfile doctor, String channel,
-                   LocalDate appointmentDate, LocalTime startTime, LocalTime endTime) {
+                   LocalDate appointmentDate, String regionCode, LocalTime startTime, LocalTime endTime) {
         this.publicId = PublicIdGenerator.generate("bk_");
         this.patient = patient;
         this.intakeSession = intakeSession;
@@ -82,6 +86,7 @@ public class Booking extends BaseTimeEntity {
         this.doctor = doctor;
         this.channel = channel != null ? channel : "WEB_SIMULATOR";
         this.appointmentDate = appointmentDate;
+        this.regionCode = regionCode != null ? regionCode : (patient != null ? patient.getRegionCode() : null);
         this.startTime = startTime;
         this.endTime = endTime;
         this.status = BookingStatus.CONFIRMED;
@@ -89,9 +94,13 @@ public class Booking extends BaseTimeEntity {
 
     /** 예약 취소 처리 */
     public void cancel(String reason) {
+        cancel(reason, KstTime.now());
+    }
+
+    public void cancel(String reason, LocalDateTime now) {
         this.status = BookingStatus.CANCELLED;
         this.cancelReason = reason;
-        this.cancelledAt = LocalDateTime.now();
+        this.cancelledAt = now;
     }
 
     public void complete() {

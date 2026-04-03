@@ -6,11 +6,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.waddoc.global.util.KstTime;
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 @Slf4j
 @Service
@@ -21,10 +24,9 @@ public class RobotSseService {
     static final long DEFAULT_RECONNECT_DELAY_MILLIS = 3_000L;
     static final long HEARTBEAT_INTERVAL_MILLIS = 25_000L;
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final RobotStateCache stateCache;
     private final RobotSnapshotAssembler robotSnapshotAssembler;
+    private final Clock clock;
 
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
@@ -51,11 +53,14 @@ public class RobotSseService {
                             "odom",    stateCache.getLastOdomJson(),
                             "status",  stateCache.getLastStatusJson(),
                             "snapshot", robotSnapshotAssembler.fromCache(stateCache),
-                            "connectedAt", OffsetDateTime.now(KST).toString()
+                            "connectedAt", OffsetDateTime.now(KstTime.resolve(clock)).toString()
                     )));
         } catch (Exception e) {
             removeEmitter(connectionId);
-            emitter.completeWithError(e);
+            emitter.complete();
+            if (isClientDisconnect(e)) {
+                return emitter;
+            }
             throw new IllegalStateException("Failed to initialize robot SSE stream", e);
         }
 
@@ -74,9 +79,10 @@ public class RobotSseService {
                         .name(eventName)
                         .data(payload));
             } catch (Exception e) {
-                log.warn("Robot SSE delivery failed. connectionId={}, event={}", connectionId, eventName, e);
-                removeEmitter(connectionId);
-                emitter.completeWithError(e);
+                if (!isClientDisconnect(e)) {
+                    log.warn("Robot SSE delivery failed. connectionId={}, event={}", connectionId, eventName, e);
+                }
+                closeEmitter(connectionId, emitter);
             }
         });
     }
@@ -86,7 +92,7 @@ public class RobotSseService {
         if (emitters.isEmpty()) {
             return;
         }
-        String ping = "{\"ts\":\"" + OffsetDateTime.now(KST) + "\"}";
+        String ping = "{\"ts\":\"" + OffsetDateTime.now(KstTime.resolve(clock)) + "\"}";
         emitters.forEach((connectionId, emitter) -> {
             try {
                 emitter.send(SseEmitter.event()
@@ -94,15 +100,48 @@ public class RobotSseService {
                         .name("ping")
                         .data(ping));
             } catch (Exception e) {
-                log.warn("Robot SSE heartbeat failed. connectionId={}", connectionId, e);
-                removeEmitter(connectionId);
-                emitter.completeWithError(e);
+                if (!isClientDisconnect(e)) {
+                    log.warn("Robot SSE heartbeat failed. connectionId={}", connectionId, e);
+                }
+                closeEmitter(connectionId, emitter);
             }
         });
     }
 
+    private void closeEmitter(String connectionId, SseEmitter emitter) {
+        removeEmitter(connectionId);
+        emitter.complete();
+    }
+
     private void removeEmitter(String connectionId) {
-        emitters.remove(connectionId);
-        log.info("Robot SSE disconnected. connectionId={}, remaining={}", connectionId, emitters.size());
+        if (emitters.remove(connectionId) != null) {
+            log.info("Robot SSE disconnected. connectionId={}, remaining={}", connectionId, emitters.size());
+        }
+    }
+
+    private boolean isClientDisconnect(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof AsyncRequestNotUsableException) {
+                return true;
+            }
+
+            String simpleName = current.getClass().getSimpleName();
+            if ("ClientAbortException".equals(simpleName) || "EOFException".equals(simpleName)) {
+                return true;
+            }
+
+            String message = current.getMessage();
+            if (message != null) {
+                String normalizedMessage = message.toLowerCase(Locale.ROOT);
+                if (normalizedMessage.contains("broken pipe")
+                        || normalizedMessage.contains("connection reset by peer")) {
+                    return true;
+                }
+            }
+
+            current = current.getCause();
+        }
+        return false;
     }
 }

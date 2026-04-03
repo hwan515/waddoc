@@ -11,19 +11,18 @@
 > {
 >   "errorCode": "ERR_XXX",
 >   "message": "사람이 읽을 수 있는 에러 메시지",
->   "timestamp": "2026-03-11T10:00:00+09:00",
->   "correlationId": "corr_case_T7nLp4"
+>   "timestamp": "2026-03-11T10:00:00"
 > }
 > ```
-> `correlationId`는 해당 요청이 속한 케이스/세션 흐름을 전 구간 추적하기 위한 값이다. 서버 내부 운영 로그에도 동일한 값을 사용한다.
+> `timestamp`는 서버 KST 기준 `LocalDateTime` 문자열이다.
+> 상관관계 ID(`correlationId`)는 서버 내부 운영 로그에서만 사용하며 현재 에러 응답 바디에는 포함되지 않는다.
 >
 > **상세 검증 에러 시** `details` 필드를 추가로 포함할 수 있다:
 > ```json
 > {
 >   "errorCode": "BOOKING_SLOT_CONFLICT",
 >   "message": "이미 예약된 슬롯입니다.",
->   "timestamp": "2026-03-11T10:00:00+09:00",
->   "correlationId": "corr_case_T7nLp4",
+>   "timestamp": "2026-03-11T10:00:00",
 >   "details": [
 >     { "field": "slotId", "reason": "해당 슬롯은 이미 다른 예약에 확정되었습니다." }
 >   ]
@@ -528,6 +527,8 @@
 ```
 
 > 별도 추천 리소스를 생성하지 않고, 응답에 포함된 선택 결과와 `availableSlots` 스냅샷을 동일한 `INTAKE_SESSION`에 인라인 저장한다.
+> `availableSlots`에는 같은 지역 차량 용량과 당일 현재 시각 이후 조건이 함께 반영된다. 기준 시각은 서버 KST(`Asia/Seoul`)이며, 오늘 날짜 슬롯은 아직 시작되지 않은 시간만 노출된다.
+> `ttsMessage`는 `availableSlots`의 첫 번째 슬롯만 읽어 주며, 나머지 후보는 `다른 시간은 2번` 흐름에서 사용한다.
 
 ---
 
@@ -582,6 +583,8 @@
 > - `intakeSession.patient_id` 존재 (환자 바인딩 완료)
 > - `slotId`가 해당 세션에서 안내된 슬롯 목록에 포함되는지
 > - 세션 상태가 예약 생성 가능한 단계인지
+> - 당일 슬롯이면 현재 시각 이후 시작 슬롯인지
+> - 동일 `regionCode`에서는 같은 시간대 예약을 1건만 허용하는지
 > - `patientId`, `channel`은 서버가 세션에서 자동 추출하므로 body에 포함하지 않는다.
 
 **Request Body**
@@ -619,20 +622,26 @@
 >
 > 추가로 서버는 같은 트랜잭션 문맥에서 다음 리소스를 함께 준비한다.
 > - `CARE_CASE` 생성
-> - `MISSION` 생성 (`phase=CREATED`, `vehicleId=veh_GIMCHEON_01`)
+> - `MISSION` 생성 (`phase=CREATED`, `vehicleId=null`)
 > - `DISPATCH_OUTBOX` 생성
 >
 > 주소가 waypoint 매핑 대상이면 `MISSION.targetWaypointNumber`에 저장하고, 운영/데모 환경에서 이후 출동 트리거에 사용한다.
+> 이 시점에는 차량이 아직 배정되지 않았으므로 `MISSION.vehicleId`는 `null`이며, 실제 차량 `public_id`는 이후 배차 성공 시점에 채워진다.
 
 **Errors**
 
 | Status | errorCode | 설명 |
 |--------|-----------|------|
 | 409 | `BOOKING_SLOT_CONFLICT` | 이미 예약된 슬롯 |
+| 409 | `BOOKING_SLOT_EXPIRED` | 이미 시작되었거나 지난 시간의 슬롯 |
+| 409 | `BOOKING_VEHICLE_CONFLICT` | 같은 지역 차량에 이미 같은 시간대 예약이 존재 |
 | 404 | `SLOT_NOT_FOUND` | 유효하지 않은 슬롯 ID |
-| 409 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
-| 400 | `SLOT_NOT_OFFERED` | 해당 세션에서 안내되지 않은 슬롯 |
-| 409 | `SESSION_STATE_INVALID` | 예약 생성 불가한 세션 상태 |
+| 400 | `PATIENT_NOT_BOUND` | 세션에 환자가 아직 바인딩되지 않음 (워크플로 단계 충돌) |
+| 400 | `SLOT_NOT_IN_RECOMMENDATION` | 해당 세션에서 안내되지 않은 슬롯 |
+| 400 | `SESSION_STATE_INVALID` | 예약 생성 불가한 세션 상태 |
+
+> 추천 응답의 `availableSlots`는 같은 지역 차량 용량을 반영해 필터링된 결과다. 지역 용량 계산에서는 `status = CANCELLED`만 제외되며, `COMPLETED` 예약은 같은 지역/시간대 재예약을 계속 막는다.
+> 예약 취소 후에는 `status = CANCELLED` 예약이 지역 용량 계산에서 제외되므로 해당 시간대가 다시 노출될 수 있다.
 
 ---
 
@@ -646,12 +655,13 @@
 
 > 공개 키오스크/시뮬레이터에서 예약을 조회할 때는 반드시 인테이크 세션 문맥 내에서 수행한다.
 > 서버는 `intakeSession.patient_id`로 해당 환자의 예약만 조회한다.
+> 기본 응답은 서버 KST 기준으로 아직 시작되지 않은 `CONFIRMED` 예약만 반환한다. 즉 `appointmentDate > today` 이거나, `appointmentDate = today` 이면서 `startTime > now` 인 예약만 포함된다.
 
 **Query Params**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |----------|------|------|------|
-| `status` | string | X | 필터 (`CONFIRMED`, `CANCELLED` 등) |
+| `status` | string | X | 상태 필터. 미지정 시 `CONFIRMED`로 동작하며, 시간 조건은 동일하게 적용된다. |
 
 **Response** `200 OK`
 ```json
@@ -852,8 +862,8 @@
 | `vitals.ecgSamplingHz` | integer \| null | ECG 샘플링 주파수 |
 | `vitals.ecgDurationSeconds` | integer \| null | ECG 샘플 길이(초) |
 | `vitals.measuredAt` | string \| null | 마지막 측정 시각 (`OffsetDateTime`, KST) |
-| `vitals.createdAt` | string \| null | 해당 케이스 생체데이터 row 생성 시각 |
-| `vitals.updatedAt` | string \| null | 마지막 partial upsert 시각 |
+| `vitals.createdAt` | string \| null | 해당 케이스 생체데이터 row 생성 시각 (`LocalDateTime`, KST) |
+| `vitals.updatedAt` | string \| null | 마지막 partial upsert 시각 (`LocalDateTime`, KST) |
 
 ---
 
@@ -1411,8 +1421,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 {
   "errorCode": "IDENTITY_CHECK_FAILED",
   "message": "본인 확인에 실패했습니다. 다시 촬영해주세요.",
-  "timestamp": "2026-03-11T09:58:00+09:00",
-  "correlationId": "corr_case_T7nLp4",
+  "timestamp": "2026-03-11T09:58:00",
   "details": [
     { "field": "identityCheck.faceSimilarityScore", "reason": "임계값 미만" }
   ]

@@ -2,62 +2,82 @@ import React, { useState } from 'react';
 import PrescriptionModal from './PrescriptionModal';
 import OpinionModal from './OpinionModal';
 
+const headerCellClass =
+    'px-8 py-5 text-center text-base lg:text-lg font-bold border-r border-white/20 last:border-r-0';
+const bodyCellClass = 'px-8 py-5 text-center border-r border-slate-200 last:border-r-0';
+const bodyTextClass = 'text-base lg:text-lg font-bold';
+const emptyTextClass = 'text-base lg:text-lg font-medium text-slate-300';
+const actionButtonBaseClass =
+    'mx-auto inline-flex items-center justify-center rounded-full border px-5 py-2.5 text-base font-bold shadow-sm transition-all active:translate-y-[1px]';
+
 const ListView = ({ records, patientName }) => {
     const [selectedPrescription, setSelectedPrescription] = useState(null);
     const [selectedOpinion, setSelectedOpinion] = useState(null);
+
     return (
-        <div className="flex-1 flex flex-col p-6 animate-fade-in w-full bg-white">
-            <div className="w-full overflow-hidden border border-slate-200 rounded-2xl shadow-sm bg-white">
-                <table className="w-full border-collapse">
+        <div className="flex-1 flex flex-col p-7 lg:p-8 w-full bg-white animate-fade-in">
+            <div className="w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full min-w-[60rem] border-collapse">
                     <thead>
                         <tr className="bg-primary text-white">
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">진료일</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">진료과목</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">담당의</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold border-r border-white/20">처방전</th>
-                            <th className="px-6 py-4 text-center text-sm font-bold">소견서</th>
+                            <th className={headerCellClass}>진료일</th>
+                            <th className={headerCellClass}>진료과</th>
+                            <th className={headerCellClass}>담당의</th>
+                            <th className={headerCellClass}>처방전</th>
+                            <th className={headerCellClass}>소견서</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {records.length > 0 ? records.map((r, i) => (
-                            <tr key={r.id || i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-secondary/20 transition-colors border-b border-slate-200 last:border-b-0`}>
-                                <td className="px-6 py-4 border-r border-slate-200 text-center">
-                                    <span className="text-sm font-bold text-slate-700">{r.date.replace(/-/g, '/')}</span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-slate-200 text-center">
-                                    <span className="text-sm font-bold text-primary">{r.department}</span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-slate-200 text-center">
-                                    <span className="text-sm font-bold text-slate-700">{r.doctorName}</span>
-                                </td>
-                                <td className="px-6 py-4 border-r border-slate-200 text-center">
-                                    {r.hasPrescription ? (
-                                        <button 
-                                            onClick={() => setSelectedPrescription(r)}
-                                            className="mx-auto rounded-full border border-primary px-4 py-1.5 text-sm font-bold text-primary shadow-sm transition-all hover:bg-primary hover:text-white active:translate-y-[1px]"
-                                        >
-                                            열람
-                                        </button>
-                                    ) : (
-                                        <span className="text-sm font-medium text-slate-300">-</span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                    {r.hasNote ? (
-                                        <button 
-                                            onClick={() => setSelectedOpinion(r)}
-                                            className="mx-auto rounded-full border border-teal-800 px-4 py-1.5 text-sm font-bold text-teal-800 shadow-sm transition-all hover:bg-teal-800 hover:text-white active:translate-y-[1px]"
-                                        >
-                                            열람
-                                        </button>
-                                    ) : (
-                                        <span className="text-sm font-medium text-slate-300">-</span>
-                                    )}
-                                </td>
-                            </tr>
-                        )) : (
+                        {records.length > 0 ? (
+                            records.map((record, index) => (
+                                <tr
+                                    key={record.id || index}
+                                    className={`${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'} border-b border-slate-200 transition-colors hover:bg-secondary/20 last:border-b-0`}
+                                >
+                                    <td className={bodyCellClass}>
+                                        <span className={`${bodyTextClass} text-slate-700`}>
+                                            {record.date.replace(/-/g, '/')}
+                                        </span>
+                                    </td>
+                                    <td className={bodyCellClass}>
+                                        <span className={`${bodyTextClass} text-primary`}>
+                                            {record.department}
+                                        </span>
+                                    </td>
+                                    <td className={bodyCellClass}>
+                                        <span className={`${bodyTextClass} text-slate-700`}>
+                                            {record.doctorName}
+                                        </span>
+                                    </td>
+                                    <td className={bodyCellClass}>
+                                        {record.hasPrescription ? (
+                                            <button
+                                                onClick={() => setSelectedPrescription(record)}
+                                                className={`${actionButtonBaseClass} border-primary text-primary hover:bg-primary hover:text-white`}
+                                            >
+                                                열람
+                                            </button>
+                                        ) : (
+                                            <span className={emptyTextClass}>-</span>
+                                        )}
+                                    </td>
+                                    <td className={bodyCellClass}>
+                                        {record.hasNote ? (
+                                            <button
+                                                onClick={() => setSelectedOpinion(record)}
+                                                className={`${actionButtonBaseClass} border-teal-800 text-teal-800 hover:bg-teal-800 hover:text-white`}
+                                            >
+                                                열람
+                                            </button>
+                                        ) : (
+                                            <span className={emptyTextClass}>-</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))
+                        ) : (
                             <tr>
-                                <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
+                                <td colSpan="5" className="px-8 py-10 text-center text-base lg:text-lg text-slate-500">
                                     조회된 진료 기록이 없습니다.
                                 </td>
                             </tr>
@@ -66,17 +86,16 @@ const ListView = ({ records, patientName }) => {
                 </table>
             </div>
 
-            {/* Modals */}
-            <PrescriptionModal 
-                isOpen={!!selectedPrescription} 
-                onClose={() => setSelectedPrescription(null)} 
-                record={selectedPrescription} 
+            <PrescriptionModal
+                isOpen={!!selectedPrescription}
+                onClose={() => setSelectedPrescription(null)}
+                record={selectedPrescription}
                 patientName={patientName}
             />
-            <OpinionModal 
-                isOpen={!!selectedOpinion} 
-                onClose={() => setSelectedOpinion(null)} 
-                record={selectedOpinion} 
+            <OpinionModal
+                isOpen={!!selectedOpinion}
+                onClose={() => setSelectedOpinion(null)}
+                record={selectedOpinion}
                 patientName={patientName}
             />
         </div>

@@ -5,14 +5,13 @@ import com.waddoc.domain.intake.entity.IntakeStatus;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class BindPatientResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String intakeSessionId;
     private String patientId;
@@ -24,7 +23,7 @@ public class BindPatientResponse {
                 .intakeSessionId(session.getPublicId())
                 .patientId(session.getPatient() != null ? session.getPatient().getPublicId() : null)
                 .status(session.getStatus())
-                .lastActivityAt(session.getLastActivityAt().atZone(KST).toOffsetDateTime())
+                .lastActivityAt(session.getLastActivityAt().atZone(KstTime.ZONE).toOffsetDateTime())
                 .build();
     }
 }

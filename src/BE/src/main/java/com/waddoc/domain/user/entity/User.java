@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import com.waddoc.global.util.KstTime;
+
 /**
  * 시스템 사용자(의사, 관리자, 보호자). 환자는 별도 Patient 테이블.
  */
@@ -60,7 +62,7 @@ public class User extends BaseTimeEntity {
 
     @Builder
     public User(String username, String passwordHash, String name, Role role) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = KstTime.now();
         this.publicId = PublicIdGenerator.generate("usr_");
         this.username = username;
         this.passwordHash = passwordHash;
@@ -86,17 +88,25 @@ public class User extends BaseTimeEntity {
     }
 
     public void approve(User approver) {
+        approve(approver, KstTime.now());
+    }
+
+    public void approve(User approver, LocalDateTime now) {
         this.active = true;
         this.approvalStatus = ApprovalStatus.APPROVED;
         this.approvedByUser = approver;
-        this.approvedAt = LocalDateTime.now();
+        this.approvedAt = now;
     }
 
     public void reject(User approver) {
+        reject(approver, KstTime.now());
+    }
+
+    public void reject(User approver, LocalDateTime now) {
         this.active = false;
         this.approvalStatus = ApprovalStatus.REJECTED;
         this.approvedByUser = approver;
-        this.approvedAt = LocalDateTime.now();
+        this.approvedAt = now;
     }
 
     public void changePasswordHash(String passwordHash) {

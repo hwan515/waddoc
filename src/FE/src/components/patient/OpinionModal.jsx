@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, FileSignature, Printer } from 'lucide-react';
 
 /**
@@ -6,7 +7,7 @@ import { X, FileSignature, Printer } from 'lucide-react';
  * 환자의 진료 후 의사 소견 및 요약을 병원 문서 스타일로 렌더링합니다.
  */
 const OpinionModal = ({ isOpen, onClose, record, patientName }) => {
-    if (!isOpen || !record) return null;
+    if (!isOpen || !record || typeof document === 'undefined') return null;
 
     // 모달 배경 클릭 시 닫기
     const handleBackdropClick = (e) => {
@@ -15,7 +16,7 @@ const OpinionModal = ({ isOpen, onClose, record, patientName }) => {
         }
     };
 
-    return (
+    const modalContent = (
         <div 
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
             onClick={handleBackdropClick}
@@ -116,6 +117,8 @@ const OpinionModal = ({ isOpen, onClose, record, patientName }) => {
             </div>
         </div>
     );
+
+    return createPortal(modalContent, document.body);
 };
 
 export default OpinionModal;

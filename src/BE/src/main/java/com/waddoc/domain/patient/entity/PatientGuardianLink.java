@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+import com.waddoc.global.util.KstTime;
+
 @Entity
 @Table(
         name = "patient_guardian_link",
@@ -62,18 +64,26 @@ public class PatientGuardianLink {
         this.guardianUser = guardianUser;
         this.relation = relation;
         this.status = GuardianLinkStatus.PENDING;
-        this.requestedAt = LocalDateTime.now();
+        this.requestedAt = KstTime.now();
     }
 
     public void approve(User approver) {
+        approve(approver, KstTime.now());
+    }
+
+    public void approve(User approver, LocalDateTime now) {
         this.status = GuardianLinkStatus.APPROVED;
         this.approvedByUser = approver;
-        this.approvedAt = LocalDateTime.now();
+        this.approvedAt = now;
     }
 
     public void reject(User approver) {
+        reject(approver, KstTime.now());
+    }
+
+    public void reject(User approver, LocalDateTime now) {
         this.status = GuardianLinkStatus.REJECTED;
         this.approvedByUser = approver;
-        this.approvedAt = LocalDateTime.now();
+        this.approvedAt = now;
     }
 }

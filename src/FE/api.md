@@ -11,19 +11,18 @@
 > {
 >   "errorCode": "ERR_XXX",
 >   "message": "사람이 읽을 수 있는 에러 메시지",
->   "timestamp": "2026-03-11T10:00:00+09:00",
->   "correlationId": "corr_case_T7nLp4"
+>   "timestamp": "2026-03-11T10:00:00"
 > }
 > ```
-> `correlationId`는 해당 요청이 속한 케이스/세션 흐름을 전 구간 추적하기 위한 값이다. 서버 내부 운영 로그에도 동일한 값을 사용한다.
+> `timestamp`는 서버 KST 기준 `LocalDateTime` 문자열이다.
+> 상관관계 ID(`correlationId`)는 서버 내부 운영 로그에서만 사용하며 현재 에러 응답 바디에는 포함되지 않는다.
 >
 > **상세 검증 에러 시** `details` 필드를 추가로 포함할 수 있다:
 > ```json
 > {
 >   "errorCode": "BOOKING_SLOT_CONFLICT",
 >   "message": "이미 예약된 슬롯입니다.",
->   "timestamp": "2026-03-11T10:00:00+09:00",
->   "correlationId": "corr_case_T7nLp4",
+>   "timestamp": "2026-03-11T10:00:00",
 >   "details": [
 >     { "field": "slotId", "reason": "해당 슬롯은 이미 다른 예약에 확정되었습니다." }
 >   ]
@@ -527,6 +526,8 @@
 ```
 
 > 별도 추천 리소스를 생성하지 않고, 응답에 포함된 선택 결과와 `availableSlots` 스냅샷을 동일한 `INTAKE_SESSION`에 인라인 저장한다.
+> `availableSlots`에는 같은 지역 차량 용량과 당일 현재 시각 이후 조건이 함께 반영된다. 기준 시각은 서버 KST(`Asia/Seoul`)이며, 오늘 날짜 슬롯은 아직 시작되지 않은 시간만 노출된다.
+> `ttsMessage`는 `availableSlots`의 첫 번째 슬롯만 읽어 주며, 나머지 후보는 `다른 시간은 2번` 흐름에서 사용한다.
 
 ---
 
@@ -1403,8 +1404,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 {
   "errorCode": "IDENTITY_CHECK_FAILED",
   "message": "본인 확인에 실패했습니다. 다시 촬영해주세요.",
-  "timestamp": "2026-03-11T09:58:00+09:00",
-  "correlationId": "corr_case_T7nLp4",
+  "timestamp": "2026-03-11T09:58:00",
   "details": [
     { "field": "identityCheck.faceSimilarityScore", "reason": "임계값 미만" }
   ]

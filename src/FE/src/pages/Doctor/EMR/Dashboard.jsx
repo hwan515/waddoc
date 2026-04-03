@@ -8,26 +8,48 @@ import { sanitizeSelectionReason } from '../../../utils/intakeSelectionReason';
 import { logoutSession } from '../../../utils/logout';
 import { parsePrescriptionNote } from '../../../utils/prescriptionNote';
 
-// 진료과에 따른 랜덤 증상 생성 함수 (컴포넌트 외부에 배치)
-const getRandomSymptom = (deptName = '') => {
+const getSymptomCandidates = (deptName = '') => {
     if (deptName.includes('정형')) {
-        const syms = ['어깨 통증', '무릎 관절염', '발목 염좌', '허리 디스크 증상', '손목 시큰거림'];
-        return syms[Math.floor(Math.random() * syms.length)];
+        return ['어깨 통증', '무릎 관절염', '발목 염좌', '허리 디스크 증상', '손목 시큰거림'];
     }
     if (deptName.includes('내과')) {
-        const syms = ['속쓰림, 소화불량', '기침, 가래', '발열 및 오한', '두통, 어지러움', '복통, 설사'];
-        return syms[Math.floor(Math.random() * syms.length)];
+        return ['속쓰림, 소화불량', '기침, 가래', '발열 및 오한', '두통, 어지러움', '복통, 설사'];
     }
     if (deptName.includes('이비인후')) {
-        const syms = ['귀 통증', '코막힘, 콧물', '인후통', '편도선 붓기', '어지럼증'];
-        return syms[Math.floor(Math.random() * syms.length)];
+        return ['귀 통증', '코막힘, 콧물', '인후통', '편도선 붓기', '어지럼증'];
     }
     if (deptName.includes('안과')) {
-        const syms = ['눈 충혈', '시력 침침함', '안구 건조증', '눈물 흘림', '눈 주위 통증'];
-        return syms[Math.floor(Math.random() * syms.length)];
+        return ['눈 충혈', '시력 침침함', '안구 건조증', '눈물 흘림', '눈 주위 통증'];
     }
-    const general = ['단순 문진', '가벼운 통증', '컨디션 저하', '정기 진료 대기', '약 처방 문의'];
-    return general[Math.floor(Math.random() * general.length)];
+
+    return ['단순 문진', '가벼운 통증', '컨디션 저하', '정기 진료 대기', '약 처방 문의'];
+};
+
+const getStableSymptomFallback = (seed, deptName = '') => {
+    const candidates = getSymptomCandidates(deptName);
+    const normalizedSeed = String(seed || deptName || 'default');
+    const hash = [...normalizedSeed].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+    return candidates[hash % candidates.length];
+};
+
+const resolveReservationSymptom = (source, existingSymptom = '') => {
+    const actualSymptom = sanitizeSelectionReason(
+        source?.intakeSummary?.selectionReason ?? source?.selectionReason,
+        ''
+    );
+
+    if (actualSymptom) {
+        return actualSymptom;
+    }
+    if (existingSymptom) {
+        return existingSymptom;
+    }
+
+    return getStableSymptomFallback(
+        source?.caseId ?? source?.bookingId ?? source?.patientId,
+        source?.departmentName
+    );
 };
 
 // 예약일 비교를 위해 YYYY-MM-DD 키를 만든다.
@@ -89,7 +111,7 @@ const mapCaseToReservation = (caseData, existingReservation = {}) => ({
     ptNo: caseData.patientId,
     name: caseData.patientName,
     gender: mapGenderLabel(caseData.patientGender),
-    symptom: existingReservation.symptom || getRandomSymptom(caseData.departmentName),
+    symptom: resolveReservationSymptom(caseData, existingReservation.symptom),
     date: caseData.appointmentDate,
     time: caseData.startTime?.substring(0, 5) || '00:00',
     status: mapCaseStatusToLabel(caseData.status),
@@ -108,7 +130,7 @@ const mapNotificationToReservation = (notif) => ({
     ptNo: notif.patientId,
     name: notif.patientName,
     gender: mapGenderLabel(notif.patientGender),
-    symptom: getRandomSymptom(notif.departmentName),
+    symptom: resolveReservationSymptom(notif),
     date: notif.appointmentDate,
     time: notif.startTime?.substring(0, 5) || '00:00',
     status: mapCaseStatusToLabel(notif.caseStatus || 'CREATED'),
@@ -165,6 +187,21 @@ const getReservationStatusClassName = (reservation) => {
 };
 
 // 비대면 예약 상태인 항목만 진료 시작 버튼 대상으로 본다.
+const patientDetailLabelCellClass =
+    'bg-[#E2EFDA] border border-slate-300 px-3 py-2 text-sm font-bold text-[#385723]';
+const patientDetailValueCellClass =
+    'border border-slate-300 px-3 py-2 text-sm';
+const patientDetailStrongValueCellClass =
+    `${patientDetailValueCellClass} font-bold text-blue-800`;
+const patientDetailNameCellClass =
+    `${patientDetailValueCellClass} font-bold text-base lg:text-lg leading-none`;
+const patientDetailAlertLabelCellClass =
+    'bg-[#FFE699] border border-slate-300 px-3 py-2 text-sm font-bold text-[#C55A11] align-top';
+const historyHeaderCellClass =
+    'border-r border-[#3B62A4] px-2.5 py-1.5 text-sm font-bold last:border-r-0';
+const historyBodyCellClass =
+    'border-r border-slate-200 px-2.5 py-2 text-sm last:border-r-0';
+
 const isConsultationStartTarget = (reservation) => {
     return reservation.type === '비대면' && STARTABLE_CASE_STATUSES.has(reservation.caseStatus);
 };
@@ -223,6 +260,7 @@ const LegacyEMRDashboard = () => {
     const [reservations, setReservations] = useState([]);
     const [patientDB, setPatientDB] = useState({});
     const [historyDB, setHistoryDB] = useState({});
+    const [expandedHistoryRows, setExpandedHistoryRows] = useState({});
 
     // 3. 현재 선택된 예약
     const [selectedReservationId, setSelectedReservationId] = useState(null);
@@ -308,6 +346,12 @@ const LegacyEMRDashboard = () => {
                 }
             }));
 
+            setReservations(prev => prev.map((reservation) => (
+                reservation.id === caseId
+                    ? { ...reservation, symptom: resolveReservationSymptom(detail, reservation.symptom) }
+                    : reservation
+            )));
+
             setHistoryDB(prev => ({
                 ...prev,
                 [ptNo]: (detail.consultationHistories || []).map(mapConsultationHistoryToRow)
@@ -347,6 +391,12 @@ const LegacyEMRDashboard = () => {
                         )
                     }
                 }));
+
+                setReservations(prev => prev.map((reservation) => (
+                    reservation.id === caseId
+                        ? { ...reservation, symptom: resolveReservationSymptom(detail, reservation.symptom) }
+                        : reservation
+                )));
 
                 setHistoryDB(prev => ({
                     ...prev,
@@ -447,6 +497,10 @@ const LegacyEMRDashboard = () => {
     const selectedPatientInfo = patientDB[effectiveSelectedPatientId] || null;
     const selectedHistory = historyDB[effectiveSelectedPatientId] || [];
 
+    useEffect(() => {
+        setExpandedHistoryRows({});
+    }, [effectiveSelectedPatientId]);
+
     const handleLogout = async () => {
         await logoutSession();
         navigate('/emr/login');
@@ -455,6 +509,13 @@ const LegacyEMRDashboard = () => {
     const handleStartConsultation = (resId) => {
         // 비대면 화상진료 화면으로 이동 (resId = caseId)
         navigate(`/doctor/consultation/${resId}`);
+    };
+
+    const toggleHistoryRowExpansion = (historyId) => {
+        setExpandedHistoryRows((prev) => ({
+            ...prev,
+            [historyId]: !prev[historyId]
+        }));
     };
 
     return (
@@ -498,7 +559,7 @@ const LegacyEMRDashboard = () => {
                 <div className="w-[45%] shrink-0 flex flex-col border border-slate-400 bg-white">
                     {/* 패널 타이틀바 */}
                         <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center">
-                        <span className="font-bold text-slate-800 text-sm">📋 예약 및 대기자 관리</span>
+                        <span className="font-bold text-slate-800 text-base lg:text-lg">📋 예약 및 대기자 관리</span>
                         <div className="flex space-x-2 text-xs">
                             <label className="flex items-center space-x-1 cursor-pointer">
                                 <input type="radio" name="filter" checked={filterType === '전체'} onChange={() => setFilterType('전체')} /><span>전체</span>
@@ -512,16 +573,16 @@ const LegacyEMRDashboard = () => {
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto bg-white" style={{ scrollbarGutter: 'stable' }}>
-                        <div className="sticky top-0 z-10 bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
-                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">번호</div>
-                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">환자명</div>
-                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1">성별</div>
-                            <div className="flex-1 min-w-0 border-r border-[#3B62A4] py-1 text-left px-2">병명/증상</div>
-                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">날짜</div>
-                            <div className="w-16 shrink-0 border-r border-[#3B62A4] py-1">시간</div>
-                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1">구분</div>
-                            <div className="w-28 shrink-0 py-1">상태</div>
+                    <div className="flex-1 overflow-y-auto bg-white">
+                        <div className="sticky top-0 z-10 bg-[#4472C4] text-white flex border-b border-slate-400 text-sm text-center font-bold">
+                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1.5">번호</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1.5">환자명</div>
+                            <div className="w-12 shrink-0 border-r border-[#3B62A4] py-1.5">성별</div>
+                            <div className="flex-1 min-w-0 border-r border-[#3B62A4] py-1.5 text-left px-2.5">병명/증상</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1.5">날짜</div>
+                            <div className="w-16 shrink-0 border-r border-[#3B62A4] py-1.5">시간</div>
+                            <div className="w-20 shrink-0 border-r border-[#3B62A4] py-1.5">구분</div>
+                            <div className="w-24 shrink-0 py-1.5">상태</div>
                         </div>
 
                         {filteredReservations.length === 0 ? (
@@ -538,19 +599,19 @@ const LegacyEMRDashboard = () => {
                                     <div
                                         key={res.id}
                                         onClick={() => handlePatientSelect(res.ptNo, res.id)}
-                                        className={`flex text-xs border-b border-slate-200 cursor-pointer ${effectiveSelectedReservationId === res.id ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
+                                        className={`flex text-sm border-b border-slate-200 cursor-pointer ${effectiveSelectedReservationId === res.id ? 'bg-[#D9E1F2] font-semibold' : 'hover:bg-slate-50'
                                             }`}
                                     >
-                                        <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200">{idx + 1}</div>
-                                        <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.name}</div>
-                                        <div className="w-12 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.gender}</div>
-                                        <div className="flex-1 min-w-0 py-1.5 px-2 text-left border-r border-slate-200 truncate">{res.symptom}</div>
-                                        <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.date?.substring(5)}</div>
-                                        <div className="w-16 shrink-0 py-1.5 text-center border-r border-slate-200 truncate">{res.time}</div>
-                                        <div className="w-20 shrink-0 py-1.5 text-center border-r border-slate-200 text-[#0051C4] font-bold truncate">
+                                        <div className="w-12 shrink-0 py-2 text-center border-r border-slate-200">{idx + 1}</div>
+                                        <div className="w-20 shrink-0 py-2 text-center border-r border-slate-200 truncate">{res.name}</div>
+                                        <div className="w-12 shrink-0 py-2 text-center border-r border-slate-200 truncate">{res.gender}</div>
+                                        <div className="flex-1 min-w-0 py-2 px-2.5 text-left border-r border-slate-200 truncate">{res.symptom}</div>
+                                        <div className="w-20 shrink-0 py-2 text-center border-r border-slate-200 truncate">{res.date?.substring(5)}</div>
+                                        <div className="w-16 shrink-0 py-2 text-center border-r border-slate-200 truncate">{res.time}</div>
+                                        <div className="w-20 shrink-0 py-2 text-center border-r border-slate-200 text-[#0051C4] font-bold truncate">
                                             {res.type}
                                         </div>
-                                        <div className="w-28 shrink-0 py-1 text-center flex justify-center items-center">
+                                        <div className="w-24 shrink-0 py-1.5 text-center flex justify-center items-center">
                                             {consultationActionVisible ? (
                                                 <button
                                                     onClick={(e) => {
@@ -562,7 +623,7 @@ const LegacyEMRDashboard = () => {
                                                     }}
                                                     disabled={!consultationStartEnabled}
                                                     title={consultationStartButtonTitle}
-                                                    className={`px-2 py-0.5 text-xs border shadow-sm ${consultationStartEnabled
+                                                    className={`px-1.5 py-0.5 text-xs whitespace-nowrap border shadow-sm ${consultationStartEnabled
                                                         ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-700'
                                                         : 'bg-slate-200 text-slate-500 border-slate-400 cursor-not-allowed'
                                                         }`}
@@ -587,43 +648,45 @@ const LegacyEMRDashboard = () => {
                     {/* 우측 상단: 환자 정보 창 */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-[#EFEFEF]">
                             <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
-                            <span className="font-bold text-slate-800 text-sm">👤 환자 상세 정보</span>
+                            <span className="font-bold text-slate-800 text-base lg:text-lg">👤 환자 상세 정보</span>
                         </div>
                         <div className="p-2 flex-1 flex flex-col pt-0">
                             {selectedPatientInfo ? (
-                                <div className="bg-white border border-slate-300 p-3 h-full overflow-hidden flex flex-col">
-                                    <table className="w-full text-xs text-left border-collapse">
-                                        <tbody>
-                                            <tr>
-                                                <th className="w-24 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">환자번호</th>
-                                                <td className="w-32 border border-slate-300 px-2 py-1.5 font-bold text-blue-800">{selectedPatientInfo.ptNo}</td>
-                                                <th className="w-24 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">성명</th>
-                                                <td className="w-32 border border-slate-300 px-2 py-1.5 font-bold text-lg leading-none">{selectedPatientInfo.name}</td>
-                                                <th className="w-20 bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">성별/나이</th>
-                                                <td className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.gender} / {selectedPatientInfo.age === '미상' ? '미상' : `만 ${selectedPatientInfo.age}세`}</td>
-                                            </tr>
-                                            <tr>
-                                                <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">생년월일</th>
-                                                <td className="border border-slate-300 px-2 py-1.5 tracking-widest">{selectedPatientInfo.birthDate}</td>
-                                                <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">연락처</th>
-                                                <td colSpan="3" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.phone}</td>
-                                            </tr>
-                                            <tr>
-                                                <th className="bg-[#E2EFDA] border border-slate-300 px-2 py-1.5 font-bold text-[#385723]">자택주소</th>
-                                                <td colSpan="5" className="border border-slate-300 px-2 py-1.5">{selectedPatientInfo.address}</td>
-                                            </tr>
-                                            <tr>
-                                                <th className="bg-[#FFE699] border border-slate-300 px-2 py-1.5 font-bold text-[#C55A11] align-top">
-                                                    <span className="block">특이사항</span>
-                                                    <span className="mt-0.5 block text-[11px] leading-tight">(알러지 등)</span>
-                                                </th>
-                                                <td colSpan="5" className="border border-slate-300 px-2 py-1.5 text-red-600 font-bold h-12 align-top">{selectedPatientInfo.note}</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
+                                <div className="bg-white border border-slate-300 p-3 lg:p-4 h-full overflow-hidden flex flex-col">
+                                    <div className="overflow-hidden">
+                                        <table className="w-full table-fixed text-left border-collapse">
+                                            <tbody>
+                                                <tr>
+                                                    <th className={`w-20 lg:w-24 ${patientDetailLabelCellClass}`}>환자번호</th>
+                                                    <td className={`w-36 lg:w-40 ${patientDetailStrongValueCellClass} whitespace-nowrap`}>{selectedPatientInfo.ptNo}</td>
+                                                    <th className={`w-20 lg:w-24 ${patientDetailLabelCellClass}`}>성명</th>
+                                                    <td className={`w-20 lg:w-24 ${patientDetailNameCellClass}`}>{selectedPatientInfo.name}</td>
+                                                    <th className={`w-20 lg:w-24 ${patientDetailLabelCellClass}`}>성별/나이</th>
+                                                    <td className={`${patientDetailValueCellClass} break-words`}>{selectedPatientInfo.gender} / {selectedPatientInfo.age === '미상' ? '미상' : `만 ${selectedPatientInfo.age}세`}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th className={patientDetailLabelCellClass}>생년월일</th>
+                                                    <td className={`${patientDetailValueCellClass} tracking-tight whitespace-nowrap`}>{selectedPatientInfo.birthDate}</td>
+                                                    <th className={patientDetailLabelCellClass}>연락처</th>
+                                                    <td colSpan="3" className={`${patientDetailValueCellClass} break-all`}>{selectedPatientInfo.phone}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th className={patientDetailLabelCellClass}>자택주소</th>
+                                                    <td colSpan="5" className={`${patientDetailValueCellClass} break-words`}>{selectedPatientInfo.address}</td>
+                                                </tr>
+                                                <tr>
+                                                    <th className={patientDetailAlertLabelCellClass}>
+                                                        <span className="block">특이사항</span>
+                                                        <span className="mt-1 block text-xs leading-tight">(알러지 등)</span>
+                                                    </th>
+                                                    <td colSpan="5" className={`${patientDetailValueCellClass} h-16 align-top break-words font-bold text-red-600`}>{selectedPatientInfo.note}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="flex-1 flex items-center justify-center text-slate-400 bg-white border border-slate-300">
+                                <div className="flex-1 flex items-center justify-center text-sm lg:text-base text-slate-400 bg-white border border-slate-300">
                                     선택된 환자가 없습니다.
                                 </div>
                             )}
@@ -633,36 +696,61 @@ const LegacyEMRDashboard = () => {
                     {/* 우측 하단: 진료 내역 (History) */}
                     <div className="flex-1 flex flex-col border border-slate-400 bg-white">
                             <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300">
-                            <span className="font-bold text-slate-800 text-sm">📁 진료 및 처방 이력</span>
+                            <span className="font-bold text-slate-800 text-base lg:text-lg">📁 진료 및 처방 이력</span>
                         </div>
 
                         {/* 과거 내역 데이터 테이블 */}
-                        <div className="bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold">
-                            <div className="w-10 border-r border-[#3B62A4] py-1">순번</div>
-                            <div className="w-24 border-r border-[#3B62A4] py-1">진료일자</div>
-                            <div className="w-16 border-r border-[#3B62A4] py-1">담당의</div>
-                            <div className="w-32 border-r border-[#3B62A4] py-1 text-left px-2">내원 사유</div>
-                            <div className="w-40 border-r border-[#3B62A4] py-1 text-left px-2">진단명(상병)</div>
-                            <div className="flex-1 py-1 text-left px-2">처방 내역</div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto bg-white">
-                            {selectedHistory.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-slate-400">
-                                    등록된 과거 진료 내역이 없습니다.
+                        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                            <div className="flex flex-col min-h-0 flex-1">
+                                <div className="grid w-full grid-cols-[3.25rem_7.5rem_4.5rem_minmax(0,1.35fr)_minmax(0,1.05fr)] bg-[#4472C4] text-white border-b border-slate-400 text-center">
+                                    <div className={historyHeaderCellClass}>순번</div>
+                                    <div className={historyHeaderCellClass}>진료일자</div>
+                                    <div className={historyHeaderCellClass}>담당의</div>
+                                    <div className={`${historyHeaderCellClass} min-w-0 text-left`}>진단명(상병)</div>
+                                    <div className="min-w-0 px-2.5 py-1.5 text-left text-sm font-bold">처방 내역</div>
                                 </div>
-                            ) : (
-                                selectedHistory.map((hist, idx) => (
-                                    <div key={hist.id} className="flex text-xs border-b border-slate-200 hover:bg-slate-50 cursor-default">
-                                        <div className="w-10 py-1.5 text-center border-r border-slate-200 text-slate-500">{idx + 1}</div>
-                                        <div className="w-24 py-1.5 text-center border-r border-slate-200">{hist.date}</div>
-                                        <div className="w-16 py-1.5 text-center border-r border-slate-200">{hist.doctor}</div>
-                                        <div className="w-32 py-1.5 px-2 text-left border-r border-slate-200 truncate">{hist.symptom}</div>
-                                        <div className="w-40 py-1.5 px-2 text-left text-blue-700 font-semibold border-r border-slate-200 truncate">{hist.dx}</div>
-                                        <div className="flex-1 py-1.5 px-2 text-left truncate">{hist.rx}</div>
-                                    </div>
-                                ))
-                            )}
+
+                                <div className="flex-1 overflow-y-auto bg-white">
+                                    {selectedHistory.length === 0 ? (
+                                        <div className="h-full flex items-center justify-center text-sm lg:text-base text-slate-400">
+                                            등록된 과거 진료 내역이 없습니다.
+                                        </div>
+                                    ) : (
+                                        selectedHistory.map((hist, idx) => {
+                                            const historyRowId = hist.id || `${hist.date}-${hist.doctor}-${idx}`;
+                                            const isHistoryExpanded = Boolean(expandedHistoryRows[historyRowId]);
+
+                                            return (
+                                                <div
+                                                    key={historyRowId}
+                                                    className={`grid w-full grid-cols-[3.25rem_7.5rem_4.5rem_minmax(0,1.35fr)_minmax(0,1.05fr)] border-b border-slate-200 transition-colors ${isHistoryExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'} cursor-pointer`}
+                                                    onClick={() => toggleHistoryRowExpansion(historyRowId)}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === 'Enter' || event.key === ' ') {
+                                                            event.preventDefault();
+                                                            toggleHistoryRowExpansion(historyRowId);
+                                                        }
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-expanded={isHistoryExpanded}
+                                                    title={isHistoryExpanded ? '클릭하면 접습니다.' : '클릭하면 전체 내용을 펼칩니다.'}
+                                                >
+                                                    <div className={`${historyBodyCellClass} text-center text-slate-500 whitespace-nowrap`}>{idx + 1}</div>
+                                                    <div className={`${historyBodyCellClass} text-center whitespace-nowrap`}>{hist.date}</div>
+                                                    <div className={`${historyBodyCellClass} text-center truncate`}>{hist.doctor}</div>
+                                                    <div className={`${historyBodyCellClass} min-w-0 text-left font-semibold text-blue-700`}>
+                                                        <div className={isHistoryExpanded ? 'break-words whitespace-normal leading-snug' : 'truncate'}>{hist.dx}</div>
+                                                    </div>
+                                                    <div className="min-w-0 px-2.5 py-2 text-left text-sm">
+                                                        <div className={isHistoryExpanded ? 'break-words whitespace-normal leading-snug' : 'truncate'}>{hist.rx}</div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

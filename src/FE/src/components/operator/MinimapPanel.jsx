@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Activity, Gauge, Navigation } from 'lucide-react';
 import { pathPointsToMinimap, vehiclePoseToMinimap } from '../../utils/worldToMinimap';
+import { formatGpsCoordinate, getDisplayGps } from '../../utils/displayGps';
 
 const VIEWBOX_WIDTH = 1000;
 const VIEWBOX_HEIGHT = 1000;
@@ -25,11 +26,6 @@ const isSameMinimapPoint = (firstPoint, secondPoint, threshold = FLAG_MARKER_OVE
     const dx = firstPoint.x - secondPoint.x;
     const dy = firstPoint.y - secondPoint.y;
     return (dx * dx) + (dy * dy) <= (threshold * threshold);
-};
-
-const formatCoordinate = (value) => {
-    if (typeof value !== 'number' || Number.isNaN(value)) return '-';
-    return value.toFixed(4);
 };
 
 const formatSpeed = (value) => {
@@ -150,6 +146,7 @@ const MinimapPanel = ({
         VIEWBOX_HEIGHT,
         UNITY_MINIMAP_OPTIONS
     );
+    const displayGps = getDisplayGps({ vehiclePose, vehicleLocation });
 
     const minimapPathPoints = pathPointsToMinimap(
         pathPoints,
@@ -329,10 +326,10 @@ const MinimapPanel = ({
 
                         <StatCard icon={Navigation} label="실시간 좌표">
                             <div className="mt-3 space-y-2">
-                                <CoordinateRow axis="위도" value={formatCoordinate(vehicleLocation?.lat)} />
-                                <CoordinateRow axis="경도" value={formatCoordinate(vehicleLocation?.lng)} />
+                                <CoordinateRow axis="위도" value={formatGpsCoordinate(displayGps?.lat)} />
+                                <CoordinateRow axis="경도" value={formatGpsCoordinate(displayGps?.lng)} />
                             </div>
-                            <p className="mt-3 text-sm text-slate-300">GPS 미수신 시 맵 좌표 표시</p>
+                            <p className="mt-3 text-sm text-slate-300">맵 좌표 기반 근사 GPS 표시</p>
                         </StatCard>
                     </div>
                 </div>

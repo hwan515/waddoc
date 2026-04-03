@@ -13,6 +13,7 @@ import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.authorization.AccessActor;
 import com.waddoc.global.security.authorization.AccessControlService;
 import com.waddoc.global.security.jwt.MissionTerminalScopes;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +24,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +46,7 @@ public class MissionIdentityCheckService {
     private final ConsultationIdentityVerificationClient consultationIdentityVerificationClient;
     private final MissionIdentityCheckCacheService missionIdentityCheckCacheService;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     @Value("${file.storage-root}")
     private String fileStorageRoot;
@@ -76,7 +80,7 @@ public class MissionIdentityCheckService {
         Patient patient = mission.getCareCase().getPatient();
 
         if (mission.getPhase() == MissionPhase.ARRIVED) {
-            mission.updatePhase(MissionPhase.VERIFYING);
+            mission.updatePhase(MissionPhase.VERIFYING, LocalDateTime.now(KstTime.resolve(clock)));
             missionRepository.save(mission);
         }
 

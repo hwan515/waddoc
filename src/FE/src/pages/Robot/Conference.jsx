@@ -10,6 +10,10 @@ import {
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
+import {
+    LIVEKIT_HIGH_QUALITY_ROOM_OPTIONS,
+    LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS,
+} from '../../utils/livekitVideoConfig';
 
 const TERMINAL_SESSION_STATUSES = new Set(['COMPLETED', 'FAILED', 'ABANDONED']);
 
@@ -168,10 +172,11 @@ const Conference = () => {
     return (
         <LiveKitRoom
             connect={Boolean(livekitToken && livekitUrl)}
-            video={true}
+            video={LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS}
             audio={true}
             token={livekitToken}
             serverUrl={livekitUrl}
+            options={LIVEKIT_HIGH_QUALITY_ROOM_OPTIONS}
             data-lk-theme="default"
             className="w-full h-full p-0 m-0 border-0 bg-transparent"
             onDisconnected={handleDisconnected}

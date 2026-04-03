@@ -5,12 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
-import lombok.RequiredArgsConstructor;
+import com.waddoc.global.util.KstTime;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Optional;
@@ -20,7 +23,6 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MqttMissionPhaseUpdater {
 
     private static final EnumSet<MissionPhase> AUTO_PHASE_ELIGIBLE =
@@ -36,6 +38,28 @@ public class MqttMissionPhaseUpdater {
     private final ObjectMapper objectMapper;
     private final MissionRepository missionRepository;
     private final MqttMissionResolver mqttMissionResolver;
+    private final Clock clock;
+
+    @Autowired
+    public MqttMissionPhaseUpdater(
+            ObjectMapper objectMapper,
+            MissionRepository missionRepository,
+            MqttMissionResolver mqttMissionResolver,
+            Clock clock
+    ) {
+        this.objectMapper = objectMapper;
+        this.missionRepository = missionRepository;
+        this.mqttMissionResolver = mqttMissionResolver;
+        this.clock = KstTime.resolve(clock);
+    }
+
+    public MqttMissionPhaseUpdater(
+            ObjectMapper objectMapper,
+            MissionRepository missionRepository,
+            MqttMissionResolver mqttMissionResolver
+    ) {
+        this(objectMapper, missionRepository, mqttMissionResolver, KstTime.clock());
+    }
 
     @Transactional
     public void updateFromMinimap(String minimapPayload, String statePayload) {
@@ -146,7 +170,7 @@ public class MqttMissionPhaseUpdater {
             return;
         }
 
-        mission.updatePhase(targetPhase);
+        mission.updatePhase(targetPhase, LocalDateTime.now(KstTime.resolve(clock)));
         missionRepository.save(mission);
         log.info("Mission phase updated from MQTT. missionId={}, previousPhase={}, nextPhase={}, sourceTopic={}",
                 mission.getPublicId(), currentPhase, targetPhase, sourceTopic);

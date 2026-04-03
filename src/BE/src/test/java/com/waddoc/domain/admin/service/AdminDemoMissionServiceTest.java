@@ -11,6 +11,7 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import com.waddoc.domain.mission.repository.MissionRepository;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.user.entity.Role;
+import com.waddoc.global.config.DispatchAssignmentPolicy;
 import com.waddoc.global.config.DemoModePolicy;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
@@ -53,6 +54,9 @@ class AdminDemoMissionServiceTest {
 
     @Mock
     private DemoModePolicy demoModePolicy;
+
+    @Mock
+    private DispatchAssignmentPolicy dispatchAssignmentPolicy;
 
     @InjectMocks
     private AdminDemoMissionService adminDemoMissionService;
@@ -161,6 +165,36 @@ class AdminDemoMissionServiceTest {
     }
 
     @Test
+    void dispatchMission_assignsDefaultVehicleWhenMissionVehicleIsMissing() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission(59, null);
+        DispatchOutbox outbox = DispatchOutbox.builder()
+                .careCase(mission.getCareCase())
+                .regionCode("GIMCHEON")
+                .destination(mission.getDestination())
+                .build();
+
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
+        when(dispatchAssignmentPolicy.getDefaultVehicleId()).thenReturn("veh_GIMCHEON_01");
+        when(missionRepository.findWithDetailsByPublicId(mission.getPublicId())).thenReturn(Optional.of(mission));
+        when(missionRepository.findAllByVehicleIdAndPhaseIn(eq("veh_GIMCHEON_01"), any())).thenReturn(java.util.List.of());
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId(anyString())).thenReturn(Optional.of(outbox));
+        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AdminDemoMissionActionResponse response =
+                adminDemoMissionService.dispatchMission(admin, mission.getPublicId());
+
+        assertThat(response.getVehicleId()).isEqualTo("veh_GIMCHEON_01");
+        assertThat(response.getPhase()).isEqualTo(MissionPhase.EN_ROUTE);
+        verify(robotWaypointCommandClient).dispatchMission(
+                mission.getPublicId(),
+                "veh_GIMCHEON_01",
+                59,
+                mission.getDestination()
+        );
+    }
+
+    @Test
     void dispatchMission_rejectsWhenDemoModeIsDisabled() {
         AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
         Mission mission = buildMission(59);
@@ -174,6 +208,10 @@ class AdminDemoMissionServiceTest {
     }
 
     private Mission buildMission(Integer targetWaypointNumber) {
+        return buildMission(targetWaypointNumber, "veh_GIMCHEON_01");
+    }
+
+    private Mission buildMission(Integer targetWaypointNumber, String vehicleId) {
         Patient patient = Patient.builder()
                 .name("Hong Gil-dong")
                 .birthDate(LocalDate.of(1958, 3, 15))
@@ -198,7 +236,7 @@ class AdminDemoMissionServiceTest {
                 .build();
         return Mission.builder()
                 .careCase(careCase)
-                .vehicleId("veh_GIMCHEON_01")
+                .vehicleId(vehicleId)
                 .destination(patient.getAddress())
                 .targetWaypointNumber(targetWaypointNumber)
                 .build();

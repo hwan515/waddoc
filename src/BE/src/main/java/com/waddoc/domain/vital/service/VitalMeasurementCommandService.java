@@ -5,12 +5,13 @@ import com.waddoc.domain.vital.dto.UpsertVitalMeasurementRequest;
 import com.waddoc.domain.vital.dto.VitalMeasurementResponse;
 import com.waddoc.domain.vital.entity.VitalMeasurement;
 import com.waddoc.domain.vital.repository.VitalMeasurementRepository;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
 
 /**
@@ -20,9 +21,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class VitalMeasurementCommandService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final VitalMeasurementRepository vitalMeasurementRepository;
+    private final Clock clock;
 
     @Transactional
     public VitalMeasurementResponse upsert(CareCase careCase, UpsertVitalMeasurementRequest request) {
@@ -45,7 +45,7 @@ public class VitalMeasurementCommandService {
                 request.getEcgWaveform(),
                 request.getEcgSamplingHz(),
                 request.getEcgDurationSeconds(),
-                request.resolveMeasuredAt(LocalDateTime.now(KST))
+                request.resolveMeasuredAt(LocalDateTime.now(KstTime.resolve(clock)))
         );
 
         VitalMeasurement saved = vitalMeasurement.getId() == null

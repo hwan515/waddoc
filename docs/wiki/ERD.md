@@ -107,6 +107,7 @@ erDiagram
         bigint doctor_id FK "DOCTOR_PROFILE.doctor_profile_id 참조"
         varchar channel "WEB_SIMULATOR"
         date appointment_date
+        varchar region_code "예약 시점 환자 권역 스냅샷"
         time start_time
         time end_time
         enum status "CONFIRMED | CANCELLED | COMPLETED | NO_SHOW"
@@ -284,7 +285,7 @@ erDiagram
 
 | 테이블 | 설명 |
 |--------|------|
-| `BOOKING` | 예약 정보. 상태: `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
+| `BOOKING` | 예약 정보. 예약 시점 환자의 `region_code` 스냅샷을 함께 저장하며, 상태는 `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
 | `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED` |
 | `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
 | `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
@@ -359,6 +360,8 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `USER` | `INDEX (approval_status)` | 승인 대기/승인/반려 목록 조회 최적화 |
 | `PATIENT_GUARDIAN_LINK` | `UNIQUE (patient_id, guardian_user_id)` | 동일 보호자-환자 조합의 중복 가입 이력 방지 |
 | `BOOKING` | `UNIQUE (slot_id)` WHERE `status != 'CANCELLED'` | 동일 슬롯 이중 예약 방지 (부분 unique) |
+| `BOOKING` | `INDEX (region_code, appointment_date, start_time, end_time)` WHERE `status != 'CANCELLED'` | 권역/시간대 예약 충돌 조회 최적화 |
+| `BOOKING` | `UNIQUE (region_code, appointment_date, start_time)` WHERE `status = 'CONFIRMED' AND region_code IS NOT NULL` | 활성 예약 기준 동일 권역 시작 시각 중복 방지 |
 | `CARE_CASE` | `UNIQUE (booking_id)` | 예약-케이스 1:1 보장 |
 | `VITAL_MEASUREMENT` | `UNIQUE (case_id)` | 케이스별 최신 생체데이터 1건 보장 |
 | `VEHICLE` | `UNIQUE (public_id)`, `UNIQUE (code)` | 외부 노출 ID와 운영 코드 유일성 보장 |

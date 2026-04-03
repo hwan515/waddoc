@@ -1,6 +1,7 @@
 package com.waddoc.domain.vehicle.entity;
 
 import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.util.KstTime;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -75,13 +76,17 @@ public class Vehicle extends BaseTimeEntity {
     }
 
     public void updateOperationalStatus(OperationalStatus nextStatus, String reason) {
+        updateOperationalStatus(nextStatus, reason, KstTime.now());
+    }
+
+    public void updateOperationalStatus(OperationalStatus nextStatus, String reason, LocalDateTime now) {
         String normalizedReason = normalizeReason(reason);
         if (this.operationalStatus == nextStatus && Objects.equals(this.statusReason, normalizedReason)) {
             return;
         }
 
         if (this.operationalStatus != nextStatus) {
-            this.statusChangedAt = LocalDateTime.now();
+            this.statusChangedAt = now;
         }
         this.operationalStatus = nextStatus;
         this.statusReason = nextStatus == OperationalStatus.OPERATIONAL ? null : normalizedReason;

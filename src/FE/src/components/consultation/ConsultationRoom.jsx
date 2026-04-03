@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Mic, MicOff, Video, VideoOff,
     Eye, EyeOff
@@ -14,6 +14,14 @@ import {
     hasSummaryNote,
 } from '../../utils/consultationSummary';
 import EcgWaveform from './EcgWaveform';
+
+const DEFAULT_LOCAL_VIDEO_SIZE = { width: 240, height: 160 };
+const MIN_LOCAL_VIDEO_WIDTH = 180;
+const MAX_LOCAL_VIDEO_WIDTH = 420;
+const MIN_LOCAL_VIDEO_HEIGHT = 120;
+const MAX_LOCAL_VIDEO_HEIGHT = 280;
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const ConsultationRoom = ({
     details,
@@ -42,6 +50,9 @@ const ConsultationRoom = ({
     const [consultationNote, setConsultationNote] = useState('');
     const [needsFollowUp, setNeedsFollowUp] = useState(false);
     const [validationMessage, setValidationMessage] = useState('');
+    const [localVideoSize, setLocalVideoSize] = useState(DEFAULT_LOCAL_VIDEO_SIZE);
+    const [isResizingLocalVideo, setIsResizingLocalVideo] = useState(false);
+    const localVideoResizeStartRef = useRef(null);
 
     // 진료 시간 타이머 & 상단 시계
     useEffect(() => {
@@ -52,6 +63,47 @@ const ConsultationRoom = ({
             clearInterval(timer2);
         };
     }, []);
+
+    useEffect(() => {
+        if (!isResizingLocalVideo) {
+            return undefined;
+        }
+
+        const previousCursor = document.body.style.cursor;
+        const previousUserSelect = document.body.style.userSelect;
+
+        const handleMouseMove = (event) => {
+            const resizeStart = localVideoResizeStartRef.current;
+            if (!resizeStart) {
+                return;
+            }
+
+            const deltaX = event.clientX - resizeStart.startX;
+            const deltaY = event.clientY - resizeStart.startY;
+
+            setLocalVideoSize({
+                width: clamp(resizeStart.startWidth + deltaX, MIN_LOCAL_VIDEO_WIDTH, MAX_LOCAL_VIDEO_WIDTH),
+                height: clamp(resizeStart.startHeight - deltaY, MIN_LOCAL_VIDEO_HEIGHT, MAX_LOCAL_VIDEO_HEIGHT),
+            });
+        };
+
+        const handleMouseUp = () => {
+            setIsResizingLocalVideo(false);
+            localVideoResizeStartRef.current = null;
+        };
+
+        document.body.style.cursor = 'nesw-resize';
+        document.body.style.userSelect = 'none';
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.body.style.cursor = previousCursor;
+            document.body.style.userSelect = previousUserSelect;
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizingLocalVideo]);
 
     const formatTime = (sec) => {
         const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -66,6 +118,18 @@ const ConsultationRoom = ({
     const remoteTrack = remoteVideoTracks.length > 0 ? remoteVideoTracks[0] : null;
 
     const handleSearchChange = (e) => setSearchQuery(e.target.value);
+
+    const handleLocalVideoResizeStart = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        localVideoResizeStartRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            startWidth: localVideoSize.width,
+            startHeight: localVideoSize.height,
+        };
+        setIsResizingLocalVideo(true);
+    };
     
     const handleMedToggle = (medCode) => {
         setSelectedMeds(prev => 
@@ -161,15 +225,15 @@ const ConsultationRoom = ({
     };
 
     return (
-        <div className="flex flex-col h-screen bg-[#F0F0F0] font-sans text-sm select-none">
+        <div className="flex h-screen flex-col select-none bg-[#F0F0F0] font-sans text-base">
             {/* 1. 클래식 상단 네비게이션 바 (대시보드와 동일한 테마) */}
-            <div className="bg-[#E0E0E0] border-b-2 border-slate-400 flex items-center justify-between px-2 py-1 shrink-0">
-                <div className="flex space-x-1">
-                    <button className="px-4 py-1.5 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF] flex flex-col items-center">
-                        <span className="font-bold text-slate-800 text-xs">진료실</span>
+            <div className="flex shrink-0 items-center justify-between border-b-2 border-slate-400 bg-[#E0E0E0] px-3 py-1.5">
+                <div className="flex space-x-1.5">
+                    <button className="flex flex-col items-center border border-slate-400 bg-[#F0F0F0] px-5 py-2 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
+                        <span className="text-sm font-bold text-slate-800">진료실</span>
                     </button>
-                    <div className="h-6 w-px bg-slate-400 mx-2 self-center"></div>
-                    <div className="flex items-center text-xs space-x-4 pl-2 font-medium text-slate-700">
+                    <div className="mx-2 h-7 w-px self-center bg-slate-400"></div>
+                    <div className="flex items-center space-x-5 pl-2 text-sm font-medium text-slate-700">
                         <span>환자명: <span className="font-bold text-blue-800">{details.patientName}</span></span>
                         <span>|</span>
                         <span>담당의: <span className="font-bold">{details.doctorName}</span></span>
@@ -177,56 +241,56 @@ const ConsultationRoom = ({
                         <span>진료시간: <span className="font-bold text-red-600">{formatTime(durationSec)}</span></span>
                     </div>
                 </div>
-                <div className="flex items-center space-x-4 pr-2">
+                <div className="flex items-center space-x-4 pr-2 text-sm">
                     <div className="flex space-x-2">
                         <button 
                             onClick={() => setMicEnabled(!micEnabled)}
-                            className={`px-3 py-1 text-xs border border-slate-400 shadow-sm flex items-center space-x-1 ${micEnabled ? 'bg-white text-slate-800' : 'bg-red-100 text-red-700'}`}
+                            className={`flex items-center space-x-1.5 border border-slate-400 px-4 py-1.5 shadow-sm ${micEnabled ? 'bg-white text-slate-800' : 'bg-red-100 text-red-700'}`}
                         >
-                            {micEnabled ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
+                            {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
                             <span>{micEnabled ? '마이크 ON' : '마이크 OFF'}</span>
                         </button>
                         <button 
                             onClick={() => setVideoEnabled(!videoEnabled)}
-                            className={`px-3 py-1 text-xs border border-slate-400 shadow-sm flex items-center space-x-1 ${videoEnabled ? 'bg-white text-slate-800' : 'bg-red-100 text-red-700'}`}
+                            className={`flex items-center space-x-1.5 border border-slate-400 px-4 py-1.5 shadow-sm ${videoEnabled ? 'bg-white text-slate-800' : 'bg-red-100 text-red-700'}`}
                         >
-                            {videoEnabled ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5" />}
+                            {videoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
                             <span>{videoEnabled ? '카메라 ON' : '카메라 OFF'}</span>
                         </button>
                     </div>
-                    <div className="text-slate-600 bg-white px-2 py-0.5 border border-slate-300 shadow-inner text-xs">
+                    <div className="border border-slate-300 bg-white px-3 py-1 text-sm text-slate-600 shadow-inner">
                         {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </div>
-                    <button onClick={handleEndCallClick} className="px-4 py-1 bg-[#F0F0F0] border border-slate-400 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
-                        <span className="text-red-700 font-bold text-xs">진료완료</span>
+                    <button onClick={handleEndCallClick} className="border border-slate-400 bg-[#F0F0F0] px-5 py-1.5 shadow-[inset_1px_1px_0_#FFF,1px_1px_0_#888] active:shadow-[inset_1px_1px_0_#888,1px_1px_0_#FFF]">
+                        <span className="text-sm font-bold text-red-700">진료완료</span>
                     </button>
                 </div>
             </div>
 
             {/* 2. 메인 2단 분할 레이아웃 */}
-            <div className="flex-1 flex overflow-hidden p-1 gap-1">
+            <div className="flex flex-1 gap-1.5 overflow-hidden p-1.5">
                 
                 {/* 2-1. 좌측: 비디오 및 스트리밍 영역 (상대방 화면 및 오버레이) */}
                 <div className="flex-[6] relative border border-slate-400 bg-black overflow-hidden flex flex-col">
                     {/* 상단 툴바 (토글 기능) */}
-                    <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-2 pointer-events-none">
-                        <div className="pointer-events-auto bg-black/60 px-2 py-1 text-white text-xs font-bold border border-slate-600 flex items-center space-x-2">
-                            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <div className="pointer-events-none absolute top-0 left-0 right-0 z-20 flex justify-between p-3">
+                        <div className="pointer-events-auto flex items-center space-x-2 border border-slate-600 bg-black/60 px-3 py-1.5 text-sm font-bold text-white">
+                            <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse"></span>
                             <span>{details.patientName} 님 연결 중</span>
                         </div>
-                        <div className="flex space-x-2 pointer-events-auto">
+                        <div className="pointer-events-auto flex space-x-2">
                             <button 
                                 onClick={() => setShowVitals(!showVitals)}
-                                className="bg-black/60 hover:bg-black/80 px-2 py-1 text-white text-xs border border-slate-600 flex items-center space-x-1"
+                                className="flex items-center space-x-1.5 border border-slate-600 bg-black/60 px-3 py-1.5 text-sm text-white hover:bg-black/80"
                             >
-                                {showVitals ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                {showVitals ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 <span>생체정보 {showVitals ? '숨기기' : '보기'}</span>
                             </button>
                             <button 
                                 onClick={() => setShowLocalVideo(!showLocalVideo)}
-                                className="bg-black/60 hover:bg-black/80 px-2 py-1 text-white text-xs border border-slate-600 flex items-center space-x-1"
+                                className="flex items-center space-x-1.5 border border-slate-600 bg-black/60 px-3 py-1.5 text-sm text-white hover:bg-black/80"
                             >
-                                {showLocalVideo ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                {showLocalVideo ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 <span>내 화면 {showLocalVideo ? '숨기기' : '보기'}</span>
                             </button>
                         </div>
@@ -240,8 +304,8 @@ const ConsultationRoom = ({
                                 className="w-full h-full object-cover" 
                             />
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full bg-slate-800 text-slate-400">
-                                <div className="w-12 h-12 border-4 border-slate-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <div className="flex h-full flex-col items-center justify-center bg-slate-800 text-base text-slate-400">
+                                <div className="mb-4 h-14 w-14 animate-spin rounded-full border-4 border-slate-500 border-t-transparent"></div>
                                 <span className="font-bold">환자 접속 대기 중입니다...</span>
                             </div>
                         )}
@@ -249,23 +313,23 @@ const ConsultationRoom = ({
 
                     {/* 우측 상단 오버레이: 생체 정보 (Vitals) */}
                     {showVitals && (
-                        <div className="absolute top-10 right-2 w-[26rem] max-h-[calc(100%-4rem)] overflow-y-auto bg-white/90 backdrop-blur-md border-2 border-slate-400 shadow-xl z-20 flex flex-col text-xs">
-                            <div className="bg-[#4472C4] text-white px-2 py-1 font-bold text-center border-b border-slate-400">
+                        <div className="absolute top-12 right-3 z-20 flex max-h-[calc(100%-5rem)] w-[28rem] flex-col overflow-y-auto border-2 border-slate-400 bg-white/90 text-sm shadow-xl backdrop-blur-md">
+                            <div className="border-b border-slate-400 bg-[#4472C4] px-3 py-1.5 text-center text-sm font-bold text-white">
                                 📈 환자 생체정보
                             </div>
-                            <div className="p-2 space-y-2">
-                                <div className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-700">
+                            <div className="space-y-3 p-3">
+                                <div className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
                                     측정 시각: <span className="font-bold">{measuredAtText}</span>
                                 </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-1">
+                                <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
                                     <span className="font-bold text-slate-700">체온 (Temp)</span>
                                     {hasValue(vitals?.temperature) ? (
-                                        <span className="font-extrabold text-blue-700">{vitals.temperature} <span className="text-[10px] text-slate-500 font-normal">°C</span></span>
+                                        <span className="font-extrabold text-blue-700">{vitals.temperature} <span className="text-xs font-normal text-slate-500">°C</span></span>
                                     ) : (
                                         <span className="font-bold text-slate-400">미측정</span>
                                     )}
                                 </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-1">
+                                <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
                                     <span className="font-bold text-slate-700">혈압 (BP)</span>
                                     {hasValue(vitals?.bloodPressureSys) && hasValue(vitals?.bloodPressureDia) ? (
                                         <span className="font-extrabold text-slate-800">{vitals.bloodPressureSys}/{vitals.bloodPressureDia}</span>
@@ -273,26 +337,26 @@ const ConsultationRoom = ({
                                         <span className="font-bold text-slate-400">미측정</span>
                                     )}
                                 </div>
-                                <div className="flex justify-between items-center border-b border-slate-200 pb-1">
+                                <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
                                     <span className="font-bold text-slate-700">심박수 (HR)</span>
                                     {hasValue(vitals?.heartRate) ? (
                                         <span className="font-extrabold text-red-600 flex items-center gap-1">
-                                            {vitals.heartRate} <span className="text-[10px] text-slate-500 font-normal">bpm</span>
+                                            {vitals.heartRate} <span className="text-xs font-normal text-slate-500">bpm</span>
                                         </span>
                                     ) : (
                                         <span className="font-bold text-slate-400">미측정</span>
                                     )}
                                 </div>
-                                <div className="flex justify-between items-center">
+                                <div className="flex items-center justify-between">
                                     <span className="font-bold text-slate-700">산소포화도 (SpO2)</span>
                                     {hasValue(vitals?.spO2) ? (
-                                        <span className="font-extrabold text-green-700">{vitals.spO2} <span className="text-[10px] text-slate-500 font-normal">%</span></span>
+                                        <span className="font-extrabold text-green-700">{vitals.spO2} <span className="text-xs font-normal text-slate-500">%</span></span>
                                     ) : (
                                         <span className="font-bold text-slate-400">미측정</span>
                                     )}
                                 </div>
-                                <div className="border-t border-slate-200 pt-2">
-                                    <div className="mb-2 text-[11px] font-bold text-slate-700">측정 시점 ECG</div>
+                                <div className="border-t border-slate-200 pt-3">
+                                    <div className="mb-2 text-sm font-bold text-slate-700">측정 시점 ECG</div>
                                     <EcgWaveform
                                         waveform={waveform}
                                         samplingHz={vitals?.ecgSamplingHz ?? 25}
@@ -306,8 +370,24 @@ const ConsultationRoom = ({
 
                     {/* 좌측 하단 오버레이: 내 화면 (Local PIP) */}
                     {showLocalVideo && (
-                        <div className="absolute bottom-2 left-2 w-52 h-36 bg-slate-900 border-2 border-slate-400 shadow-xl z-20 overflow-hidden">
-                            <div className="absolute top-1 left-1 bg-black/50 px-1 text-white text-[10px] z-30">내 화면 (의사)</div>
+                        <div
+                            className="absolute bottom-3 left-3 z-20 overflow-hidden border-2 border-slate-400 bg-slate-900 shadow-xl"
+                            style={{
+                                width: `${localVideoSize.width}px`,
+                                height: `${localVideoSize.height}px`,
+                            }}
+                        >
+                            <div className="absolute top-1.5 left-1.5 z-30 bg-black/50 px-1.5 py-0.5 text-xs text-white">내 화면 (의사)</div>
+                            <button
+                                type="button"
+                                aria-label="의사 화면 크기 조절"
+                                onMouseDown={handleLocalVideoResizeStart}
+                                className={`absolute top-1.5 right-1.5 z-30 flex h-5 w-5 cursor-nesw-resize items-center justify-center rounded-sm border border-white/50 bg-black/50 text-white/90 transition-colors ${
+                                    isResizingLocalVideo ? 'bg-blue-600/70' : 'hover:bg-black/70'
+                                }`}
+                            >
+                                <span className="translate-y-[-1px] text-[10px] font-bold">↗</span>
+                            </button>
                             {videoEnabled && localVideoTrack ? (
                                 <VideoTrack
                                     trackRef={localVideoTrack}
@@ -315,7 +395,7 @@ const ConsultationRoom = ({
                                 />
                             ) : (
                                 <div className="absolute inset-0 flex items-center justify-center bg-slate-800 text-slate-500">
-                                    <VideoOff className="w-8 h-8" />
+                                    <VideoOff className="h-9 w-9" />
                                 </div>
                             )}
                         </div>
@@ -323,29 +403,29 @@ const ConsultationRoom = ({
                 </div>
 
                 {/* 2-2. 우측: 차팅 및 처방 영역 */}
-                <div className="flex-[4] flex flex-col gap-1">
+                <div className="flex-[4] flex flex-col gap-1.5">
                     
                     {/* 우측 상단: 처방전 약 선택 */}
-                    <div className="flex-1 flex flex-col border border-slate-400 bg-white overflow-hidden">
-                                            <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 flex justify-between items-center shrink-0">
-                            <span className="font-bold text-slate-800 text-sm">💊 약품 처방</span>
-                            <div className="flex items-center space-x-1">
-                                <span className="text-[11px] font-bold text-slate-600">검색:</span>
+                    <div className="flex flex-1 flex-col overflow-hidden border border-slate-400 bg-white">
+                        <div className="flex shrink-0 items-center justify-between border-b border-slate-300 bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-3 py-2">
+                            <span className="text-base font-bold text-slate-800">💊 약품 처방</span>
+                            <div className="flex items-center space-x-2">
+                                <span className="text-sm font-bold text-slate-600">검색:</span>
                                 <input 
                                     type="text" 
                                     value={searchQuery}
                                     onChange={handleSearchChange}
                                     placeholder="약품명 / 코드"
-                                    className="border border-slate-400 bg-white text-slate-800 placeholder:text-slate-400 h-5 px-1 w-32 text-xs focus:outline-none focus:bg-[#FFFFCC]"
+                                    className="h-8 w-40 border border-slate-400 bg-white px-2 text-sm text-slate-800 placeholder:text-slate-400 focus:bg-[#FFFFCC] focus:outline-none"
                                 />
                             </div>
                         </div>
                         
-                        <div className="bg-[#4472C4] text-white flex border-b border-slate-400 text-xs text-center font-bold shrink-0">
-                            <div className="w-8 border-r border-[#3B62A4] py-1">선택</div>
-                            <div className="w-16 border-r border-[#3B62A4] py-1">코드</div>
-                            <div className="w-32 border-r border-[#3B62A4] py-1 text-left px-2">약품명</div>
-                            <div className="flex-1 py-1 text-left px-2">용법 / 용량</div>
+                        <div className="flex shrink-0 border-b border-slate-400 bg-[#4472C4] text-center text-sm font-bold text-white">
+                            <div className="w-10 border-r border-[#3B62A4] py-1.5">선택</div>
+                            <div className="w-20 border-r border-[#3B62A4] py-1.5">코드</div>
+                            <div className="w-44 border-r border-[#3B62A4] px-3 py-1.5 text-left">약품명</div>
+                            <div className="flex-1 px-3 py-1.5 text-left">용법 / 용량</div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto bg-white">
@@ -356,7 +436,7 @@ const ConsultationRoom = ({
                                     <div 
                                         key={med.code} 
                                         onClick={() => handleMedToggle(med.code)}
-                                        className={`flex text-[11px] border-b border-slate-200 cursor-pointer ${
+                                        className={`flex border-b border-slate-200 text-sm cursor-pointer ${
                                             isChecked
                                                 ? 'bg-[#D9E1F2] font-semibold text-blue-900'
                                                 : isPrescribed
@@ -364,54 +444,54 @@ const ConsultationRoom = ({
                                                     : 'hover:bg-slate-50'
                                         }`}
                                     >
-                                        <div className="w-8 py-1 flex items-center justify-center border-r border-slate-200">
+                                        <div className="flex w-10 items-center justify-center border-r border-slate-200 py-1.5">
                                             <input 
                                                 type="checkbox" 
                                                 checked={isChecked} 
                                                 onChange={() => {}} 
-                                                className="cursor-pointer"
+                                                className="h-4 w-4 cursor-pointer"
                                             />
                                         </div>
-                                        <div className="w-16 py-1 text-center border-r border-slate-200 text-slate-500">{med.code}</div>
-                                        <div className="w-32 py-1 px-2 text-left border-r border-slate-200 truncate text-slate-800" title={med.name}>
+                                        <div className="w-20 border-r border-slate-200 py-1.5 text-center text-slate-500">{med.code}</div>
+                                        <div className="w-44 truncate border-r border-slate-200 px-3 py-1.5 text-left text-slate-800" title={med.name}>
                                             <div className="flex items-center gap-1">
                                                 <span className="truncate">{med.name}</span>
                                                 {isPrescribed ? (
-                                                    <span className="shrink-0 rounded bg-emerald-100 px-1 py-[1px] text-[10px] font-bold text-emerald-700">
+                                                    <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-bold text-emerald-700">
                                                         처방
                                                     </span>
                                                 ) : null}
                                             </div>
                                         </div>
-                                        <div className="flex-1 py-1 px-2 text-left truncate text-slate-600">{med.dosage}</div>
+                                        <div className="flex-1 truncate px-3 py-1.5 text-left text-slate-600">{med.dosage}</div>
                                     </div>
                                 );
                             })}
                         </div>
 
-                        <div className="border-t border-slate-200 bg-slate-50 px-2 py-2 text-[11px] text-slate-700">
+                        <div className="border-t border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
                             <div className="flex items-center justify-between gap-2">
                                 <div className="font-bold text-slate-800">처방 내역</div>
                                 <button
                                     onClick={handleClearPrescription}
                                     disabled={prescribedMedicineItems.length === 0 || isSavingSummary}
-                                    className="px-2 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-300 bg-white disabled:cursor-not-allowed disabled:text-slate-300"
+                                    className="border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 disabled:cursor-not-allowed disabled:text-slate-300"
                                 >
                                     전체 비우기
                                 </button>
                             </div>
                             {prescribedMedicineItems.length > 0 ? (
-                                <div className="mt-1 flex flex-wrap gap-1">
+                                <div className="mt-2 flex flex-wrap gap-1.5">
                                     {prescribedMedicineItems.map((medicine) => (
                                         <div
                                             key={medicine.code}
-                                            className="flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800"
+                                            className="flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2.5 py-1 text-sm font-semibold text-emerald-800"
                                             title={`${medicine.category} / ${medicine.dosage}`}
                                         >
                                             <span>{medicine.name}</span>
                                             <button
                                                 onClick={() => handleRemovePrescription(medicine.code)}
-                                                className="rounded border border-emerald-400 bg-white px-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50"
+                                                className="rounded border border-emerald-400 bg-white px-1.5 py-0.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
                                                 aria-label={`${medicine.name} 삭제`}
                                                 disabled={isSavingSummary}
                                             >
@@ -425,21 +505,21 @@ const ConsultationRoom = ({
                             )}
                         </div>
                         
-                        <div className="bg-[#F0F0F0] border-t border-slate-300 p-1 flex justify-between items-center shrink-0">
-                            <span className="text-xs font-bold text-slate-700 pl-1">
+                        <div className="flex shrink-0 items-center justify-between border-t border-slate-300 bg-[#F0F0F0] px-3 py-2">
+                            <span className="pl-1 text-sm font-bold text-slate-700">
                                 선택 {selectedMeds.length}개 | 처방 {prescribedMeds.length}개
                             </span>
                             <button
                                 onClick={handleAddPrescription}
                                 disabled={selectedMeds.length === 0 || isSavingSummary}
-                                className="px-3 py-0.5 bg-blue-100 border border-blue-400 text-xs text-blue-800 font-bold active:bg-blue-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+                                className="border border-blue-400 bg-blue-100 px-4 py-1 text-sm font-bold text-blue-800 active:bg-blue-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
                             >
                                 처방 내역 추가
                             </button>
                         </div>
                         {feedbackMessage ? (
                             <div
-                                className={`border-t px-2 py-1 text-[11px] font-medium ${
+                                className={`border-t px-3 py-1.5 text-sm font-medium ${
                                     feedbackType === 'error'
                                         ? 'border-red-200 bg-red-50 text-red-700'
                                         : feedbackType === 'success'
@@ -453,31 +533,31 @@ const ConsultationRoom = ({
                     </div>
 
                     {/* 우측 하단: 진료 내역 입력란 */}
-                    <div className="flex-1 flex flex-col border border-slate-400 bg-white">
-                                <div className="bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-2 py-1 border-b border-slate-300 shrink-0 flex items-center justify-between gap-2">
+                    <div className="flex flex-1 flex-col border border-slate-400 bg-white">
+                        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-300 bg-linear-to-b from-[#FFF] to-[#E5E5E5] px-3 py-2">
                             <div>
-                                <span className="font-bold text-slate-800 text-sm">📝 진료 기록 (경과 기록지)</span>
-                                <div className="text-[11px] font-medium text-slate-500">작성 내용은 진료 종료 시 저장됩니다.</div>
+                                <span className="text-base font-bold text-slate-800">📝 진료 기록 (경과 기록지)</span>
+                                <div className="text-sm font-medium text-slate-500">작성 내용은 진료 종료 시 저장됩니다.</div>
                             </div>
                             <div className="flex items-center gap-2">
-                                <label className="flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-slate-700">
+                                <label className="flex items-center gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-slate-700">
                                     <input
                                         type="checkbox"
                                         checked={needsFollowUp}
                                         onChange={(e) => setNeedsFollowUp(e.target.checked)}
-                                        className="h-3.5 w-3.5 accent-amber-600"
+                                        className="h-4 w-4 accent-amber-600"
                                     />
                                     재진 필요
                                 </label>
                                 <button
                                     onClick={handleResetConsultationNote}
-                                    className="px-2 py-0.5 bg-white border border-slate-400 text-xs text-slate-700 active:bg-slate-100"
+                                    className="border border-slate-400 bg-white px-3 py-1 text-sm text-slate-700 active:bg-slate-100"
                                 >
                                     초기화
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 p-2 bg-[#EAE6D0]">
+                        <div className="flex-1 bg-[#EAE6D0] p-3">
                             <textarea 
                                 value={consultationNote}
                                 onChange={(e) => {
@@ -486,7 +566,7 @@ const ConsultationRoom = ({
                                         setValidationMessage('');
                                     }
                                 }}
-                                className="h-full w-full resize-none rounded-md border border-amber-300 bg-[#FFFDF5] p-3 font-mono text-sm leading-6 text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                className="h-full w-full resize-none rounded-md border border-amber-300 bg-[#FFFDF5] p-4 font-sans text-lg font-medium leading-8 text-slate-900 shadow-inner placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                                 placeholder="환자 증상, 진단 소견, 처방 이유를 자세히 기록하세요."
                             ></textarea>
                         </div>
@@ -496,7 +576,7 @@ const ConsultationRoom = ({
             </div>
             
             {/* 상태 표시줄 (Bottom Bar) */}
-            <div className="bg-[#E0E0E0] border-t border-slate-400 px-2 py-0.5 flex justify-between text-[11px] text-slate-600 shrink-0">
+            <div className="flex shrink-0 justify-between border-t border-slate-400 bg-[#E0E0E0] px-3 py-1 text-xs text-slate-600">
                 <div className="flex space-x-4">
                     <span>비대면 진료 모듈 [Active]</span>
                     <span className="text-green-700 font-bold">네트워크 연결 정상 (WebRTC)</span>

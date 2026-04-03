@@ -1,15 +1,11 @@
-import { Navigation, Truck, Video, AlertOctagon } from 'lucide-react';
+import { Navigation, Truck, Video, AlertOctagon, Play } from 'lucide-react';
 import MinimapPanel from './MinimapPanel';
 import apiClient from '../../utils/api';
+import { formatGpsCoordinate, getDisplayGps } from '../../utils/displayGps';
 
 const formatSpeed = (value) => {
     if (typeof value !== 'number' || Number.isNaN(value) || value <= 0) return '0 km/h';
     return `${value.toFixed(value >= 10 ? 0 : 1)} km/h`;
-};
-
-const formatCoordinate = (value) => {
-    if (typeof value !== 'number' || Number.isNaN(value)) return '-';
-    return value.toFixed(4);
 };
 
 const getStatusBadge = (status) => {
@@ -56,16 +52,32 @@ const MapMonitoring = ({
     minimapRouteAlert = null,
     useMockMinimapData = false,
 }) => {
-    
+    const normalizedVehicleState = typeof vehicleState === 'string' ? vehicleState.trim() : '';
+    const isEmergencyStopped = (
+        normalizedVehicleState === '긴급 정지'
+        || normalizedVehicleState === '긴급정지'
+    );
+
     // E-Stop REST API POST 요청 핸들러
     const handleEStop = async () => {
-        if (!window.confirm('정말로 E-Stop을 발동하시겠습니까?')) return;
+        const nextEstopState = isEmergencyStopped ? 0 : 1;
+        const confirmationMessage = isEmergencyStopped
+            ? '정말로 주행을 재개하시겠습니까?'
+            : '정말로 E-Stop을 발동하시겠습니까?';
+        const successMessage = isEmergencyStopped
+            ? '주행 재개 명령을 전송했습니다.'
+            : 'E-Stop 명령을 전송했습니다.';
+        const failureMessage = isEmergencyStopped
+            ? '주행 재개 명령 전송에 실패했습니다.'
+            : 'E-Stop 명령 전송에 실패했습니다.';
+
+        if (!window.confirm(confirmationMessage)) return;
 
         try {
-            await apiClient.post('/robots/cmd/estop/1');
-            window.alert('E-Stop 명령을 전송했습니다.');
+            await apiClient.post(`/robots/cmd/estop/${nextEstopState}`);
+            window.alert(successMessage);
         } catch {
-            window.alert('E-Stop 명령 전송에 실패했습니다.');
+            window.alert(failureMessage);
         }
     };
 
@@ -91,10 +103,18 @@ const MapMonitoring = ({
             <div className="flex w-[clamp(22rem,28vw,26rem)] shrink-0 flex-col gap-4">
                 <button
                     onClick={handleEStop}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-red-600 text-sm font-bold text-white shadow-lg shadow-red-600/30 transition-transform hover:bg-red-700 active:scale-100"
+                    className={`flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-white shadow-lg transition-transform active:scale-100 ${
+                        isEmergencyStopped
+                            ? 'bg-green-600 shadow-green-600/30 hover:bg-green-700'
+                            : 'bg-red-600 shadow-red-600/30 hover:bg-red-700'
+                    }`}
                 >
-                    <AlertOctagon className="h-5 w-5 animate-pulse" />
-                    EMERGENCY STOP
+                    {isEmergencyStopped ? (
+                        <Play className="h-5 w-5" />
+                    ) : (
+                        <AlertOctagon className="h-5 w-5 animate-pulse" />
+                    )}
+                    {isEmergencyStopped ? 'RESUMING' : 'EMERGENCY STOP'}
                 </button>
 
                 <div className="flex flex-3 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -115,7 +135,13 @@ const MapMonitoring = ({
                             const displaySpeed = isSelectedVehicle && typeof vehicleSpeed === 'number'
                                 ? vehicleSpeed
                                 : vehicle.speed;
-                            const displayLocation = isPrimaryServiceVehicle ? vehicle.location : null;
+                            const displayLocation = isPrimaryServiceVehicle
+                                ? (isSelectedVehicle ? (vehicleLocation || vehicle.location) : vehicle.location)
+                                : null;
+                            const displayGps = getDisplayGps({
+                                vehiclePose: isSelectedVehicle ? minimapVehiclePose : null,
+                                vehicleLocation: displayLocation
+                            });
                             const displayBattery = typeof vehicle.battery === 'number' ? `${vehicle.battery}%` : '-';
 
                             return (
@@ -148,7 +174,7 @@ const MapMonitoring = ({
                                         <div className="flex items-center gap-2">
                                             <Navigation className="h-3.5 w-3.5 text-slate-400" />
                                             <span className="font-mono">
-                                                {formatCoordinate(displayLocation?.lat)}, {formatCoordinate(displayLocation?.lng)}
+                                                {formatGpsCoordinate(displayGps?.lat)}, {formatGpsCoordinate(displayGps?.lng)}
                                             </span>
                                         </div>
                                         <div className="mt-2 flex items-center justify-between border-t border-slate-200/60 pt-2">

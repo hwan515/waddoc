@@ -19,11 +19,12 @@ import com.waddoc.domain.notification.event.SmsRequestMessage;
 import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.mission.entity.Mission;
 import com.waddoc.domain.mission.service.MissionCommandService;
-import com.waddoc.global.config.DispatchAssignmentPolicy;
+import com.waddoc.domain.vehicle.repository.VehicleRepository;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.sms.SmsService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -32,7 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -56,8 +60,9 @@ public class BookingService {
     private final AuditLogService auditLogService;
     private final SmsService smsService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final DispatchAssignmentPolicy dispatchAssignmentPolicy;
+    private final VehicleRepository vehicleRepository;
     private final WaypointAddressResolver waypointAddressResolver;
+    private final Clock clock;
 
     /** 4.1 — 예약 생성 */
     @Transactional
@@ -73,6 +78,8 @@ public class BookingService {
             throw new BusinessException(ErrorCode.RECOMMENDATION_NOT_FOUND);
         }
 
+        lockRegionCapacity(patient.getRegionCode());
+
         ScheduleSlot slot = scheduleSlotRepository.findByPublicId(request.getSlotId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_NOT_FOUND));
 
@@ -80,8 +87,16 @@ public class BookingService {
             throw new BusinessException(ErrorCode.SLOT_NOT_IN_RECOMMENDATION);
         }
 
+        if (!isSlotBookable(slot, LocalDate.now(KstTime.resolve(clock)), LocalTime.now(KstTime.resolve(clock)))) {
+            throw new BusinessException(ErrorCode.BOOKING_SLOT_EXPIRED);
+        }
+
         if (slot.isBooked()) {
             throw new BusinessException(ErrorCode.BOOKING_SLOT_CONFLICT);
+        }
+
+        if (hasActiveRegionBookingConflict(patient.getRegionCode(), slot.getSlotDate(), slot.getStartTime(), slot.getEndTime())) {
+            throw new BusinessException(ErrorCode.BOOKING_VEHICLE_CONFLICT);
         }
 
         slot.markBooked();
@@ -93,6 +108,7 @@ public class BookingService {
                 .doctor(slot.getDoctor())
                 .channel(session.getChannel().name())
                 .appointmentDate(slot.getSlotDate())
+                .regionCode(patient.getRegionCode())
                 .startTime(slot.getStartTime())
                 .endTime(slot.getEndTime())
                 .build();
@@ -100,7 +116,7 @@ public class BookingService {
         try {
             bookingRepository.save(booking);
         } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.BOOKING_SLOT_CONFLICT);
+            throw new BusinessException(resolveBookingConflictErrorCode(e));
         }
 
         CareCase careCase = CareCase.builder()
@@ -118,7 +134,7 @@ public class BookingService {
                 .build());
         ensureCreatedMission(careCase, patient);
 
-        session.touch();
+        session.touch(LocalDateTime.now(KstTime.resolve(clock)));
 
         // TTS 메시지 생성
         String doctorName = slot.getDoctor().getUser().getName();
@@ -181,13 +197,17 @@ public class BookingService {
             throw new BusinessException(ErrorCode.PATIENT_NOT_BOUND);
         }
 
-        List<Booking> bookings;
-        if (status != null && !status.isBlank()) {
-            BookingStatus bookingStatus = BookingStatus.valueOf(status.toUpperCase());
-            bookings = bookingRepository.findByPatientAndStatus(patient, bookingStatus);
-        } else {
-            bookings = bookingRepository.findByPatient(patient);
-        }
+        BookingStatus bookingStatus = status != null && !status.isBlank()
+                ? BookingStatus.valueOf(status.toUpperCase())
+                : BookingStatus.CONFIRMED;
+        LocalDate today = LocalDate.now(KstTime.resolve(clock));
+        LocalTime currentTime = LocalTime.now(KstTime.resolve(clock));
+        List<Booking> bookings = bookingRepository.findUpcomingBookingsByPatientAndStatus(
+                patient,
+                bookingStatus,
+                today,
+                currentTime
+        );
 
         List<BookingSummaryResponse> summaries = bookings.stream()
                 .map(BookingSummaryResponse::from)
@@ -264,7 +284,7 @@ public class BookingService {
         }
 
         String reason = request != null ? request.getCancelReason() : null;
-        booking.cancel(reason);
+        booking.cancel(reason, LocalDateTime.now(KstTime.resolve(clock)));
         booking.getSlot().markAvailable();
 
         careCaseRepository.findByBooking(booking).ifPresent(CareCase::cancel);
@@ -352,10 +372,69 @@ public class BookingService {
         WaypointAddressResolver.ResolvedTarget resolvedTarget = waypointAddressResolver.resolve(patient.getAddress());
         return missionCommandService.createMissionForDispatch(
                 careCase,
-                dispatchAssignmentPolicy.getDefaultVehicleId(),
+                null,
                 patient.getAddress(),
                 null,
                 resolvedTarget.waypointNumber()
         );
+    }
+
+    private void lockRegionCapacity(String regionCode) {
+        if (regionCode == null || regionCode.isBlank()) {
+            return;
+        }
+
+        vehicleRepository.findFirstByRegionCodeOrderByCreatedAtAsc(regionCode);
+    }
+
+    private boolean hasActiveRegionBookingConflict(
+            String regionCode,
+            java.time.LocalDate appointmentDate,
+            java.time.LocalTime startTime,
+            java.time.LocalTime endTime
+    ) {
+        if (regionCode == null || regionCode.isBlank()) {
+            return false;
+        }
+
+        return bookingRepository.existsActiveRegionBookingConflict(
+                regionCode,
+                appointmentDate,
+                startTime,
+                endTime,
+                BookingStatus.CANCELLED
+        );
+    }
+
+    static boolean isSlotBookable(
+            ScheduleSlot slot,
+            java.time.LocalDate today,
+            java.time.LocalTime currentTime
+    ) {
+        if (slot.getSlotDate().isAfter(today)) {
+            return true;
+        }
+        if (slot.getSlotDate().isBefore(today)) {
+            return false;
+        }
+        return slot.getStartTime().isAfter(currentTime);
+    }
+
+    private ErrorCode resolveBookingConflictErrorCode(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null) {
+                String normalized = message.toLowerCase();
+                if (normalized.contains("uq_booking_region_date_start_active")) {
+                    return ErrorCode.BOOKING_VEHICLE_CONFLICT;
+                }
+                if (normalized.contains("idx_booking_slot_active")) {
+                    return ErrorCode.BOOKING_SLOT_CONFLICT;
+                }
+            }
+            current = current.getCause();
+        }
+        return ErrorCode.BOOKING_SLOT_CONFLICT;
     }
 }

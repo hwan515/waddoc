@@ -15,11 +15,13 @@ import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -38,6 +40,7 @@ public class ConsultationSummaryService {
     private final AccessControlService accessControlService;
     private final ConsultationLiveKitService consultationLiveKitService;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     @Transactional(readOnly = true)
     public ConsultationSummaryResponse getSummary(String sessionId, AuthenticatedUser authenticatedUser) {
@@ -99,10 +102,11 @@ public class ConsultationSummaryService {
         boolean shouldCloseRoom = false;
         if (session.getStatus() == ConsultationSessionStatus.IN_PROGRESS) {
             // 진료 요약 저장을 세션 종료 시점으로 간주하고 연관된 케이스/예약 상태도 함께 마감한다.
-            session.complete(calculateDurationMinutes(session, LocalDateTime.now()));
+            LocalDateTime now = LocalDateTime.now(KstTime.resolve(clock));
+            session.complete(calculateDurationMinutes(session, now), now);
             session.getCareCase().complete();
             session.getCareCase().getBooking().complete();
-            syncMissionAfterConsultationCompletion(session);
+            syncMissionAfterConsultationCompletion(session, now);
             shouldCloseRoom = true;
         }
 
@@ -137,12 +141,12 @@ public class ConsultationSummaryService {
         return Math.max(0, (int) Duration.between(session.getStartedAt(), endedAt).toMinutes());
     }
 
-    private void syncMissionAfterConsultationCompletion(ConsultationSession session) {
+    private void syncMissionAfterConsultationCompletion(ConsultationSession session, LocalDateTime now) {
         missionRepository.findByCareCase(session.getCareCase())
                 .ifPresent(mission -> {
                     if (mission.getPhase() == MissionPhase.CONSULTING
                             || mission.getPhase() == MissionPhase.VERIFYING) {
-                        mission.updatePhase(MissionPhase.RETURNING);
+                        mission.updatePhase(MissionPhase.RETURNING, now);
                         missionRepository.save(mission);
                         return;
                     }

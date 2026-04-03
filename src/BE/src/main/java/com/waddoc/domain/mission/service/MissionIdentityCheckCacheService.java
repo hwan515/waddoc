@@ -6,9 +6,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.waddoc.global.util.KstTime;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -21,15 +22,15 @@ import java.util.concurrent.TimeUnit;
 public class MissionIdentityCheckCacheService {
 
     private static final String IDENTITY_CHECK_KEY_PREFIX = "identity-check:";
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final StringRedisTemplate stringRedisTemplate;
+    private final Clock clock;
 
     @Value("${consultation.identity-check-cache-ttl-seconds:600}")
     private long identityCheckCacheTtlSeconds;
 
     public VerifiedIdentityCheck saveVerified(String missionId, String patientId) {
-        OffsetDateTime verifiedAt = OffsetDateTime.now(KST);
+        OffsetDateTime verifiedAt = OffsetDateTime.now(KstTime.resolve(clock));
         stringRedisTemplate.opsForValue().set(
                 generateKey(missionId, patientId),
                 verifiedAt.toString(),

@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.waddoc.global.util.KstTime;
+
 /**
  * 전화 시뮬레이터 인테이크 세션. patient_id는 nullable (식별 전 생성 허용).
  * publicId가 capability token 역할 수행.
@@ -88,24 +90,32 @@ public class IntakeSession extends BaseCreatedEntity {
         this.callerNumber = callerNumber;
         this.channel = channel != null ? channel : IntakeChannel.WEB_SIMULATOR;
         this.status = IntakeStatus.STARTED;
-        this.lastActivityAt = LocalDateTime.now();
+        this.lastActivityAt = KstTime.now();
     }
 
     /** 환자 식별 완료 후 세션에 바인딩 */
     public void bindPatient(Patient patient) {
+        bindPatient(patient, KstTime.now());
+    }
+
+    public void bindPatient(Patient patient, LocalDateTime now) {
         this.patient = patient;
         if (this.status == IntakeStatus.STARTED) {
             this.status = IntakeStatus.IN_PROGRESS;
         }
-        touch();
+        touch(now);
     }
 
     /** 세션 종료 처리 */
     public void complete(CompletionReason completionReason) {
+        complete(completionReason, KstTime.now());
+    }
+
+    public void complete(CompletionReason completionReason, LocalDateTime now) {
         this.status = IntakeStatus.COMPLETED;
         this.completionReason = completionReason;
-        this.endedAt = LocalDateTime.now();
-        touch();
+        this.endedAt = now;
+        touch(now);
     }
 
     public void markInProgress() {
@@ -121,20 +131,30 @@ public class IntakeSession extends BaseCreatedEntity {
 
     /** 마지막 활동 시각 갱신 */
     public void touch() {
-        this.lastActivityAt = LocalDateTime.now();
+        touch(KstTime.now());
+    }
+
+    public void touch(LocalDateTime now) {
+        this.lastActivityAt = now;
     }
 
     /** 과 선택 결과와 안내 슬롯 스냅샷 기록 */
     public void recordSelection(String department, String departmentName,
                                 ConfidenceLevel confidenceLevel, boolean emergency,
                                 String reason, List<String> offeredSlotIds) {
+        recordSelection(department, departmentName, confidenceLevel, emergency, reason, offeredSlotIds, KstTime.now());
+    }
+
+    public void recordSelection(String department, String departmentName,
+                                ConfidenceLevel confidenceLevel, boolean emergency,
+                                String reason, List<String> offeredSlotIds, LocalDateTime now) {
         this.selectedDepartment = department;
         this.selectedDepartmentName = departmentName;
         this.selectionConfidenceLevel = confidenceLevel;
         this.selectionIsEmergency = emergency;
         this.selectionReason = reason;
         this.offeredSlotIds = offeredSlotIds;
-        this.selectionUpdatedAt = LocalDateTime.now();
+        this.selectionUpdatedAt = now;
     }
 
     /** 추천(과 선택)이 완료되었는지 확인 */

@@ -5,15 +5,14 @@ import com.waddoc.domain.mission.entity.MissionPhase;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.waddoc.global.util.KstTime;
+
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Getter
 @Builder
 public class UpdateMissionPhaseResponse {
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private String missionId;
     private MissionPhase phase;
@@ -33,6 +32,6 @@ public class UpdateMissionPhaseResponse {
         if (value == null) {
             return null;
         }
-        return value.atZone(KST).toOffsetDateTime();
+        return value.atZone(KstTime.ZONE).toOffsetDateTime();
     }
 }

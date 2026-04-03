@@ -11,10 +11,13 @@ import com.waddoc.domain.patient.entity.Patient;
 import com.waddoc.domain.patient.repository.PatientRepository;
 import com.waddoc.global.error.BusinessException;
 import com.waddoc.global.error.ErrorCode;
+import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +32,7 @@ public class PatientIdentifyService {
     private final IntakeSessionRepository intakeSessionRepository;
     private final PatientRepository patientRepository;
     private final AuditLogService auditLogService;
+    private final Clock clock;
 
     @Transactional
     public IdentifyPatientResponse identifyByCallerNumber(String intakeSessionId,
@@ -63,7 +67,7 @@ public class PatientIdentifyService {
         );
         Patient patient = matchedPatients.size() == 1 ? matchedPatients.get(0) : null;
 
-        session.touch();
+        session.touch(LocalDateTime.now(KstTime.resolve(clock)));
 
         Map<String, Object> detailJson = new LinkedHashMap<>();
         detailJson.put("identified", patient != null);
@@ -89,7 +93,7 @@ public class PatientIdentifyService {
 
         Patient patient = patientRepository.findByPhone(phoneNumber).orElse(null);
 
-        session.touch();
+        session.touch(LocalDateTime.now(KstTime.resolve(clock)));
 
         Map<String, Object> detailJson = new LinkedHashMap<>();
         detailJson.put("identified", patient != null);

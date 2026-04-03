@@ -2,6 +2,7 @@ package com.waddoc.domain.mission.entity;
 
 import com.waddoc.domain.carecase.entity.CareCase;
 import com.waddoc.global.audit.BaseTimeEntity;
+import com.waddoc.global.util.KstTime;
 import com.waddoc.global.util.PublicIdGenerator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -114,6 +115,10 @@ public class Mission extends BaseTimeEntity {
     }
 
     public void updatePhase(MissionPhase phase) {
+        updatePhase(phase, KstTime.now());
+    }
+
+    public void updatePhase(MissionPhase phase, LocalDateTime now) {
         if (this.phase == phase) {
             return;
         }
@@ -129,10 +134,10 @@ public class Mission extends BaseTimeEntity {
 
         this.phase = phase;
         if (phase == MissionPhase.DISPATCHED && this.dispatchedAt == null) {
-            this.dispatchedAt = LocalDateTime.now();
+            this.dispatchedAt = now;
         }
         if (phase == MissionPhase.COMPLETED) {
-            this.completedAt = LocalDateTime.now();
+            this.completedAt = now;
         }
     }
 
