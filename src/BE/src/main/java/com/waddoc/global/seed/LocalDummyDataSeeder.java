@@ -918,7 +918,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         };
         String allergyNote = switch (doctor.getDepartment()) {
             case "INTERNAL_MEDICINE" -> List.of(
-                    "페니실린 복용 시 발진 이력이 있어 약 처방 전 확인 필요",
+                    "페니실린 복용 시 발진 이력이 있어 약 처방 전 확인 필요함",
                     "갑각류 섭취 후 두드러기 반응이 있어 식이 안내 필요",
                     "조영제 알러지 이력이 있어 검사 전 고지 요청").get(Math.floorMod(seed.waypointNumber() * 2 + visitSequence, 3));
             case "ORTHOPEDICS" -> List.of(
