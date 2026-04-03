@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Video, Mic, MicOff, VideoOff, MonitorUp } from 'lucide-react';
+import { LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS } from '../../utils/livekitVideoConfig';
 
 const PreJoinRoom = ({
     patientName,
@@ -19,7 +20,10 @@ const PreJoinRoom = ({
         let isMounted = true;
         const initMedia = async () => {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS,
+                    audio: true,
+                });
                 if (!isMounted) {
                     stream.getTracks().forEach(t => t.stop());
                     return;
