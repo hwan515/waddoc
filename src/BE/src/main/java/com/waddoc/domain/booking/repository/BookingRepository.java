@@ -77,6 +77,24 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByPatientAndStatus(Patient patient, BookingStatus status);
 
+    @Query("""
+            select b
+            from Booking b
+            where b.patient = :patient
+              and b.status = :status
+              and (
+                    b.appointmentDate > :today
+                    or (b.appointmentDate = :today and b.startTime > :currentTime)
+                  )
+            order by b.appointmentDate asc, b.startTime asc
+            """)
+    List<Booking> findUpcomingBookingsByPatientAndStatus(
+            @Param("patient") Patient patient,
+            @Param("status") BookingStatus status,
+            @Param("today") LocalDate today,
+            @Param("currentTime") LocalTime currentTime
+    );
+
     @Query(
             value = """
                     select b

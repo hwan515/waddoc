@@ -197,13 +197,17 @@ public class BookingService {
             throw new BusinessException(ErrorCode.PATIENT_NOT_BOUND);
         }
 
-        List<Booking> bookings;
-        if (status != null && !status.isBlank()) {
-            BookingStatus bookingStatus = BookingStatus.valueOf(status.toUpperCase());
-            bookings = bookingRepository.findByPatientAndStatus(patient, bookingStatus);
-        } else {
-            bookings = bookingRepository.findByPatient(patient);
-        }
+        BookingStatus bookingStatus = status != null && !status.isBlank()
+                ? BookingStatus.valueOf(status.toUpperCase())
+                : BookingStatus.CONFIRMED;
+        LocalDate today = LocalDate.now(KstTime.resolve(clock));
+        LocalTime currentTime = LocalTime.now(KstTime.resolve(clock));
+        List<Booking> bookings = bookingRepository.findUpcomingBookingsByPatientAndStatus(
+                patient,
+                bookingStatus,
+                today,
+                currentTime
+        );
 
         List<BookingSummaryResponse> summaries = bookings.stream()
                 .map(BookingSummaryResponse::from)

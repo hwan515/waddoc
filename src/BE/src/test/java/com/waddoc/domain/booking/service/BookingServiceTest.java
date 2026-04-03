@@ -48,9 +48,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -674,5 +677,82 @@ class BookingServiceTest {
 
         assertThat(booking.getStatus()).isEqualTo(com.waddoc.domain.booking.entity.BookingStatus.CANCELLED);
         assertThat(slot.isBooked()).isFalse();
+    }
+
+    @Test
+    void getExistingBookings_returnsOnlyUpcomingConfirmedBookingsByDefault() {
+        ReflectionTestUtils.setField(
+                bookingService,
+                "clock",
+                Clock.fixed(Instant.parse("2026-04-01T01:30:00Z"), ZoneId.of("Asia/Seoul"))
+        );
+
+        Patient patient = Patient.builder()
+                .name("Patient Park")
+                .birthDate(LocalDate.of(1958, 3, 15))
+                .gender(PatientGender.FEMALE)
+                .regionCode("ULLEUNG")
+                .address("울릉군")
+                .phone("01012345678")
+                .build();
+
+        IntakeSession session = IntakeSession.builder()
+                .patient(patient)
+                .callerNumber("01012345678")
+                .channel(IntakeChannel.WEB_SIMULATOR)
+                .build();
+
+        User doctorUser = User.builder()
+                .username("doctor")
+                .passwordHash("encoded")
+                .name("Doctor Kim")
+                .role(Role.DOCTOR)
+                .build();
+
+        DoctorProfile doctor = DoctorProfile.builder()
+                .user(doctorUser)
+                .department("INTERNAL_MEDICINE")
+                .departmentName("Internal Medicine")
+                .build();
+
+        ScheduleSlot slot = ScheduleSlot.builder()
+                .doctor(doctor)
+                .slotDate(LocalDate.of(2026, 4, 1))
+                .startTime(LocalTime.of(11, 0))
+                .endTime(LocalTime.of(11, 30))
+                .build();
+
+        Booking booking = Booking.builder()
+                .patient(patient)
+                .intakeSession(session)
+                .slot(slot)
+                .doctor(doctor)
+                .channel("WEB_SIMULATOR")
+                .appointmentDate(LocalDate.of(2026, 4, 1))
+                .regionCode("ULLEUNG")
+                .startTime(LocalTime.of(11, 0))
+                .endTime(LocalTime.of(11, 30))
+                .build();
+        ReflectionTestUtils.setField(booking, "createdAt", LocalDateTime.of(2026, 3, 31, 9, 0));
+
+        when(intakeSessionRepository.findByPublicId(session.getPublicId())).thenReturn(Optional.of(session));
+        when(bookingRepository.findUpcomingBookingsByPatientAndStatus(
+                patient,
+                com.waddoc.domain.booking.entity.BookingStatus.CONFIRMED,
+                LocalDate.of(2026, 4, 1),
+                LocalTime.of(10, 30)
+        )).thenReturn(List.of(booking));
+
+        var response = bookingService.getExistingBookings(session.getPublicId(), null);
+
+        assertThat(response.getTotalCount()).isEqualTo(1);
+        assertThat(response.getBookings()).hasSize(1);
+        assertThat(response.getBookings().get(0).getBookingId()).isEqualTo(booking.getPublicId());
+        verify(bookingRepository).findUpcomingBookingsByPatientAndStatus(
+                patient,
+                com.waddoc.domain.booking.entity.BookingStatus.CONFIRMED,
+                LocalDate.of(2026, 4, 1),
+                LocalTime.of(10, 30)
+        );
     }
 }
