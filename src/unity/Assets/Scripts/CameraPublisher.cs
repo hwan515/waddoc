@@ -42,7 +42,7 @@ public class CameraPublisher : MonoBehaviour
             return;
         }
 
-        // 안전하게 카메라 출력 텍스처를 다시 지정
+        // 카메라 출력 대상을 RT로 고정
         targetCamera.targetTexture = renderTexture;
 
         publishInterval = 1.0f / Mathf.Max(1, publishHz);
@@ -54,7 +54,12 @@ public class CameraPublisher : MonoBehaviour
             false
         );
 
-        Debug.Log($"[CameraPublisher] Started. Publishing to {topicName}");
+        if (debugLog)
+        {
+            Debug.Log(
+                $"[CameraPublisher] Started. topic={topicName}, size={renderTexture.width}x{renderTexture.height}"
+            );
+        }
     }
 
     void LateUpdate()
@@ -75,51 +80,63 @@ public class CameraPublisher : MonoBehaviour
         }
 
         RenderTexture previous = RenderTexture.active;
-        RenderTexture.active = renderTexture;
 
-        // RenderTexture의 현재 내용을 읽음
-        texture2D.ReadPixels(
-            new Rect(0, 0, renderTexture.width, renderTexture.height),
-            0,
-            0,
-            false
-        );
-        texture2D.Apply(false);
-
-        // 상하반전 보정
-        Color32[] pixels = texture2D.GetPixels32();
-        Color32[] flipped = FlipVertical(pixels, texture2D.width, texture2D.height);
-        byte[] imageBytes = ConvertColor32ToRgbBytes(flipped);
-
-        double now = Time.timeAsDouble;
-        int sec = (int)now;
-        uint nanosec = (uint)((now - sec) * 1e9);
-
-        HeaderMsg header = new HeaderMsg();
-        header.frame_id = frameId;
-        header.stamp = new TimeMsg(sec, nanosec);
-
-        ImageMsg imageMsg = new ImageMsg(
-            header,
-            (uint)renderTexture.height,
-            (uint)renderTexture.width,
-            "rgb8",
-            0,
-            (uint)(renderTexture.width * 3),
-            imageBytes
-        );
-
-        ros.Publish(topicName, imageMsg);
-
-        if (debugLog)
+        try
         {
-            Debug.Log(
-                $"[CameraPublisher] Published {renderTexture.width}x{renderTexture.height}, " +
-                $"bytes={imageBytes.Length}, topic={topicName}"
-            );
-        }
+            // 현재 카메라가 RT에 한 프레임을 확실히 렌더하도록 강제
+            targetCamera.targetTexture = renderTexture;
+            targetCamera.Render();
 
-        RenderTexture.active = previous;
+            // RT 읽기
+            RenderTexture.active = renderTexture;
+
+            texture2D.ReadPixels(
+                new Rect(0, 0, renderTexture.width, renderTexture.height),
+                0,
+                0,
+                false
+            );
+            texture2D.Apply(false);
+
+            // Unity 화면 좌표계 상하반전 보정
+            Color32[] pixels = texture2D.GetPixels32();
+            Color32[] flipped = FlipVertical(pixels, texture2D.width, texture2D.height);
+            byte[] imageBytes = ConvertColor32ToRgbBytes(flipped);
+
+            double now = Time.timeAsDouble;
+            int sec = (int)now;
+            uint nanosec = (uint)((now - sec) * 1e9);
+
+            HeaderMsg header = new HeaderMsg
+            {
+                frame_id = frameId,
+                stamp = new TimeMsg(sec, nanosec)
+            };
+
+            ImageMsg imageMsg = new ImageMsg(
+                header,
+                (uint)renderTexture.height,
+                (uint)renderTexture.width,
+                "rgb8",
+                0,
+                (uint)(renderTexture.width * 3),
+                imageBytes
+            );
+
+            ros.Publish(topicName, imageMsg);
+
+            if (debugLog)
+            {
+                Debug.Log(
+                    $"[CameraPublisher] Published {renderTexture.width}x{renderTexture.height}, " +
+                    $"bytes={imageBytes.Length}, topic={topicName}"
+                );
+            }
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+        }
     }
 
     Color32[] FlipVertical(Color32[] src, int width, int height)
@@ -129,6 +146,7 @@ public class CameraPublisher : MonoBehaviour
         for (int y = 0; y < height; y++)
         {
             int flippedY = height - 1 - y;
+
             for (int x = 0; x < width; x++)
             {
                 dst[flippedY * width + x] = src[y * width + x];
