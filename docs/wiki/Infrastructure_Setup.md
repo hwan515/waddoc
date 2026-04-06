@@ -35,6 +35,21 @@ cp .env.example .env
 # .env 파일을 열어 실제 값으로 수정
 ```
 
+### Unity Camera relay (prod)
+
+- 운영 관제 영상 경로는 브라우저 기준 계속 `https://www.waddoc.site/unity_cam/` 를 사용한다.
+- frontend 컨테이너는 `UNITY_CAM_PROXY_TARGET` 으로 MediaMTX 내부 경로를 프록시한다.
+- 권장 운영 값:
+
+```env
+UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam
+MEDIAMTX_WEBRTC_PUBLIC_HOST=www.waddoc.site
+UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
+```
+
+- `MEDIAMTX_WEBRTC_PUBLIC_HOST` 는 브라우저가 WebRTC ICE 후보로 사용할 공개 호스트와 일치해야 한다.
+- 차량 쪽 `UNITY_CAM_RTSP_URL` 은 ROS2 docker compose 또는 실행 환경에서 override 한다.
+
 ## 실행 명령어
 
 ### 개발 환경 (권장: 전체 Docker Compose)
@@ -56,6 +71,14 @@ docker compose down                # 종료
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
 - 로컬 compose는 monitoring stack을 포함하지 않으며 `VITE_ENABLE_MONITORING_TAB=false` 기본값으로 관제의 `시스템 모니터링` 탭도 숨긴다.
 - 로컬 개발 compose는 로봇/차량 관련 컨테이너를 포함하지 않는다. 로봇 통신 테스트는 운영 MQTT 브로커를 참조한다.
+
+### Unity Camera rollout check
+
+- `infra/docker-compose.prod.yml` 적용 후 `mediamtx` 컨테이너가 정상 기동하는지 확인한다.
+- 운영 환경에서 `docker compose ps` 로 `frontend`, `nginx`, `mediamtx` 상태를 함께 확인한다.
+- 차량 publish 전, EC2 내부에서 `http://mediamtx:8889/unity_cam/` 응답 여부를 확인한다.
+- 차량 적용 후, `camera_streamer` 로그에 EC2 RTSP URL이 반영됐는지와 MediaMTX 로그에 `unity_cam` publisher 접속이 찍히는지 확인한다.
+- 최종적으로 브라우저에서 `https://www.waddoc.site/unity_cam/` 가 502 없이 열리는지 검증한다.
 
 ### 개발 환경 (고급: DB/Redis/Kafka만 Docker + Backend는 로컬 JVM)
 
