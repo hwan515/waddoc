@@ -19,14 +19,25 @@ services:
     build: ../src/FE
     expose:
       - "3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
       - VITE_DEMO_MODE_ENABLED=${APP_DEMO_MODE_ENABLED:-true}
       - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
       - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-false}
-      - UNITY_CAM_PROXY_TARGET=${UNITY_CAM_PROXY_TARGET:-http://host.docker.internal:8889/unity_cam}
+      - UNITY_CAM_PROXY_TARGET=${UNITY_CAM_PROXY_TARGET:-http://mediamtx:8889/unity_cam}
+    networks:
+      - waddoc-net
+
+  mediamtx:
+    image: bluenviron/mediamtx:1
+    expose:
+      - "8889"
+    ports:
+      - "8554:8554"
+      - "8189:8189/udp"
+    environment:
+      - MTX_RTSPTRANSPORTS=tcp
+      - MTX_WEBRTCADDITIONALHOSTS=${MEDIAMTX_WEBRTC_PUBLIC_HOST:-127.0.0.1}
     networks:
       - waddoc-net
 

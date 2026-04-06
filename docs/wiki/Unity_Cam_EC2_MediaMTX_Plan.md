@@ -1,22 +1,22 @@
-# Unity Camera EC2 MediaMTX 전환 플랜
+# Unity Camera MediaMTX 소유권 정리 플랜
 
 ## 목표
 
-- 차량 로컬 ROS Compose 내부의 MediaMTX 의존성을 제거하고, EC2에서 `unity_cam` 스트림을 수신/중계한다.
+- `src/ros2_docker` 내부의 MediaMTX 의존성을 제거하고, local/prod 모두 `infra` compose가 `unity_cam` 스트림을 수신/중계한다.
 - 차량 쪽 `camera_streamer.py`는 EC2의 RTSP ingest endpoint로 송출한다.
 - 웹 브라우저는 계속 `https://www.waddoc.site/unity_cam/` 만 호출한다.
 - 프론트엔드 React 컴포넌트는 가능한 한 변경하지 않고, 프록시와 인프라 설정만 교체한다.
 
-## 현재 구조
+## 적용 후 구조
 
-코드 기준 현재 경로는 아래와 같다.
+코드 기준 최종 경로는 아래와 같다.
 
 - 차량 송출 기본값: `src/ros2_docker/workspace/src/my_ros2_basics/my_ros2_basics/camera_streamer.py`
   - `rtsp://127.0.0.1:8554/unity_cam`
-- 차량 로컬 MediaMTX: `src/ros2_docker/docker-compose.yml`
-  - `mediamtx` 서비스가 같은 compose에 존재
-- 프론트 프록시: `src/FE/nginx.conf`
-  - `/unity_cam/` 요청을 Tailscale IP `http://100.89.189.27:8889/unity_cam/` 로 전달
+- 로컬/운영 MediaMTX: `infra/docker-compose.yml`, `infra/docker-compose.prod.yml`
+  - `mediamtx` 서비스가 frontend와 같은 compose/network에 존재
+- 프론트 프록시: `src/FE/nginx.conf.template`
+  - `/unity_cam/` 요청을 `UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam` 로 전달
 - 브라우저 호출 경로: `src/FE/src/components/operator/MapMonitoring.jsx`
   - iframe `src="/unity_cam/"`
 
@@ -27,9 +27,9 @@
 ```text
 차량 ROS2 camera_streamer
   -> RTSP publish (tcp)
-  -> rtsp://<EC2 public host>:8554/unity_cam
+  -> rtsp://<MediaMTX ingest host>:8554/unity_cam
 
-EC2 MediaMTX
+infra-owned MediaMTX (local/prod)
   -> 내부 네트워크에서 frontend nginx가 참조
   -> http://mediamtx:8889/unity_cam
 
@@ -63,28 +63,32 @@ frontend nginx
 - 최종 location은 `/unity_cam/` 서브패스 프록시 규칙을 사용한다.
 - 핵심은 upstream 값에 `unity_cam` path를 포함해 `/unity_cam/` prefix strip 이후에도 MediaMTX stream path가 유지되게 하는 것이다.
 
-### 4. EC2 MediaMTX는 frontend와 같은 Docker 네트워크에 둠
+### 4. MediaMTX는 local/prod 모두 infra compose에서 관리
 
-- `infra/docker-compose.prod.yml` 안에 `mediamtx` 서비스를 추가한다.
+- `infra/docker-compose.yml`, `infra/docker-compose.prod.yml` 안에 `mediamtx` 서비스를 둔다.
 - `frontend` 컨테이너가 `mediamtx` 서비스에 내부 접근하고, 프록시 대상은 `http://mediamtx:8889/unity_cam` 로 둔다.
+- `src/ros2_docker/docker-compose.yml` 는 publisher만 관리하고 `mediamtx` 서비스를 포함하지 않는다.
 - `8889`는 가능하면 외부에 직접 publish하지 않고, 컨테이너 내부 통신으로만 사용한다.
 
 ## 단계별 구현 플랜
 
-## Phase 1. EC2 MediaMTX 서비스 추가
+## Phase 1. infra compose로 MediaMTX 소유권 이동
 
 대상 파일:
 
+- `infra/docker-compose.yml`
 - `infra/docker-compose.prod.yml`
+- `src/ros2_docker/docker-compose.yml`
 - `infra/.env.example`
 - `docs/wiki/Infrastructure_Setup.md`
 
 작업:
 
-- `mediamtx` 서비스를 운영 compose에 추가한다.
+- `mediamtx` 서비스를 local/prod infra compose에 둔다.
 - `frontend`, `nginx`와 같은 `waddoc-net` 네트워크에 붙인다.
-- RTSP ingest 용 `8554/tcp` 를 host publish 한다.
+- local/prod 모두 RTSP ingest 용 `8554/tcp` 를 host publish 한다.
 - WebRTC/HTTP 제공을 위해 MediaMTX 내부 HTTP 리스너 `8889`를 사용한다.
+- `src/ros2_docker/docker-compose.yml` 에서는 `mediamtx` 서비스와 `depends_on` 을 제거한다.
 - 운영 환경변수를 정의한다.
 
 권장 환경변수 예시:
@@ -169,7 +173,7 @@ envsubst '${UNITY_CAM_PROXY_TARGET}' \
   > /etc/nginx/conf.d/default.conf
 ```
 
-## Phase 3. 차량 RTSP publish endpoint를 env/parameter 기반으로 변경
+## Phase 3. 차량 compose는 publisher 역할만 유지
 
 대상 파일:
 
@@ -180,7 +184,7 @@ envsubst '${UNITY_CAM_PROXY_TARGET}' \
 
 - `camera_streamer.py`는 이미 `declare_parameter('rtsp_url', ...)`로 RTSP 목적지 override를 지원한다.
 - 따라서 애플리케이션 코드 추가보다 `custom_entrypoint.sh`에서 ROS parameter를 주입하는 방식으로 처리한다.
-- 차량 compose에 `UNITY_CAM_RTSP_URL` 환경변수를 추가한다.
+- 차량 compose는 `UNITY_CAM_RTSP_URL` 환경변수만 관리하고 MediaMTX lifecycle은 관리하지 않는다.
 
 권장 실행 형태:
 
@@ -213,22 +217,9 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 - `src/ros2_docker/docker-compose.yml`
 - 관련 실행 문서
 
-선택지:
-
-- A안: 로컬 `mediamtx` 서비스를 완전히 제거
-- B안: 로컬 개발용 fallback profile로 분리
-
-권장:
-
-- 당장 운영 전환이 목표라면 B안을 권장한다.
-- 이유:
-  - 네트워크 장애 시 로컬 smoke test 경로 보존 가능
-  - 차량 개발자가 EC2 없이도 영상 경로 자체를 검증 가능
-
-예시:
-
-- 기본 실행은 EC2 publish
-- `--profile local-stream` 일 때만 로컬 `mediamtx` 활성화
+- `src/ros2_docker/docker-compose.yml` 에서 로컬 `mediamtx` 서비스를 제거한다.
+- 로컬 smoke test는 별도 profile이 아니라 `infra/docker-compose.yml` 의 기본 `mediamtx` 를 사용한다.
+- 따라서 local/prod 모두 MediaMTX lifecycle과 WebRTC host 설정은 `infra` 가 책임진다.
 
 ## Phase 5. 보안그룹/네트워크 설정
 
@@ -253,11 +244,11 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 
 ## Phase 6. 배포 및 전환 순서
 
-1. EC2에 `mediamtx` 서비스만 먼저 올린다.
-2. EC2 내부에서 `mediamtx:8889` 와 host `:8554` 가 정상인지 확인한다.
-3. 프론트 nginx를 env 기반 프록시로 바꿔 배포한다.
+1. local/prod `infra` compose에 `mediamtx` 서비스를 둔다.
+2. local은 `infra/docker-compose.yml`, prod는 `infra/docker-compose.prod.yml` 기준으로 `mediamtx:8889` 와 host `:8554` 가 정상인지 확인한다.
+3. 프론트 nginx가 `UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam` 를 사용하도록 유지한다.
 4. 브라우저에서 `/unity_cam/` 경로가 MediaMTX 페이지로 응답하는지 확인한다.
-5. 마지막으로 차량 `UNITY_CAM_RTSP_URL` 값을 EC2로 전환한다.
+5. 차량 `UNITY_CAM_RTSP_URL` 값을 환경별 ingest host로 맞춘다.
 6. 실제 카메라 publish가 들어오는지 확인한다.
 
 이 순서를 지키면 브라우저 경로, 프론트, 차량 publish 전환을 분리해서 검증할 수 있다.
@@ -348,9 +339,9 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 
 ## 권장 구현 순서 요약
 
-1. `infra/docker-compose.prod.yml` 에 `mediamtx` 서비스 추가
-2. `src/FE` nginx 설정을 env 템플릿으로 전환
-3. `src/ros2_docker` 에 `UNITY_CAM_RTSP_URL` 주입 경로 추가
+1. `infra/docker-compose.yml`, `infra/docker-compose.prod.yml` 에 `mediamtx` 서비스 정렬
+2. `src/FE` nginx 설정을 env 템플릿 기반으로 유지
+3. `src/ros2_docker` 는 `UNITY_CAM_RTSP_URL` publisher 설정만 유지
 4. 보안그룹과 MediaMTX WebRTC public host 설정 반영
 5. 문서 업데이트 후 단계적 배포
 

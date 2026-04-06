@@ -35,11 +35,22 @@ cp .env.example .env
 # .env 파일을 열어 실제 값으로 수정
 ```
 
-### Unity Camera relay (prod)
+### Unity Camera relay (local/prod)
 
-- 운영 관제 영상 경로는 브라우저 기준 계속 `https://www.waddoc.site/unity_cam/` 를 사용한다.
+- 브라우저 경로는 local/prod 모두 계속 `/unity_cam/` 를 사용한다.
+- MediaMTX 소유권은 local/prod 모두 `infra/docker-compose*.yml` 에 있다.
 - frontend 컨테이너는 `UNITY_CAM_PROXY_TARGET` 으로 MediaMTX 내부 경로를 프록시한다.
-- 권장 운영 값:
+- `src/ros2_docker` 는 MediaMTX를 띄우지 않고 `UNITY_CAM_RTSP_URL` 로 ingest endpoint에 publish만 한다.
+
+로컬 개발 권장 값:
+
+```env
+UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam
+MEDIAMTX_WEBRTC_PUBLIC_HOST=127.0.0.1
+UNITY_CAM_RTSP_URL=rtsp://127.0.0.1:8554/unity_cam
+```
+
+운영 override 예시:
 
 ```env
 UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam
@@ -48,7 +59,7 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 ```
 
 - `MEDIAMTX_WEBRTC_PUBLIC_HOST` 는 브라우저가 WebRTC ICE 후보로 사용할 공개 호스트와 일치해야 한다.
-- 차량 쪽 `UNITY_CAM_RTSP_URL` 은 ROS2 docker compose 또는 실행 환경에서 override 한다.
+- 운영 차량 쪽 `UNITY_CAM_RTSP_URL` 은 ROS2 docker compose 또는 실행 환경에서 override 한다.
 
 ## 실행 명령어
 
@@ -56,7 +67,7 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 
 ```bash
 cd infra
-docker compose up -d              # 메인 스택 기동 (nginx/frontend/frontend-phone/spring-api/postgres/redis/zookeeper/kafka/livekit)
+docker compose up -d              # 메인 스택 기동 (nginx/frontend/mediamtx/frontend-phone/spring-api/postgres/redis/zookeeper/kafka/livekit)
 docker compose logs -f spring-api  # 로그 확인
 docker compose up -d --build spring-api  # 특정 서비스 재빌드
 docker compose down                # 종료
@@ -69,8 +80,10 @@ docker compose down                # 종료
 - 진료/LiveKit/webhook 검증은 이 전체 compose 구성을 기본 경로로 사용한다.
 - 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
+- 로컬 compose는 `mediamtx`를 포함하며 `frontend`가 `http://mediamtx:8889/unity_cam` 으로 프록시한다.
+- ROS2 local publisher는 별도 `src/ros2_docker/docker-compose.yml`에서 `rtsp://127.0.0.1:8554/unity_cam` 로 publish 한다.
 - 로컬 compose는 monitoring stack을 포함하지 않으며 `VITE_ENABLE_MONITORING_TAB=false` 기본값으로 관제의 `시스템 모니터링` 탭도 숨긴다.
-- 로컬 개발 compose는 로봇/차량 관련 컨테이너를 포함하지 않는다. 로봇 통신 테스트는 운영 MQTT 브로커를 참조한다.
+- 로컬 개발 compose는 로봇/차량 애플리케이션 컨테이너를 포함하지 않는다. 로봇 통신 테스트는 운영 MQTT 브로커를 참조하고, 카메라 relay만 `mediamtx`로 포함한다.
 
 ### Unity Camera rollout check
 
@@ -347,6 +360,8 @@ wscat -c wss://<DOMAIN>/mqtt
 | 외부 포트 | 서비스 | 용도 |
 |-----------|--------|------|
 | 80 | nginx | HTTP (API + 프론트엔드) |
+| 8554 | mediamtx | Unity camera RTSP ingest |
+| 8189/udp | mediamtx | Unity camera WebRTC ICE/UDP |
 | 9092 | kafka | Kafka host access / 로컬 JVM 연동 |
 | 7880 | livekit | API + signaling WebSocket |
 | 7881 | livekit | ICE/TCP |
@@ -362,6 +377,8 @@ wscat -c wss://<DOMAIN>/mqtt
 |-----------|-----------|--------|------|
 | 80 | 80 | nginx | HTTP → HTTPS 리다이렉트 |
 | 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS, `/grafana/`) |
+| 8554 | 8554 | mediamtx | Unity camera RTSP ingest |
+| 8189/udp | 8189/udp | mediamtx | Unity camera WebRTC ICE/UDP |
 | 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
 | (없음) | 9001 | mosquitto | MQTT over WS (Docker 내부 전용, Nginx `/mqtt`로 프록시) |
 | 8881 | 7881 | livekit | ICE/TCP |
