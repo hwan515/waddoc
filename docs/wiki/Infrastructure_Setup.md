@@ -31,9 +31,15 @@ infra/
 ## 환경 변수 설정
 
 ```bash
-cp .env.example .env
-# .env 파일을 열어 실제 값으로 수정
+# 로컬 개발
+docker compose --env-file .env.local -f docker-compose.yml config
+
+# 운영 템플릿 확인
+docker compose --env-file .env.prod -f docker-compose.prod.yml config
 ```
+
+- `infra/.env.local` 은 로컬 개발 실행용 기본값 파일이다.
+- `infra/.env.prod` 는 운영 템플릿 파일이다. 실제 배포 시에는 이 값을 기반으로 비밀값을 채워 서버 외부 경로의 env 파일로 관리하는 것을 권장한다.
 
 ### Unity Camera relay (local/prod)
 
@@ -67,13 +73,13 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 
 ```bash
 cd infra
-docker compose up -d              # 메인 스택 기동 (nginx/frontend/mediamtx/frontend-phone/spring-api/postgres/redis/zookeeper/kafka/livekit)
-docker compose logs -f spring-api  # 로그 확인
-docker compose up -d --build spring-api  # 특정 서비스 재빌드
-docker compose down                # 종료
+docker compose --env-file .env.local -f docker-compose.yml up -d              # 메인 스택 기동 (nginx/frontend/mediamtx/frontend-phone/spring-api/postgres/redis/zookeeper/kafka/livekit)
+docker compose --env-file .env.local -f docker-compose.yml logs -f spring-api  # 로그 확인
+docker compose --env-file .env.local -f docker-compose.yml up -d --build spring-api  # 특정 서비스 재빌드
+docker compose --env-file .env.local -f docker-compose.yml down                # 종료
 ```
 
-- 기본 host 조합을 쓸 경우 `.env` 에 `DEV_GPU_SERVER_HOST` 를 설정한다. 커스텀 포트나 스킴을 쓰면 `AI_IDV_URL` 을 직접 지정한다.
+- 기본 host 조합을 쓸 경우 `.env.local` 에 `DEV_GPU_SERVER_HOST` 를 설정한다. 커스텀 포트나 스킴을 쓰면 `AI_IDV_URL` 을 직접 지정한다.
 - 로봇 통신은 운영 MQTT 브로커(`wss://<DOMAIN>/mqtt`)를 통해 이루어진다. 로컬 개발 환경에서도 운영 브로커를 참조하거나 로컬 Mosquitto를 띄울 수 있다.
 - 개발 compose의 기본값은 `AI_IDV_URL=http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify` 이다.
 - 커스텀 포트나 `https` 스킴이 필요하면 `AI_IDV_URL` 환경변수로 전체 URL을 override 한다.
@@ -81,7 +87,7 @@ docker compose down                # 종료
 - 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
 - 로컬 compose는 `mediamtx`를 포함하며 `frontend`가 `http://mediamtx:8889/unity_cam` 으로 프록시한다.
-- ROS2 local publisher는 별도 `src/ros2_docker/docker-compose.yml`에서 `rtsp://127.0.0.1:8554/unity_cam` 로 publish 한다.
+- ROS2 local publisher는 별도 `src/ros2_docker/.env.local` + `src/ros2_docker/docker-compose.yml` 조합으로 `rtsp://127.0.0.1:8554/unity_cam` 로 publish 한다.
 - 로컬 compose는 monitoring stack을 포함하지 않으며 `VITE_ENABLE_MONITORING_TAB=false` 기본값으로 관제의 `시스템 모니터링` 탭도 숨긴다.
 - 로컬 개발 compose는 로봇/차량 애플리케이션 컨테이너를 포함하지 않는다. 로봇 통신 테스트는 운영 MQTT 브로커를 참조하고, 카메라 relay만 `mediamtx`로 포함한다.
 
@@ -97,7 +103,7 @@ docker compose down                # 종료
 
 ```bash
 cd infra
-docker compose up -d postgres redis zookeeper kafka
+docker compose --env-file .env.local -f docker-compose.yml up -d postgres redis zookeeper kafka
 ```
 
 - Backend는 `src/BE/src/main/resources/application.yml`에서 기본 프로파일이 `local`로 설정되어 있으므로 IntelliJ 실행 시 별도 `SPRING_PROFILES_ACTIVE` 지정이 없어도 된다.
@@ -118,11 +124,12 @@ docker compose up -d postgres redis zookeeper kafka
 
 ```bash
 cd infra
-docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml up -d
+docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml up -d
 ```
 
-- `.env` 에 `PROD_GPU_SERVER_HOST` 와 `SERVER_DOMAIN` 을 반드시 설정해야 한다.
-- `.env` 에 `MONITORING_COOKIE_SECRET`, `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD` 도 설정해야 한다.
+- `/home/ubuntu/.waddoc/prod.env` 에 `PROD_GPU_SERVER_HOST` 와 `SERVER_DOMAIN` 을 반드시 설정해야 한다.
+- `/home/ubuntu/.waddoc/prod.env` 에 `MONITORING_COOKIE_SECRET`, `GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD` 도 설정해야 한다.
+- 저장소의 `infra/.env.prod` 는 운영 템플릿이며, 실제 서버에서는 별도 경로의 env 파일을 `--env-file`로 지정한다.
 - 운영 compose에는 `mosquitto` (MQTT 브로커)가 기본 포함된다. 차량/로봇 통신은 MQTT over WebSocket을 사용한다.
 - frontend runtime-config의 `VITE_ENABLE_MONITORING_TAB` 기본값은 `true`이며, 별도 override가 없으면 운영 관제에서 `시스템 모니터링` 탭이 노출된다.
 - 운영 monitoring UI는 `https://<DOMAIN>/grafana/` 경로를 사용한다.
@@ -134,7 +141,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml 
 - `livekit.yaml`, `entrypoint.sh` 같은 bind mount 파일을 수정한 배포라면 아래 재시작까지 수행해야 한다.
 
 ```bash
-docker compose -f docker-compose.prod.yml restart livekit coturn
+docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml restart livekit coturn
 ```
 - 배포 환경의 `spring-api` 기본값은 `https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify` 이며, 필요하면 `AI_IDV_URL` 로 전체 URL을 override 한다.
 
@@ -261,7 +268,7 @@ Backend를 여러 인스턴스로 띄워 부하를 분산할 수 있다.
 
 ```bash
 cd infra
-docker compose -f docker-compose.prod.yml up -d --build --scale spring-api=3
+docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml up -d --build --scale spring-api=3
 ```
 
 - `--scale spring-api=N`으로 인스턴스 수를 지정한다. compose 파일이나 nginx 설정 수정 없이 숫자만 변경하면 된다.
