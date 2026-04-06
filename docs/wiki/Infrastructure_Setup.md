@@ -42,16 +42,13 @@ cp .env.example .env
 - 권장 운영 값:
 
 ```env
-UNITY_CAM_EC2_HOST=www.waddoc.site
-UNITY_CAM_PROXY_TARGET=http://www.waddoc.site:8889/unity_cam
+UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam
 MEDIAMTX_WEBRTC_PUBLIC_HOST=www.waddoc.site
-UNITY_CAM_RTSP_URL=rtsp://www.waddoc.site:8554/unity_cam
+UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 ```
 
 - `MEDIAMTX_WEBRTC_PUBLIC_HOST` 는 브라우저가 WebRTC ICE 후보로 사용할 공개 호스트와 일치해야 한다.
 - 차량 쪽 `UNITY_CAM_RTSP_URL` 은 ROS2 docker compose 또는 실행 환경에서 override 한다.
-- 로컬 `infra/docker-compose.yml` 의 frontend도 기본적으로 EC2 공개 endpoint 기준으로 `UNITY_CAM_PROXY_TARGET` 을 사용한다.
-- 운영 frontend가 공개 endpoint 대신 내부 MediaMTX 서비스로 직접 붙어야 한다면 배포 `.env`에서 `UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam` 으로 override 한다.
 
 ## 실행 명령어
 

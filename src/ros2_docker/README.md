@@ -62,13 +62,13 @@ docker compose up -d
 
 ### 로컬 카메라 스트림 확인
 
-- 기본값은 **EC2 MediaMTX relay로 publish 하는 설정**이다.
+- 기본값은 **Tailscale 없이 같은 PC에서 바로 확인 가능한 설정**이다.
 - `.env.example` 기본값:
-  - `UNITY_CAM_RTSP_URL=rtsp://www.waddoc.site:8554/unity_cam`
+  - `UNITY_CAM_RTSP_URL=rtsp://127.0.0.1:8554/unity_cam`
   - `MEDIAMTX_WEBRTC_PUBLIC_HOST=127.0.0.1`
-- 웹 프론트 로컬 compose는 기본적으로 EC2 공개 endpoint 기준 `http://www.waddoc.site:8889/unity_cam` 로 MediaMTX를 프록시한다.
-- 따라서 로컬 개발에서도 기본 경로는 EC2 relay를 보는 구조다.
-- 같은 PC의 로컬 MediaMTX로 직접 확인하고 싶다면 `.env`에서 `UNITY_CAM_RTSP_URL=rtsp://127.0.0.1:8554/unity_cam` 으로 바꾸고, 필요 시 `MEDIAMTX_WEBRTC_PUBLIC_HOST=127.0.0.1` 또는 개발 PC LAN IP로 조정한다.
+- 웹 프론트 로컬 compose는 `http://host.docker.internal:8889/unity_cam` 로 MediaMTX를 프록시한다.
+- 따라서 같은 PC에서 `infra` 스택과 `src/ros2_docker` 스택을 함께 띄우면 `/unity_cam/` 경로로 카메라를 볼 수 있다.
+- 다른 기기에서 같은 개발 PC의 카메라를 보려면 `.env`에서 `MEDIAMTX_WEBRTC_PUBLIC_HOST` 를 해당 PC의 LAN IP로 바꾼다.
 ### YOLO 사용 시 추가 설치
 `vision_detect.py` 의 사람/경운기 ROI e-stop 기능은 `ultralytics` 와 PyTorch가 필요합니다. 최신 `Dockerfile`로 이미지를 다시 빌드하면 함께 설치됩니다. 이미 실행 중인 컨테이너에서 바로 테스트하려면 아래를 실행하세요.
 

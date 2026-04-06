@@ -26,7 +26,7 @@ services:
       - VITE_ROBOT_TERMINAL_ID=${VITE_ROBOT_TERMINAL_ID:-}
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
       - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-false}
-      - UNITY_CAM_PROXY_TARGET=${UNITY_CAM_PROXY_TARGET:-http://${UNITY_CAM_EC2_HOST:-www.waddoc.site}:8889/unity_cam}
+      - UNITY_CAM_PROXY_TARGET=${UNITY_CAM_PROXY_TARGET:-http://host.docker.internal:8889/unity_cam}
     networks:
       - waddoc-net
 

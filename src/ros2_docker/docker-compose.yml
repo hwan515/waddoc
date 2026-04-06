@@ -16,7 +16,7 @@ services:
       - MQTT_BROKER_PORT=443
       - MQTT_WS_PATH=/mqtt
       - VEHICLE_ID=${VEHICLE_ID:-veh_GIMCHEON_01}
-      - UNITY_CAM_RTSP_URL=${UNITY_CAM_RTSP_URL:-rtsp://www.waddoc.site:8554/unity_cam}
+      - UNITY_CAM_RTSP_URL=${UNITY_CAM_RTSP_URL:-rtsp://127.0.0.1:8554/unity_cam}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./workspace:/root/workspace:rw

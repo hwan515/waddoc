@@ -47,7 +47,7 @@ frontend nginx
 - `MapMonitoring.jsx`는 변경하지 않는다.
 - 운영자 브라우저와 프론트 라우팅 계약은 `/unity_cam/` 그대로 유지한다.
 
-### 2. EC2 주소는 소스에 직접 하드코딩하지 않음
+### 2. EC2 주소는 소스에 하드코딩하지 않음
 
 - `camera_streamer.py`의 소스 기본값은 로컬 fallback으로 유지하는 것을 권장한다.
 - 실제 운영 RTSP 목적지는 환경변수 또는 ROS parameter로 주입한다.
@@ -90,13 +90,10 @@ frontend nginx
 권장 환경변수 예시:
 
 ```env
-UNITY_CAM_EC2_HOST=www.waddoc.site
-UNITY_CAM_PROXY_TARGET=http://www.waddoc.site:8889/unity_cam
-UNITY_CAM_RTSP_URL=rtsp://www.waddoc.site:8554/unity_cam
-MEDIAMTX_WEBRTC_PUBLIC_HOST=www.waddoc.site
+UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam
+UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
+MEDIAMTX_WEBRTC_PUBLIC_HOST=<EC2_PUBLIC_HOST 또는 www.waddoc.site>
 ```
-
-- 운영 frontend가 공개 endpoint 대신 EC2 내부 `mediamtx` 서비스로 직접 붙어야 하면 배포 `.env`에서 `UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam` 으로 override 한다.
 
 MediaMTX 예시 설정 방향:
 
@@ -194,10 +191,8 @@ ros2 run my_ros2_basics camera_streamer --ros-args -p rtsp_url:=${UNITY_CAM_RTSP
 권장 기본값:
 
 ```env
-UNITY_CAM_RTSP_URL=rtsp://www.waddoc.site:8554/unity_cam
+UNITY_CAM_RTSP_URL=rtsp://127.0.0.1:8554/unity_cam
 ```
-
-- 로컬 단일 PC에서 EC2 없이 직접 테스트하려면 `.env`에서 `UNITY_CAM_RTSP_URL=rtsp://127.0.0.1:8554/unity_cam` 으로 override 한다.
 
 운영 차량 값:
 
