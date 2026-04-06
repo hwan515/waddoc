@@ -40,7 +40,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-CAMERA_RTSP_URL="${UNITY_CAM_RTSP_URL:-rtsp://127.0.0.1:8554/unity_cam}"
+CAMERA_RTSP_URL="${UNITY_CAM_RTSP_URL:-rtsp://www.waddoc.site:8554/unity_cam}"
 
 start_service "ros_tcp_endpoint" ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0
 start_service "camera_streamer" ros2 run my_ros2_basics camera_streamer --ros-args -p rtsp_url:="${CAMERA_RTSP_URL}"
