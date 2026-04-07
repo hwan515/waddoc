@@ -896,7 +896,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
         String symptom = switch (doctor.getDepartment()) {
             case "INTERNAL_MEDICINE" -> List.of(
                     "혈압 변동과 어지럼이 반복되었음",
-                    "기침과 미열이 며칠째 이어져",
+                    "기침과 미열이 며칠째 계속되어",
                     "속쓰림과 복부 불편감이 있어").get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
             case "ORTHOPEDICS" -> List.of(
                     "무릎 통증과 보행 불편이 있어",
@@ -2130,8 +2130,8 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
 
     private static List<LocalTime> buildRealisticSlotStartTimes() {
         List<LocalTime> slotStartTimes = new java.util.ArrayList<>();
-        for (LocalTime startTime = REALISTIC_SLOT_OPEN_TIME; !startTime.isAfter(REALISTIC_SLOT_CLOSE_TIME); startTime =
-                startTime.plusMinutes(30)) {
+        for (LocalTime startTime = REALISTIC_SLOT_OPEN_TIME; !startTime
+                .isAfter(REALISTIC_SLOT_CLOSE_TIME); startTime = startTime.plusMinutes(30)) {
             slotStartTimes.add(startTime);
         }
         return List.copyOf(slotStartTimes);
