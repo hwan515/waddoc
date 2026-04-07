@@ -16,12 +16,11 @@ services:
       - MQTT_BROKER_PORT=443
       - MQTT_WS_PATH=/mqtt
       - VEHICLE_ID=${VEHICLE_ID:-veh_GIMCHEON_01}
+      - UNITY_CAM_RTSP_URL=${UNITY_CAM_RTSP_URL:-rtsp://127.0.0.1:8554/unity_cam}
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./workspace:/root/workspace:rw
     command: tail -f /dev/null
-    depends_on:
-      - mediamtx
     deploy:
       resources:
         reservations:
@@ -29,13 +28,3 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [ gpu, video, compute, utility ]
-
-  mediamtx:
-    image: bluenviron/mediamtx:latest
-    container_name: mediamtx_server
-    network_mode: "host"
-    environment:
-      - MTX_WEBRTCICEUDP=yes
-      - MTX_WEBRTCICEHOSTSNAT1TO1=100.89.189.27
-      - MTX_WEBRTCADDITIONALHOSTS=100.89.189.27
-    restart: unless-stopped

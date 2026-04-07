@@ -14374,6 +14374,18 @@ PrefabInstance:
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 6ddf91fff0dacca4a9c908ff2dc54b6d, type: 2}
+    - target: {fileID: 2853094927878061926, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: m_CameraType
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3851280820437364048, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: m_ClearFlags
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 3851280820437364048, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
+      propertyPath: far clip plane
+      value: 300
+      objectReference: {fileID: 0}
     - target: {fileID: 3930560712417103104, guid: 1f5022497ee0af5dc8f0c7cf4c72238f, type: 3}
       propertyPath: m_Name
       value: RAY

@@ -5,6 +5,7 @@ ROS2 /camera/image_raw -> FFmpeg subprocess (stdin) -> h264_nvenc (GPU 하드웨
 
 import subprocess
 import threading
+import time
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -33,6 +34,8 @@ class CameraStreamer(Node):
         # 프레임 버퍼 초기화 (검은 화면)
         self.current_frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
         self.frame_count = 0
+        self.last_inner_frame_at = None
+        self.inner_camera_timeout_sec = 2.0
         
         self._start_encoder(rtsp_url, fps)
 
@@ -66,6 +69,9 @@ class CameraStreamer(Node):
             '-preset', 'llhq',          
             '-tune', 'ull',             
             '-zerolatency', '1',
+            '-profile:v', 'baseline',
+            '-bf', '0',
+            '-pix_fmt', 'yuv420p',
             '-b:v', '2000k',
             '-g', str(fps * 2),
             '-f', 'rtsp',
@@ -105,12 +111,23 @@ class CameraStreamer(Node):
             self.drive_state = new_state
 
     def front_image_callback(self, msg: Image):
-        if self.drive_state == 1:
+        if self.drive_state == 1 or not self._has_recent_inner_frame():
+            if self.drive_state == 0 and not self._has_recent_inner_frame():
+                self.get_logger().warn(
+                    '내부 카메라 토픽이 없어 전방 카메라로 fallback 합니다.',
+                    throttle_duration_sec=5.0
+                )
             self.process_image(msg)
 
     def inner_image_callback(self, msg: Image):
+        self.last_inner_frame_at = time.monotonic()
         if self.drive_state == 0:
             self.process_image(msg)
+
+    def _has_recent_inner_frame(self):
+        if self.last_inner_frame_at is None:
+            return False
+        return (time.monotonic() - self.last_inner_frame_at) <= self.inner_camera_timeout_sec
 
     def process_image(self, msg: Image):
         """이미지를 변환하여 current_frame 버퍼만 갱신합니다."""
@@ -131,7 +148,7 @@ class CameraStreamer(Node):
                 return
 
             # shape 인덱싱 버그 수정
-            if img.shape != self.width or img.shape != self.height:
+            if img.shape[1] != self.width or img.shape[0] != self.height:
                 img = cv2.resize(img, (self.width, self.height))
 
             # 최신 프레임 버퍼 업데이트

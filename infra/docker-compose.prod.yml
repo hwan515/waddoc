@@ -34,6 +34,23 @@ services:
       - VITE_ROBOT_TERMINAL_KEY=${VITE_ROBOT_TERMINAL_KEY:-}
       - VITE_DEMO_MODE_ENABLED=${APP_DEMO_MODE_ENABLED:-false}
       - VITE_ENABLE_MONITORING_TAB=${VITE_ENABLE_MONITORING_TAB:-true}
+      - UNITY_CAM_PROXY_TARGET=${UNITY_CAM_PROXY_TARGET:-http://mediamtx:8889/unity_cam}
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  mediamtx:
+    image: bluenviron/mediamtx:1
+    expose:
+      - "8889"
+    ports:
+      - "8554:8554"
+      - "8189:8189/tcp"
+      - "8189:8189/udp"
+    environment:
+      - MTX_RTSPTRANSPORTS=tcp
+      - MTX_WEBRTCADDITIONALHOSTS=${MEDIAMTX_WEBRTC_PUBLIC_HOST:?MEDIAMTX_WEBRTC_PUBLIC_HOST is required}
+      - MTX_WEBRTCLOCALTCPADDRESS=:8189
     restart: unless-stopped
     networks:
       - waddoc-net
