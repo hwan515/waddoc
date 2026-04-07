@@ -66,6 +66,9 @@ class CameraStreamer(Node):
             '-preset', 'llhq',          
             '-tune', 'ull',             
             '-zerolatency', '1',
+            '-profile:v', 'baseline',
+            '-bf', '0',
+            '-pix_fmt', 'yuv420p',
             '-b:v', '2000k',
             '-g', str(fps * 2),
             '-f', 'rtsp',
@@ -131,7 +134,7 @@ class CameraStreamer(Node):
                 return
 
             # shape 인덱싱 버그 수정
-            if img.shape != self.width or img.shape != self.height:
+            if img.shape[1] != self.width or img.shape[0] != self.height:
                 img = cv2.resize(img, (self.width, self.height))
 
             # 최신 프레임 버퍼 업데이트
