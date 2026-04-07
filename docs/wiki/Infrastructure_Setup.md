@@ -368,6 +368,7 @@ wscat -c wss://<DOMAIN>/mqtt
 |-----------|--------|------|
 | 80 | nginx | HTTP (API + 프론트엔드) |
 | 8554 | mediamtx | Unity camera RTSP ingest |
+| 8189/tcp | mediamtx | Unity camera WebRTC ICE/TCP fallback |
 | 8189/udp | mediamtx | Unity camera WebRTC ICE/UDP |
 | 9092 | kafka | Kafka host access / 로컬 JVM 연동 |
 | 7880 | livekit | API + signaling WebSocket |
@@ -385,6 +386,7 @@ wscat -c wss://<DOMAIN>/mqtt
 | 80 | 80 | nginx | HTTP → HTTPS 리다이렉트 |
 | 443 | 443 | nginx | HTTPS (API, 프론트, LiveKit WSS, `/grafana/`) |
 | 8554 | 8554 | mediamtx | Unity camera RTSP ingest |
+| 8189/tcp | 8189/tcp | mediamtx | Unity camera WebRTC ICE/TCP fallback |
 | 8189/udp | 8189/udp | mediamtx | Unity camera WebRTC ICE/UDP |
 | 8092 | 9092 | kafka | Kafka host access / 운영 점검 |
 | (없음) | 9001 | mosquitto | MQTT over WS (Docker 내부 전용, Nginx `/mqtt`로 프록시) |

@@ -108,10 +108,12 @@ mediamtx:
     - "8889"
   ports:
     - "8554:8554"
+    - "8189:8189/tcp"
     - "8189:8189/udp"
   environment:
     - MTX_RTSPTRANSPORTS=tcp
     - MTX_WEBRTCADDITIONALHOSTS=${MEDIAMTX_WEBRTC_PUBLIC_HOST}
+    - MTX_WEBRTCLOCALTCPADDRESS=:8189
   restart: unless-stopped
   networks:
     - waddoc-net
