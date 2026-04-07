@@ -895,7 +895,7 @@ public class LocalDummyDataSeeder implements ApplicationRunner {
     private String buildSelectionReason(DoctorProfile doctor, PatientSeed seed, int visitSequence) {
         String symptom = switch (doctor.getDepartment()) {
             case "INTERNAL_MEDICINE" -> List.of(
-                    "혈압 변동과 어지럼이 반복되었음",
+                    "혈압 변동과 어지럼이 반복되어",
                     "기침과 미열이 며칠째 계속되어",
                     "속쓰림과 복부 불편감이 있어").get(Math.floorMod(seed.waypointNumber() + visitSequence, 3));
             case "ORTHOPEDICS" -> List.of(
