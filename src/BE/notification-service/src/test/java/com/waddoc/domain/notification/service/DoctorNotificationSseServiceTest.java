@@ -41,7 +41,7 @@ class DoctorNotificationSseServiceTest {
 
     @SuppressWarnings("unchecked")
     private ConcurrentMap<String, ConcurrentMap<String, SseEmitter>> emitterStore() throws Exception {
-        Field field = DoctorNotificationSseService.class.getDeclaredField("emittersByDoctorId");
+        Field field = DoctorNotificationSseService.class.getDeclaredField("emittersByDoctorUserId");
         field.setAccessible(true);
         return (ConcurrentMap<String, ConcurrentMap<String, SseEmitter>>) field.get(doctorNotificationSseService);
     }

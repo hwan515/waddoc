@@ -26,17 +26,17 @@ public class DoctorNotificationRedisSubscriber implements MessageListener {
                     message.getBody(), DoctorNotificationBroadcastMessage.class
             );
 
-            String doctorId = broadcast.getDoctorId();
+            String doctorUserId = broadcast.getDoctorUserId();
 
-            if (!doctorNotificationSseService.hasConnections(doctorId)) {
+            if (!doctorNotificationSseService.hasConnections(doctorUserId)) {
                 return;
             }
 
-            doctorNotificationSseService.sendToDoctor(
-                    doctorId, broadcast.getEventName(), broadcast.getPayload()
+            doctorNotificationSseService.sendToDoctorUser(
+                    doctorUserId, broadcast.getEventName(), broadcast.getPayload()
             );
 
-            log.debug("Delivered Redis broadcast to local SSE. doctorId={}", doctorId);
+            log.debug("Delivered Redis broadcast to local SSE. doctorUserId={}", doctorUserId);
         } catch (Exception e) {
             log.warn("Failed to process doctor notification Redis message", e);
         }

@@ -53,4 +53,49 @@ class KafkaMonitoringMetricsTest {
                 .timer()
                 .count()).isEqualTo(1L);
     }
+
+    @Test
+    void recordProducerResult_recordsSuccessCounterAndTimer() {
+        var sample = kafkaMonitoringMetrics.startProducerSend();
+
+        kafkaMonitoringMetrics.recordProducerResult("robot.telemetry.v1", "robot-mqtt-subscriber", sample, null);
+
+        assertThat(meterRegistry.get("waddoc.kafka.producer.sent")
+                .tag("topic", "robot.telemetry.v1")
+                .tag("producer", "robot-mqtt-subscriber")
+                .tag("result", "success")
+                .counter()
+                .count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("waddoc.kafka.producer.duration")
+                .tag("topic", "robot.telemetry.v1")
+                .tag("producer", "robot-mqtt-subscriber")
+                .tag("result", "success")
+                .timer()
+                .count()).isEqualTo(1L);
+    }
+
+    @Test
+    void recordProducerResult_recordsFailureCounterAndTimer() {
+        var sample = kafkaMonitoringMetrics.startProducerSend();
+
+        kafkaMonitoringMetrics.recordProducerResult(
+                "mission.telemetry",
+                "mission-telemetry-controller",
+                sample,
+                new IllegalStateException("boom")
+        );
+
+        assertThat(meterRegistry.get("waddoc.kafka.producer.sent")
+                .tag("topic", "mission.telemetry")
+                .tag("producer", "mission-telemetry-controller")
+                .tag("result", "fail")
+                .counter()
+                .count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("waddoc.kafka.producer.duration")
+                .tag("topic", "mission.telemetry")
+                .tag("producer", "mission-telemetry-controller")
+                .tag("result", "fail")
+                .timer()
+                .count()).isEqualTo(1L);
+    }
 }

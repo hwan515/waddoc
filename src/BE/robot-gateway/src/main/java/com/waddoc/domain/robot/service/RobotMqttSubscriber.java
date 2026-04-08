@@ -2,6 +2,7 @@ package com.waddoc.domain.robot.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.waddoc.global.monitoring.KafkaMonitoringMetrics;
 import com.waddoc.shared.event.EventEnvelope;
 import com.waddoc.shared.event.EventTypes;
 import com.waddoc.shared.event.RobotTopics;
@@ -26,12 +27,14 @@ import java.util.UUID;
 public class RobotMqttSubscriber {
 
     private static final double POSE_JUMP_WARNING_THRESHOLD = 25.0;
+    private static final String PRODUCER_ID = "robot-mqtt-subscriber";
 
     private final RobotStateCache stateCache;
     private final RobotSseService sseService;
     private final RobotSnapshotAssembler robotSnapshotAssembler;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final KafkaMonitoringMetrics kafkaMonitoringMetrics;
 
     @ServiceActivator(inputChannel = "mqttInboundChannel")
     public void handleMessage(Message<?> message) {
@@ -95,22 +98,44 @@ public class RobotMqttSubscriber {
             String aggregateId = payload.vehicleId() == null || payload.vehicleId().isBlank()
                     ? topic
                     : payload.vehicleId();
-
-            kafkaTemplate.send(
-                    EventTypes.ROBOT_TELEMETRY_V1,
-                    aggregateId,
-                    new EventEnvelope(
-                            UUID.randomUUID().toString(),
-                            EventTypes.ROBOT_TELEMETRY_V1,
-                            payload.occurredAt(),
-                            "robot-gateway",
-                            aggregateId,
-                            "corr_robot_telemetry_" + sourceEventId,
-                            objectMapper.valueToTree(payload)
-                    )
-            );
+            var sendSample = kafkaMonitoringMetrics.startProducerSend();
+            try {
+                kafkaTemplate.send(
+                        EventTypes.ROBOT_TELEMETRY_V1,
+                        aggregateId,
+                        new EventEnvelope(
+                                UUID.randomUUID().toString(),
+                                EventTypes.ROBOT_TELEMETRY_V1,
+                                payload.occurredAt(),
+                                "robot-gateway",
+                                aggregateId,
+                                "corr_robot_telemetry_" + sourceEventId,
+                                objectMapper.valueToTree(payload)
+                        )
+                ).whenComplete((result, exception) -> {
+                    kafkaMonitoringMetrics.recordProducerResult(EventTypes.ROBOT_TELEMETRY_V1, PRODUCER_ID, sendSample, exception);
+                    if (exception != null) {
+                        log.warn(
+                                "Failed to publish robot telemetry event. topic={}, aggregateId={}, sourceEventId={}",
+                                topic,
+                                aggregateId,
+                                sourceEventId,
+                                exception
+                        );
+                    }
+                });
+            } catch (RuntimeException exception) {
+                kafkaMonitoringMetrics.recordProducerResult(EventTypes.ROBOT_TELEMETRY_V1, PRODUCER_ID, sendSample, exception);
+                log.warn(
+                        "Failed to publish robot telemetry event. topic={}, aggregateId={}, sourceEventId={}",
+                        topic,
+                        aggregateId,
+                        sourceEventId,
+                        exception
+                );
+            }
         } catch (Exception exception) {
-            log.warn("Failed to publish robot telemetry event. topic={}", topic, exception);
+            log.warn("Failed to normalize robot telemetry payload for Kafka publication. topic={}", topic, exception);
         }
     }
 

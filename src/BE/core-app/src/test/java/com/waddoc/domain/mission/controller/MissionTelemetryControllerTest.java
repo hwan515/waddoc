@@ -4,6 +4,7 @@ import com.waddoc.domain.mission.event.TelemetryMessage;
 import com.waddoc.domain.mission.service.MissionTelemetryService;
 import com.waddoc.global.config.KafkaTopics;
 import com.waddoc.global.error.GlobalExceptionHandler;
+import com.waddoc.global.monitoring.KafkaMonitoringMetrics;
 import com.waddoc.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,10 +16,13 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.concurrent.CompletableFuture;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,11 +41,16 @@ class MissionTelemetryControllerTest {
   private KafkaTemplate<String, Object> kafkaTemplate;
 
   @MockBean
+  private KafkaMonitoringMetrics kafkaMonitoringMetrics;
+
+  @MockBean
   private JwtTokenProvider jwtTokenProvider;
 
   @Test
   void receiveTelemetryReturnsAccepted() throws Exception {
     doNothing().when(missionTelemetryService).validateApiKey("telemetry-dev-key");
+    when(kafkaTemplate.send(eq(KafkaTopics.MISSION_TELEMETRY_TOPIC), eq("ms_F2gHn6"), any(TelemetryMessage.class)))
+        .thenReturn(CompletableFuture.completedFuture(null));
 
     mockMvc.perform(post("/api/v1/missions/{missionId}/telemetry", "ms_F2gHn6")
         .header("X-API-Key", "telemetry-dev-key")
@@ -64,6 +73,7 @@ class MissionTelemetryControllerTest {
         .andExpect(status().isAccepted());
 
     verify(missionTelemetryService).validateApiKey("telemetry-dev-key");
+    verify(kafkaMonitoringMetrics).startProducerSend();
     verify(kafkaTemplate).send(eq(KafkaTopics.MISSION_TELEMETRY_TOPIC), eq("ms_F2gHn6"), any(TelemetryMessage.class));
   }
 

@@ -28,8 +28,9 @@ export const useSSE = () => {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'text/event-stream',
                     },
+                    openWhenHidden: true,
                     signal: controllerRef.current.signal,
-                    
+
                     onopen(res) {
                         if (res.ok && res.status === 200) {
                             setIsConnected(true);

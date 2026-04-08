@@ -7,6 +7,7 @@ import com.waddoc.domain.robot.service.MqttMissionPhaseUpdater;
 import com.waddoc.shared.event.EventEnvelope;
 import com.waddoc.shared.event.EventTypes;
 import com.waddoc.shared.event.RobotTopics;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 /**
  * robot-gateway가 정규화한 텔레메트리 이벤트만 받아 미션 위치와 단계를 갱신한다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RobotTelemetryConsumer {
@@ -23,6 +25,7 @@ public class RobotTelemetryConsumer {
     private final MqttMissionLocationUpdater missionLocationUpdater;
     private final MqttMissionPhaseUpdater missionPhaseUpdater;
     private final KafkaMonitoringMetrics kafkaMonitoringMetrics;
+    private final RobotTelemetryProcessingGuard robotTelemetryProcessingGuard;
 
     @KafkaListener(topics = EventTypes.ROBOT_TELEMETRY_V1, groupId = CONSUMER_GROUP)
     public void consume(EventEnvelope envelope) {
@@ -35,6 +38,23 @@ public class RobotTelemetryConsumer {
             String sourceTopic = snapshot.path("sourceTopic").asText(null);
             JsonNode sourceSnapshot = snapshot.path("snapshot");
             if (sourceTopic == null || sourceSnapshot.isMissingNode() || sourceSnapshot.isNull()) {
+                return;
+            }
+            String sourceEventId = snapshot.path("sourceEventId").asText(null);
+            RobotTelemetryProcessingGuard.Decision decision = robotTelemetryProcessingGuard.evaluate(
+                    envelope.aggregateId(),
+                    sourceTopic,
+                    sourceEventId,
+                    envelope.occurredAt()
+            );
+            if (!decision.accepted()) {
+                log.debug(
+                        "Skipped robot telemetry event. reason={}, aggregateId={}, sourceTopic={}, sourceEventId={}",
+                        decision.reason(),
+                        envelope.aggregateId(),
+                        sourceTopic,
+                        sourceEventId
+                );
                 return;
             }
 

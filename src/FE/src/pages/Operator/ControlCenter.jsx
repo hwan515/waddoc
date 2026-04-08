@@ -8,9 +8,9 @@ import DashboardView from '../../components/operator/DashboardView';
 import PatientManagement from '../../components/operator/PatientManagement';
 import GuardianApprovals from '../../components/operator/GuardianApprovals';
 import SystemMonitoring from '../../components/operator/SystemMonitoring';
-import { isDemoModeEnabled, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
+import { getActiveOperatorVehicleId, isDemoModeEnabled, isMonitoringTabEnabled } from '../../utils/runtimeConfig';
 import { useRobotSSE } from '../../hooks/useRobotSSE';
-const ACTIVE_OPERATOR_VEHICLE_ID = 'veh_GIMCHEON_01';
+const ACTIVE_OPERATOR_VEHICLE_ID = getActiveOperatorVehicleId();
 const DEMO_MODE_ENABLED = isDemoModeEnabled();
 const MONITORING_TAB_ENABLED = isMonitoringTabEnabled();
 

@@ -304,6 +304,7 @@ export const useRobotSSE = () => {
                         Authorization: `Bearer ${token}`,
                         Accept: 'text/event-stream',
                     },
+                    openWhenHidden: true,
                     signal: controllerRef.current.signal,
 
                     onopen(res) {

@@ -26,14 +26,14 @@ public class DoctorNotificationSseService {
     static final long DEFAULT_RECONNECT_DELAY_MILLIS = 3_000L;
     static final long HEARTBEAT_INTERVAL_MILLIS = 25_000L;
 
-    private final ConcurrentMap<String, ConcurrentMap<String, SseEmitter>> emittersByDoctorId =
+    private final ConcurrentMap<String, ConcurrentMap<String, SseEmitter>> emittersByDoctorUserId =
             new ConcurrentHashMap<>();
 
     public SseEmitter subscribeDoctor(String doctorUserId) {
         String connectionId = UUID.randomUUID().toString();
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MILLIS);
 
-        emittersByDoctorId
+        emittersByDoctorUserId
                 .computeIfAbsent(doctorUserId, ignored -> new ConcurrentHashMap<>())
                 .put(connectionId, emitter);
 
@@ -63,8 +63,8 @@ public class DoctorNotificationSseService {
         return emitter;
     }
 
-    public void sendToDoctor(String doctorProfileId, String eventName, Object payload) {
-        Map<String, SseEmitter> connections = emittersByDoctorId.get(doctorProfileId);
+    public void sendToDoctorUser(String doctorUserId, String eventName, Object payload) {
+        Map<String, SseEmitter> connections = emittersByDoctorUserId.get(doctorUserId);
         if (connections == null || connections.isEmpty()) {
             return;
         }
@@ -77,21 +77,21 @@ public class DoctorNotificationSseService {
                         .data(payload));
             } catch (Exception e) {
                 if (!isClientDisconnect(e)) {
-                    log.warn("Doctor SSE delivery failed. doctorId={}, connectionId={}, eventName={}",
-                            doctorProfileId, connectionId, eventName, e);
+                    log.warn("Doctor SSE delivery failed. doctorUserId={}, connectionId={}, eventName={}",
+                            doctorUserId, connectionId, eventName, e);
                 }
-                closeEmitter(doctorProfileId, connectionId, emitter);
+                closeEmitter(doctorUserId, connectionId, emitter);
             }
         });
     }
 
     @Scheduled(fixedDelay = HEARTBEAT_INTERVAL_MILLIS)
     void sendHeartbeat() {
-        if (emittersByDoctorId.isEmpty()) {
+        if (emittersByDoctorUserId.isEmpty()) {
             return;
         }
 
-        emittersByDoctorId.forEach((doctorProfileId, connections) ->
+        emittersByDoctorUserId.forEach((doctorUserId, connections) ->
                 connections.forEach((connectionId, emitter) -> {
                     try {
                         emitter.send(SseEmitter.event()
@@ -100,41 +100,41 @@ public class DoctorNotificationSseService {
                                 .data(new ConnectedEvent(OffsetDateTime.now())));
                     } catch (Exception e) {
                         if (!isClientDisconnect(e)) {
-                            log.warn("Doctor SSE heartbeat failed. doctorId={}, connectionId={}",
-                                    doctorProfileId, connectionId, e);
+                            log.warn("Doctor SSE heartbeat failed. doctorUserId={}, connectionId={}",
+                                    doctorUserId, connectionId, e);
                         }
-                        closeEmitter(doctorProfileId, connectionId, emitter);
+                        closeEmitter(doctorUserId, connectionId, emitter);
                     }
                 }));
     }
 
-    int countConnections(String doctorProfileId) {
-        Map<String, SseEmitter> connections = emittersByDoctorId.get(doctorProfileId);
+    int countConnections(String doctorUserId) {
+        Map<String, SseEmitter> connections = emittersByDoctorUserId.get(doctorUserId);
         return connections == null ? 0 : connections.size();
     }
 
-    public boolean hasConnections(String doctorProfileId) {
-        return countConnections(doctorProfileId) > 0;
+    public boolean hasConnections(String doctorUserId) {
+        return countConnections(doctorUserId) > 0;
     }
 
-    private void closeEmitter(String doctorProfileId, String connectionId, SseEmitter emitter) {
-        removeEmitter(doctorProfileId, connectionId);
+    private void closeEmitter(String doctorUserId, String connectionId, SseEmitter emitter) {
+        removeEmitter(doctorUserId, connectionId);
         emitter.complete();
     }
 
-    private void removeEmitter(String doctorProfileId, String connectionId) {
-        ConcurrentMap<String, SseEmitter> connections = emittersByDoctorId.get(doctorProfileId);
+    private void removeEmitter(String doctorUserId, String connectionId) {
+        ConcurrentMap<String, SseEmitter> connections = emittersByDoctorUserId.get(doctorUserId);
         if (connections == null) {
             return;
         }
 
         SseEmitter removed = connections.remove(connectionId);
         if (connections.isEmpty()) {
-            emittersByDoctorId.remove(doctorProfileId, connections);
+            emittersByDoctorUserId.remove(doctorUserId, connections);
         }
 
         if (removed != null) {
-            log.info("Doctor SSE disconnected. doctorId={}, connectionId={}", doctorProfileId, connectionId);
+            log.info("Doctor SSE disconnected. doctorUserId={}, connectionId={}", doctorUserId, connectionId);
         }
     }
 

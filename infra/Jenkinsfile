@@ -418,7 +418,7 @@ pipeline {
             }
             steps {
                 script {
-                    def monitoringServices = 'prometheus grafana cadvisor postgres-exporter redis-exporter kafka-exporter'
+                    def monitoringServices = 'prometheus grafana cadvisor postgres-exporter notification-postgres-exporter redis-exporter notification-redis-exporter robot-redis-exporter kafka-exporter'
                     def pullableServices = sh(
                             script: """
                                 cd ${PROJECT_PATH}/infra

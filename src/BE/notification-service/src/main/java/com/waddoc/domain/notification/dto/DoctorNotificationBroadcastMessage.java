@@ -1,5 +1,6 @@
 package com.waddoc.domain.notification.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -9,7 +10,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class DoctorNotificationBroadcastMessage {
 
-    private String doctorId;
+    @JsonAlias("doctorId")
+    private String doctorUserId;
     private String eventName;
     private NewBookingNotificationPayload payload;
 }
