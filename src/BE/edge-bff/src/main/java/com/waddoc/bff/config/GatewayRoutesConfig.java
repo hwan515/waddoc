@@ -24,6 +24,9 @@ public class GatewayRoutesConfig {
                 .route("core-patients", r -> r.path("/api/v1/patients/**").uri(coreAppUri))
                 .route("core-intake", r -> r.path("/api/v1/intake/**").uri(coreAppUri))
                 .route("core-bookings", r -> r.path("/api/v1/bookings/**").uri(coreAppUri))
+                .route("core-cases", r -> r
+                        .path("/api/v1/cases", "/api/v1/cases/**")
+                        .uri(coreAppUri))
                 .route("core-sessions", r -> r.path("/api/v1/sessions/**").uri(coreAppUri))
                 .route("core-missions", r -> r.path("/api/v1/missions/**").uri(coreAppUri))
                 .route("core-terminal", r -> r.path("/api/v1/terminal/**").uri(coreAppUri))
