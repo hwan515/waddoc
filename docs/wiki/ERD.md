@@ -1,6 +1,8 @@
 # 도서·산간 방문형 비대면 진료 서비스 — ERD
 
 > **기준 문서**: `MVP_Requirements_v2.md`, `API_Specification.md`, `Architecture.md`
+>
+> **범위**: 본 문서는 `core-app`의 주 영속 스키마를 중심으로 표현한다. `notification-service`의 별도 DB(`waddoc_notification`)는 4장 메모에서 함께 설명한다.
 
 ---
 
@@ -82,7 +84,7 @@ erDiagram
         varchar public_id UK "외부 노출 ID (ints_xxxx)"
         bigint patient_id FK "nullable — 식별 전 세션 생성 허용"
         varchar caller_number "발신번호"
-        varchar channel "WEB_SIMULATOR"
+        varchar channel "WEB_SIMULATOR | PHONE"
         enum status "STARTED | IN_PROGRESS | COMPLETED | ABANDONED | FAILED"
         varchar completion_reason "BOOKING_CREATED | NO_INPUT_TIMEOUT | USER_HANGUP | EXISTING_BOOKING_CHECKED"
         timestamp created_at
@@ -105,7 +107,7 @@ erDiagram
         bigint intake_session_id FK
         bigint slot_id FK
         bigint doctor_id FK "DOCTOR_PROFILE.doctor_profile_id 참조"
-        varchar channel "WEB_SIMULATOR"
+        varchar channel "WEB_SIMULATOR | PHONE"
         date appointment_date
         varchar region_code "예약 시점 환자 권역 스냅샷"
         time start_time
@@ -150,6 +152,19 @@ erDiagram
         varchar region_code "권역 코드"
         text destination "목적지 주소"
         enum status "PENDING | PUBLISHED | RETRY_PENDING | COMPLETED"
+        timestamp created_at
+    }
+
+    BUSINESS_EVENT_OUTBOX {
+        bigint business_event_outbox_id PK
+        varchar event_id UK
+        varchar event_type
+        varchar aggregate_id "aggregate public_id"
+        varchar correlation_id
+        varchar producer
+        timestamptz occurred_at
+        text payload_json
+        enum status "PENDING | PUBLISHED"
         timestamp created_at
     }
 
@@ -234,7 +249,7 @@ erDiagram
     DOCTOR_PROFILE ||--o{ BOOKING : "assigned bookings"
     DOCTOR_PROFILE ||--o{ CARE_CASE : "assigned cases"
 
-    INTAKE_SESSION ||--o| BOOKING : "leads to booking"
+    INTAKE_SESSION ||--o{ BOOKING : "can lead to bookings"
 
     SCHEDULE_SLOT ||--o| BOOKING : "booked by"
 
@@ -279,16 +294,17 @@ erDiagram
 
 | 테이블 | 설명 |
 |--------|------|
-| `INTAKE_SESSION` | 전화 시뮬레이터 인테이크 세션. **`patient_id`는 nullable** — 세션 시작 시 환자가 아직 식별되지 않을 수 있으므로, 식별 완료 후 바인딩한다. 과 선택 결과·안내 슬롯 스냅샷을 세션 자체에 저장한다 (`selected_department` 등). 메뉴 선택/식별/추천/예약 흐름은 `last_activity_at` 갱신으로 추적한다 |
+| `INTAKE_SESSION` | 전화/웹 시뮬레이터 인테이크 세션. **`patient_id`는 nullable** — 세션 시작 시 환자가 아직 식별되지 않을 수 있으므로, 식별 완료 후 바인딩한다. 채널은 `WEB_SIMULATOR | PHONE`을 사용하며, 과 선택 결과·안내 슬롯 스냅샷을 세션 자체에 저장한다 (`selected_department` 등). 메뉴 선택/식별/추천/예약 흐름은 `last_activity_at` 갱신으로 추적한다 |
 
 ### 2.5 예약 / 케이스 / 미션 도메인
 
 | 테이블 | 설명 |
 |--------|------|
-| `BOOKING` | 예약 정보. 예약 시점 환자의 `region_code` 스냅샷을 함께 저장하며, 상태는 `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
-| `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED` |
+| `BOOKING` | 예약 정보. 예약 시점 환자의 `region_code` 스냅샷을 함께 저장하며, 채널은 현재 `WEB_SIMULATOR | PHONE`을 사용한다. 상태는 `CONFIRMED → CANCELLED \| COMPLETED \| NO_SHOW` |
+| `CARE_CASE` | 진료 케이스. 예약과 1:1. 상태: `CREATED → PREPARING → IN_PROGRESS → COMPLETED \| FAILED \| CANCELLED` |
 | `VEHICLE` | 권역별 실제 운행 차량. 운영 상태(`OPERATIONAL`, `OUT_OF_SERVICE`, `MAINTENANCE`)와 최근 상태 변경 시각/사유를 관리 |
 | `DISPATCH_OUTBOX` | 예약 확정 후 자동 배차를 위해 적재되는 outbox 테이블. Kafka publish와 DB 트랜잭션 사이를 분리하며 상태는 `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
+| `BUSINESS_EVENT_OUTBOX` | 예약 확정/취소 같은 비즈니스 이벤트를 트랜잭션 밖에서 재전송 가능하게 적재하는 generic outbox. `aggregate_id`는 FK가 아니라 aggregate `public_id`를 저장하는 논리 참조다 |
 | `MISSION` | 차량 출동. 현재 위치(latitude/longitude), 배차 시각(`dispatched_at`), ETA, 최근 telemetry 메타데이터와 단계(phase)를 직접 관리한다. `vehicle_id`는 현재 `VEHICLE.public_id`를 논리 참조하고, `target_waypoint_number`는 MQTT 토픽(`robot/cmd/dispatch`)으로 전달할 waypoint 번호를 저장한다 |
 | `VITAL_MEASUREMENT` | 진료 케이스별 최신 생체데이터 1건. 로봇 측정 단계마다 같은 `case_id` row를 partial upsert 하며, 체온/혈압/심박수/SpO2와 측정 시점 ECG sample, `measured_at`, `created_at`, `updated_at`을 함께 관리 |
 
@@ -310,6 +326,7 @@ erDiagram
 | `MISSION.phase` | `CREATED → DISPATCHED → EN_ROUTE → ARRIVED → VERIFYING → CONSULTING → RETURNING → COMPLETED \| FAILED` ※ `INCIDENT`는 임시 상태 (복구 후 이전 단계 복귀) |
 | `VEHICLE.operational_status` | `OPERATIONAL \| OUT_OF_SERVICE \| MAINTENANCE` |
 | `DISPATCH_OUTBOX.status` | `PENDING → PUBLISHED → RETRY_PENDING → COMPLETED` |
+| `BUSINESS_EVENT_OUTBOX.status` | `PENDING → PUBLISHED` |
 | `CONSULTATION_SESSION.status` | `CREATED → READY → IN_PROGRESS → COMPLETED \| FAILED \| ABANDONED` |
 | `CONNECTION_STATE` | `CONNECTED \| RECONNECTING \| DISCONNECTED` |
 | `INTAKE_SESSION.status` | `STARTED → IN_PROGRESS → COMPLETED \| ABANDONED \| FAILED` |
@@ -320,7 +337,7 @@ erDiagram
 
 > **`doctorId` 참조 규칙**: API의 `doctorId`는 `DOCTOR_PROFILE.public_id` 값을 의미한다. 내부 저장은 `doctor_profile_id`(`bigint` PK)를 사용한다. 사용자 식별이 필요할 때는 별도로 `userId`를 사용한다.
 >
-> **이중 ID 전략**: 내부 PK는 `bigint` 자동 증가. 외부 API에는 `public_id`(접두사 + nanoid, 예: `pat_V1StGXR8`)를 노출한다. PK 추론을 방지하고 API 가독성을 높인다.
+> **이중 ID 전략**: 내부 PK는 `bigint` 자동 증가를 사용한다. 외부 API에는 `public_id`를 노출하며, 대부분 접두사 + 생성 ID 패턴을 따르지만 차량처럼 시드/운영 정책에 따라 고정값(`veh_GIMCHEON_01`)이 들어가는 예외도 있다. 따라서 외부 연동은 `public_id` 형식을 엄격한 패턴으로 가정하지 말고 값 자체를 식별자로 취급해야 한다.
 >
 > **PATIENT.phone 정책**: 전화번호는 전역 unique 제약을 적용한다. 1번호=1환자 원칙이며, 가족 공용번호 사용은 허용하지 않는다. 보호자 회원가입 및 전화 예약 식별은 이 컬럼을 기준으로 환자를 찾는다.
 >
@@ -338,15 +355,19 @@ USER    ←1:N→ USER                      (의사/보호자 계정 승인)
 
 PATIENT → INTAKE_SESSION (과 선택·슬롯 스냅샷 포함)    (기본 전화 예약 흐름)
 
+INTAKE_SESSION → BOOKING                                 (현재 DB는 intake_session_id unique를 강제하지 않으므로 1:N 허용)
 PATIENT → BOOKING → CARE_CASE → DISPATCH_OUTBOX → MISSION   (예약 확정 → created mission + 출동 트리거)
-                               → VITAL_MEASUREMENT          (로봇 측정 최신값 저장)
-                               → CONSULTATION_SESSION → CONSULTATION_SUMMARY
+                 └→ BUSINESS_EVENT_OUTBOX                (예약 확정/취소 이벤트 영속화, FK 없는 논리 연결)
+                                → VITAL_MEASUREMENT          (로봇 측정 최신값 저장)
+                                → CONSULTATION_SESSION → CONSULTATION_SUMMARY
 
 VEHICLE → MISSION                                           (권역 차량 배정)
 USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정 흐름)
 ```
 
 > 데모 모드에서는 예약 생성 시 `MISSION(CREATED)`까지 먼저 생성하고, 관리자의 데모 출동 API가 `DISPATCH_OUTBOX`와 `target_waypoint_number`를 사용해 실제 출동 또는 더미 완료를 제어한다.
+
+> 알림 적재는 별도 `notification-service` DB(`waddoc_notification`)에서 수행한다. `core-app`의 `BUSINESS_EVENT_OUTBOX`에 적재된 예약 이벤트가 발행되면 `processed_event`, `notification_log`, `sms_delivery`, `doctor_notification_projection` 같은 알림용 테이블이 채워진다.
 
 > `PATIENT_CONSENT`를 포함한 동의 도메인 ERD는 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
 
@@ -368,5 +389,6 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 | `VEHICLE` | `UNIQUE (region_code)` WHERE `is_active = true` | 동일 권역의 활성 차량 1대 보장 |
 | `DISPATCH_OUTBOX` | `INDEX (status, created_at)` WHERE `status = 'PENDING'` | 최초 배차 relay 스캔 최적화 |
 | `DISPATCH_OUTBOX` | `INDEX (region_code, status, created_at)` WHERE `status = 'RETRY_PENDING'` | 권역별 재배차 스캔 최적화 |
+| `BUSINESS_EVENT_OUTBOX` | `UNIQUE (event_id)`, `INDEX (status, created_at)` | 이벤트 중복 적재 방지 및 relay 스캔 최적화 |
 | `CONSULTATION_SUMMARY` | `UNIQUE (session_id)` | 세션당 요약 1건 보장 |
-| 모든 테이블 `public_id` | `UNIQUE` | 외부 노출 ID 유일성 보장 |
+| `public_id` 보유 테이블 | `UNIQUE` | 외부 노출 ID 유일성 보장 (`dispatch_outbox`, `business_event_outbox`, `vital_measurement`, `consultation_summary` 제외) |
