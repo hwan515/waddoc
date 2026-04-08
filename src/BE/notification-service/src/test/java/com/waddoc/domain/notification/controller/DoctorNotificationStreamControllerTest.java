@@ -11,9 +11,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.server.ResponseStatusException;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,5 +50,17 @@ class DoctorNotificationStreamControllerTest {
 
         verify(notificationJwtAuthService).requireDoctor("Bearer access-token");
         verify(doctorNotificationSseService).subscribeDoctor("usr_doctor");
+    }
+
+    @Test
+    void subscribe_withoutAuthorizationHeader_returnsUnauthorized() throws Exception {
+        when(notificationJwtAuthService.requireDoctor(null))
+                .thenThrow(new ResponseStatusException(UNAUTHORIZED, "Invalid access token"));
+
+        mockMvc.perform(get("/api/v1/doctors/me/notifications/stream")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isUnauthorized());
+
+        verify(notificationJwtAuthService).requireDoctor(null);
     }
 }

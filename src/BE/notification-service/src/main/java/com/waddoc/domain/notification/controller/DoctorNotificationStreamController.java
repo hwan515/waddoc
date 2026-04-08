@@ -23,7 +23,9 @@ public class DoctorNotificationStreamController {
     private final NotificationJwtAuthService notificationJwtAuthService;
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader) {
+    public SseEmitter subscribe(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader
+    ) {
         return doctorNotificationSseService.subscribeDoctor(
                 notificationJwtAuthService.requireDoctor(authorizationHeader).userId()
         );

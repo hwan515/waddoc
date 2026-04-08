@@ -9,6 +9,7 @@
  *   4. 변경된 이미지 서비스만 Docker buildx → DockerHub push
  *   5. docker compose pull/build → up -d
  *      - 변경된 서비스만 교체
+ *      - 운영 앱 이미지는 latest 대신 BUILD_NUMBER 기반 불변 태그를 사용
  *      - core-app 또는 infra 변경 시에만 core-app replica 수를 3개로 보정
  *
  * 필요한 Jenkins Credentials:
@@ -34,7 +35,7 @@ pipeline {
         // 현재 자동 배포 대상 브랜치
         BRANCH = 'dev'
         // DockerHub 이미지 이름
-        DOCKER_IMAGE_BE = 'hwan515/waddoc-backend'
+        DOCKER_IMAGE_CORE_APP = 'hwan515/waddoc-backend'
         DOCKER_IMAGE_EDGE_BFF = 'hwan515/waddoc-edge-bff'
         DOCKER_IMAGE_NOTIFICATION = 'hwan515/waddoc-notification'
         DOCKER_IMAGE_ROBOT_GATEWAY = 'hwan515/waddoc-robot-gateway'
@@ -300,8 +301,7 @@ pipeline {
                                 docker buildx build \
                                   --builder ${BUILDX_BUILDER}-core-app \
                                   --build-arg MODULE_NAME=core-app \
-                                  --tag ${DOCKER_IMAGE_BE}:${BUILD_NUMBER} \
-                                  --tag ${DOCKER_IMAGE_BE}:latest \
+                                  --tag ${DOCKER_IMAGE_CORE_APP}:${BUILD_NUMBER} \
                                   --push .
                             '''
                         }
@@ -321,7 +321,6 @@ pipeline {
                                   --builder ${BUILDX_BUILDER}-edge-bff \
                                   --build-arg MODULE_NAME=edge-bff \
                                   --tag ${DOCKER_IMAGE_EDGE_BFF}:${BUILD_NUMBER} \
-                                  --tag ${DOCKER_IMAGE_EDGE_BFF}:latest \
                                   --push .
                             '''
                         }
@@ -341,7 +340,6 @@ pipeline {
                                   --builder ${BUILDX_BUILDER}-notification-service \
                                   --build-arg MODULE_NAME=notification-service \
                                   --tag ${DOCKER_IMAGE_NOTIFICATION}:${BUILD_NUMBER} \
-                                  --tag ${DOCKER_IMAGE_NOTIFICATION}:latest \
                                   --push .
                             '''
                         }
@@ -361,7 +359,6 @@ pipeline {
                                   --builder ${BUILDX_BUILDER}-robot-gateway \
                                   --build-arg MODULE_NAME=robot-gateway \
                                   --tag ${DOCKER_IMAGE_ROBOT_GATEWAY}:${BUILD_NUMBER} \
-                                  --tag ${DOCKER_IMAGE_ROBOT_GATEWAY}:latest \
                                   --push .
                             '''
                         }
@@ -382,7 +379,6 @@ pipeline {
                                   --builder ${BUILDX_BUILDER}-fe \
                                   --build-arg VITE_API_URL=/api \
                                   --tag ${DOCKER_IMAGE_FE}:${BUILD_NUMBER} \
-                                  --tag ${DOCKER_IMAGE_FE}:latest \
                                   --push .
                             '''
                         }
@@ -404,7 +400,6 @@ pipeline {
                                   --build-arg VITE_API_BASE_URL=/api/v1 \
                                   --build-arg VITE_BASE_PATH=/phone/ \
                                   --tag ${DOCKER_IMAGE_FP}:${BUILD_NUMBER} \
-                                  --tag ${DOCKER_IMAGE_FP}:latest \
                                   --push .
                             '''
                         }
@@ -434,8 +429,21 @@ pipeline {
                             returnStdout: true
                     ).trim()
 
-                    // 변경되지 않은 서비스는 현재 떠 있는 컨테이너의 이미지 태그를 그대로 사용
-                    def resolveRunningTag = { service, fallback ->
+                    // 변경되지 않은 서비스는 현재 컨테이너 또는 prod.env에 고정된 불변 태그를 그대로 사용한다.
+                    def resolveConfiguredTag = { tagKey ->
+                        def configuredTag = sh(
+                                script: """
+                                    if [ -f ${PROD_ENV_FILE} ]; then
+                                      grep -E '^${tagKey}=' ${PROD_ENV_FILE} | tail -n 1 | cut -d= -f2- || true
+                                    fi
+                                """,
+                                returnStdout: true
+                        ).trim()
+
+                        return configuredTag
+                    }
+
+                    def resolveRunningTag = { service, tagKey ->
                         def imageRef = sh(
                             script: """
                                 cd ${PROJECT_PATH}/infra
@@ -448,26 +456,38 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                        if (!imageRef || imageRef.contains('@')) return fallback
+                        if (!imageRef || imageRef.contains('@')) {
+                            def configuredTag = resolveConfiguredTag(tagKey)
+                            if (configuredTag) {
+                                return configuredTag
+                            }
+                            error("Unable to resolve image tag for unchanged service '${service}'. Set ${tagKey} in ${PROD_ENV_FILE} or redeploy the service.")
+                        }
                         int colon = imageRef.lastIndexOf(':')
                         int slash = imageRef.lastIndexOf('/')
-                        if (colon <= slash) return fallback
+                        if (colon <= slash) {
+                            def configuredTag = resolveConfiguredTag(tagKey)
+                            if (configuredTag) {
+                                return configuredTag
+                            }
+                            error("Unable to parse image tag for unchanged service '${service}'. Set ${tagKey} in ${PROD_ENV_FILE} or redeploy the service.")
+                        }
                         return imageRef.substring(colon + 1)
                     }
 
-                    def coreAppTag = (env.CORE_APP_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('core-app', 'latest')
-                    def edgeBffTag = (env.EDGE_BFF_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('edge-bff', 'latest')
-                    def notificationTag = (env.NOTIFICATION_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('notification-service', 'latest')
-                    def robotGatewayTag = (env.ROBOT_GATEWAY_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('robot-gateway', 'latest')
-                    def feTag = (env.FE_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('frontend', 'latest')
-                    def fpTag = (env.FP_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('frontend-phone', 'latest')
+                    def coreAppTag = (env.CORE_APP_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('core-app', 'CORE_APP_IMAGE_TAG')
+                    def edgeBffTag = (env.EDGE_BFF_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('edge-bff', 'EDGE_BFF_IMAGE_TAG')
+                    def notificationTag = (env.NOTIFICATION_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('notification-service', 'NOTIFICATION_IMAGE_TAG')
+                    def robotGatewayTag = (env.ROBOT_GATEWAY_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('robot-gateway', 'ROBOT_GATEWAY_IMAGE_TAG')
+                    def feTag = (env.FE_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('frontend', 'FE_IMAGE_TAG')
+                    def fpTag = (env.FP_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('frontend-phone', 'FP_IMAGE_TAG')
 
-                    // 부분 배포 시 변경되지 않은 서비스가 latest로 덮어써지지 않도록 현재 태그를 그대로 유지한다.
+                    // 부분 배포 시 변경되지 않은 서비스가 latest로 덮어써지지 않도록 현재 불변 태그를 그대로 유지한다.
                     echo "Deploy image tags -> core-app: ${coreAppTag}, edge-bff: ${edgeBffTag}, notification: ${notificationTag}, robot-gateway: ${robotGatewayTag}, frontend: ${feTag}, phone: ${fpTag}"
 
                     // compose가 새 이미지 태그를 사용하도록 환경변수로 주입
                     withEnv([
-                        "BE_IMAGE_TAG=${coreAppTag}",
+                        "CORE_APP_IMAGE_TAG=${coreAppTag}",
                         "EDGE_BFF_IMAGE_TAG=${edgeBffTag}",
                         "NOTIFICATION_IMAGE_TAG=${notificationTag}",
                         "ROBOT_GATEWAY_IMAGE_TAG=${robotGatewayTag}",

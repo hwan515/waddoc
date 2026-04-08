@@ -238,7 +238,7 @@ services:
     image: ${DOCKER_IMAGE_EDGE_BFF}:${EDGE_BFF_IMAGE_TAG}
 
   core-app:
-    image: ${DOCKER_IMAGE_BE}:${BE_IMAGE_TAG}
+    image: ${DOCKER_IMAGE_CORE_APP}:${CORE_APP_IMAGE_TAG}
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis
@@ -436,7 +436,7 @@ services:
       - "3001"
 
   core-app:
-    image: ${DOCKER_IMAGE_BE:-hwan515/waddoc-backend}:${BE_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_CORE_APP:-hwan515/waddoc-backend}:${CORE_APP_IMAGE_TAG:-latest}
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis

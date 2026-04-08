@@ -27,7 +27,7 @@ services:
 
   # === Frontend (Web) — 의사/관리자용 웹 앱 ===
   frontend:
-    image: ${DOCKER_IMAGE_FE:-hwan515/waddoc-frontend}:${FE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_FE:-hwan515/waddoc-frontend}:${FE_IMAGE_TAG:?FE_IMAGE_TAG is required} # 운영 앱 이미지는 latest 대신 불변 태그를 사용한다.
     expose:
       - "3000"
     environment:
@@ -58,7 +58,7 @@ services:
 
   # === Frontend (Phone) — 환자용 모바일 웹 앱 ===
   frontend-phone:
-    image: ${DOCKER_IMAGE_FP:-hwan515/waddoc-phone}:${FP_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_FP:-hwan515/waddoc-phone}:${FP_IMAGE_TAG:?FP_IMAGE_TAG is required} # 운영 앱 이미지는 latest 대신 불변 태그를 사용한다.
     expose:
       - "3001"
     restart: unless-stopped
@@ -67,7 +67,7 @@ services:
 
   # === Backend (Spring Boot) ===
   edge-bff:
-    image: ${DOCKER_IMAGE_EDGE_BFF:-hwan515/waddoc-edge-bff}:${EDGE_BFF_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_EDGE_BFF:-hwan515/waddoc-edge-bff}:${EDGE_BFF_IMAGE_TAG:?EDGE_BFF_IMAGE_TAG is required}
     expose:
       - "8080"
     environment:
@@ -80,12 +80,18 @@ services:
       - core-app
       - notification-service
       - robot-gateway
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
     networks:
       - waddoc-net
 
   core-app:
-    image: ${DOCKER_IMAGE_BE:-hwan515/waddoc-backend}:${BE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_CORE_APP:-hwan515/waddoc-backend}:${CORE_APP_IMAGE_TAG:?CORE_APP_IMAGE_TAG is required} # 운영 앱 이미지는 latest 대신 불변 태그를 사용한다.
     expose:
       - "8080"
     extra_hosts:
@@ -125,12 +131,18 @@ services:
       - postgres
       - redis
       - kafka
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
     networks:
       - waddoc-net
 
   notification-service:
-    image: ${DOCKER_IMAGE_NOTIFICATION:-hwan515/waddoc-notification}:${NOTIFICATION_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_NOTIFICATION:-hwan515/waddoc-notification}:${NOTIFICATION_IMAGE_TAG:?NOTIFICATION_IMAGE_TAG is required}
     expose:
       - "8080"
     environment:
@@ -151,12 +163,18 @@ services:
       - notification-postgres
       - notification-redis
       - kafka
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
     networks:
       - waddoc-net
 
   robot-gateway:
-    image: ${DOCKER_IMAGE_ROBOT_GATEWAY:-hwan515/waddoc-robot-gateway}:${ROBOT_GATEWAY_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_ROBOT_GATEWAY:-hwan515/waddoc-robot-gateway}:${ROBOT_GATEWAY_IMAGE_TAG:?ROBOT_GATEWAY_IMAGE_TAG is required}
     expose:
       - "8080"
     environment:
@@ -172,6 +190,12 @@ services:
       - robot-redis
       - kafka
       - mosquitto
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -189,6 +213,12 @@ services:
       - "127.0.0.1:5432:5432" # SSH 터널용(운영 DB 접속)
     expose:
       - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -203,6 +233,12 @@ services:
       - notification_pg_data:/var/lib/postgresql/data
     expose:
       - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-waddoc} -d waddoc_notification"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -216,6 +252,12 @@ services:
       - redis_data:/data
     expose:
       - "6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${CORE_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -227,6 +269,12 @@ services:
       - notification_redis_data:/data
     expose:
       - "6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${NOTIFICATION_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - waddoc-net
@@ -238,6 +286,12 @@ services:
       - robot_redis_data:/data
     expose:
       - "6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${ROBOT_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - waddoc-net
