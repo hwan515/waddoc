@@ -8,9 +8,9 @@
 
 현재 구조는 모든 요청을 Spring Boot와 DB가 동기 처리하는 형태가 아니다. 구현 기준으로 보면 아래와 같이 역할이 분리되어 있다.
 
-- `Spring Boot`는 인증, 업무 규칙, 상태 전이 같은 제어 plane을 담당한다.
+- `Spring Boot` 런타임들은 `core-app`, `edge-bff`, `notification-service`, `robot-gateway`로 역할을 나눠 인증, 업무 규칙, 상태 전이 같은 제어 plane을 담당한다.
 - `Kafka`는 배차, SMS, 의사 알림, 텔레메트리 같은 burst 성격의 이벤트를 완충하는 비동기 버퍼 역할을 한다.
-- `Redis`는 refresh token, disconnect timer, webhook idempotency, 본인 확인 TTL 상태처럼 "공유가 필요하지만 영속 DB까지는 필요 없는 상태"를 저장한다.
+- `Redis`는 단일 공유 캐시가 아니라 서비스 소유 저장소로 나뉘어, refresh token, disconnect timer, webhook idempotency, 본인 확인 TTL 상태, SSE fan-out, 로봇 상태 snapshot처럼 "공유가 필요하지만 영속 DB까지는 필요 없는 상태"를 저장한다.
 - `LiveKit`는 화상 진료의 미디어 plane을 분리해서 Spring 애플리케이션이 영상/음성 트래픽을 직접 처리하지 않게 한다.
 - `AI-IDV 서버`는 OCR, 얼굴 인식 같은 GPU/CPU 집중 워크로드를 별도 프로세스로 격리한다.
 
@@ -94,28 +94,33 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 
 즉, SSE 연결 자체는 각 인스턴스 로컬 메모리에 있지만, 이벤트 fan-out은 Redis Pub/Sub로 공유되므로 다중 인스턴스 환경에서도 특정 인스턴스에 붙은 의사 브라우저에게 알림을 전달할 수 있다.
 
-### 2.4 텔레메트리 burst는 202 Accepted + Kafka buffer로 완충
+### 2.4 텔레메트리 burst는 202 Accepted, Kafka buffer, gateway 정규화 이벤트로 완충
 
-차량/미션 텔레메트리 수집 API는 요청을 즉시 DB에 반영하지 않는다. API 진입점에서 API Key만 검증하고 Kafka에 넣은 뒤 `202 Accepted`를 반환한다.
+현재 코드 기준 텔레메트리 경로는 두 갈래다. 하나는 차량/미션 텔레메트리 수집 API가 `mission.telemetry`로 넘기는 직접 수집 경로이고, 다른 하나는 `robot-gateway`가 MQTT를 수신해 `robot.telemetry.v1`로 정규화하는 분리 서비스 경로다.
 
 - 근거 코드
   - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/controller/MissionTelemetryController.java`
   - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/MissionTelemetryConsumer.java`
   - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/MissionTelemetryService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/RobotTelemetryConsumer.java`
   - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/entity/Mission.java`
+  - `src/BE/robot-gateway/src/main/java/com/waddoc/domain/robot/service/RobotMqttSubscriber.java`
+  - `src/BE/shared-kernel/src/main/java/com/waddoc/shared/event/payload/RobotTelemetryEventPayload.java`
   - `src/BE/core-app/src/main/resources/db/migration/V16__add_mission_telemetry_tracking_columns.sql`
 
 구현상 트래픽 대응 포인트는 다음과 같다.
 
-- HTTP 수집 API는 빠르게 `202`를 반환하고, 실제 처리 부담은 Kafka consumer로 넘긴다.
-- `sourceEventId`, `seqNo`, `timestamp`를 이용해 중복 이벤트와 역순 이벤트를 버린다.
-- 최신 위치와 phase만 mission 엔티티에 반영하고, 이전 텔레메트리 전체를 별도 적재하지 않는다.
+- HTTP 수집 API는 빠르게 `202`를 반환하고, 실제 처리 부담은 `mission.telemetry` consumer로 넘긴다.
+- `robot-gateway`는 MQTT broker의 유일한 owner로서 로봇 topic을 받아 Redis/SSE에 반영하고, 이를 `robot.telemetry.v1` Kafka 이벤트로 정규화해 다시 발행한다.
+- `core-app`의 mission 모듈은 더 이상 MQTT를 직접 해석하지 않고, gateway가 만든 `robot.telemetry.v1` contract만 소비해 위치/단계를 갱신한다.
+- 직접 수집 경로에서는 `sourceEventId`, `seqNo`, `timestamp`를 이용해 중복 이벤트와 역순 이벤트를 버린다.
+- 두 경로 모두 최신 위치와 phase 중심으로 반영하며, 이전 텔레메트리 전체를 별도 적재하지 않는다.
 
-이 구조는 텔레메트리 burst가 들어와도 API thread가 DB update에 오래 묶이지 않게 만들고, 순서 뒤섞임과 중복 수신을 애플리케이션 레벨에서 흡수한다.
+이 구조는 텔레메트리 burst가 들어와도 API thread가 DB update에 오래 묶이지 않게 만들고, MQTT transport 소유권을 `robot-gateway`에 몰아두면서도 mission 반영은 Kafka contract로 느슨하게 연결되도록 한다.
 
 ### 2.4.1 현재 Kafka 이벤트 메시지 구조
 
-문서상 자주 언급되는 Kafka 이벤트는 모두 Spring Kafka의 JSON 직렬화를 사용하며, 현재 구현 기준 대표 payload 구조는 아래와 같다.
+문서상 자주 언급되는 Kafka 이벤트는 모두 Spring Kafka의 JSON 직렬화를 사용하며, 현재 구현 기준 대표 payload 구조는 아래와 같다. 텔레메트리는 직접 수집 경로와 `robot-gateway` 정규화 경로가 함께 존재한다.
 
 #### `DispatchRequestMessage`
 
@@ -158,6 +163,21 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
   - `heading`: 수집 시점 방위각
   - `timestamp`: 이벤트 발생 시각
   - `metadata`: 확장용 부가 정보 맵
+
+#### `RobotTelemetryEventPayload`
+
+- topic: `robot.telemetry.v1`
+- key: `vehicleId`가 있으면 `vehicleId`, 없으면 `sourceTopic`
+- top-level fields
+  - `eventId`, `eventType`, `occurredAt`, `producer`, `aggregateId`, `correlationId`: 공통 `EventEnvelope` 메타데이터
+  - `payload`: 실제 정규화 텔레메트리 payload
+- `payload` fields
+  - `sourceTopic`: 원본 MQTT topic
+  - `sourceEventId`: gateway가 부여한 원본 이벤트 식별자
+  - `occurredAt`: gateway 수신 시각
+  - `missionId`: 로봇 payload에서 추출한 미션 ID, 없으면 `null`
+  - `vehicleId`: 로봇 payload에서 추출한 차량 ID, 없으면 `null`
+  - `snapshot`: 원본 로봇 telemetry JSON snapshot
 
 즉, 현재 이벤트 메시지는 "큰 엔티티 전체를 싣는 구조"가 아니라, consumer가 필요한 식별자와 처리 필드만 담는 비교적 얇은 DTO 중심 구조다.
 
