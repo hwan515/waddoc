@@ -124,6 +124,7 @@ pipeline {
                         def notificationChanged = changedFiles.any { it.startsWith('src/BE/notification-service/') }
                         def robotGatewayChanged = changedFiles.any { it.startsWith('src/BE/robot-gateway/') }
 
+                        env.SHARED_KERNEL_CHANGED = backendSharedChanged ? 'true' : 'false'
                         env.CORE_APP_CHANGED = (backendSharedChanged || coreAppChanged) ? 'true' : 'false'
                         env.EDGE_BFF_CHANGED = (backendSharedChanged || edgeBffChanged) ? 'true' : 'false'
                         env.NOTIFICATION_CHANGED = (backendSharedChanged || notificationChanged) ? 'true' : 'false'
@@ -164,20 +165,82 @@ pipeline {
             }
         }
 
-        // 백엔드 변경 시 테스트 실행 (병렬 확장 가능)
+        // 백엔드 품질 검사는 같은 워크스페이스의 Gradle 충돌을 피하기 위해 모듈별로 순차 실행한다.
         stage('Quality Gate') {
             parallel {
-                stage('BE Test') {
+                stage('Backend Quality Gate') {
                     when { expression { env.BE_CHANGED == 'true' } }
-                    steps {
-                        echo '=== Running Backend Tests ==='
-                        withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
-                            sh '''
-                                # 통합 테스트는 외부 인프라 의존도가 높아 CI 기본 경로에서는 제외한다.
-                                cd ${PROJECT_PATH}/src/BE && \
-                                chmod +x ./gradlew && \
-                                ./gradlew test --no-daemon -PskipIntegrationTests=true
-                            '''
+                    stages {
+                        stage('Shared Kernel Test') {
+                            when { expression { env.SHARED_KERNEL_CHANGED == 'true' } }
+                            steps {
+                                echo '=== Running Shared Kernel Tests ==='
+                                withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
+                                    sh '''
+                                        # 공통 Gradle 설정이나 shared-kernel 변경이 있으면 먼저 공통 모듈 테스트를 확인한다.
+                                        cd ${PROJECT_PATH}/src/BE && \
+                                        chmod +x ./gradlew && \
+                                        ./gradlew :shared-kernel:test --no-daemon -PskipIntegrationTests=true
+                                    '''
+                                }
+                            }
+                        }
+
+                        stage('Core App Test') {
+                            when { expression { env.CORE_APP_CHANGED == 'true' } }
+                            steps {
+                                echo '=== Running Core App Tests ==='
+                                withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
+                                    sh '''
+                                        # 통합 테스트는 외부 인프라 의존도가 높아 CI 기본 경로에서는 제외한다.
+                                        cd ${PROJECT_PATH}/src/BE && \
+                                        chmod +x ./gradlew && \
+                                        ./gradlew :core-app:test --no-daemon -PskipIntegrationTests=true
+                                    '''
+                                }
+                            }
+                        }
+
+                        stage('Edge BFF Test') {
+                            when { expression { env.EDGE_BFF_CHANGED == 'true' } }
+                            steps {
+                                echo '=== Running Edge BFF Tests ==='
+                                withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
+                                    sh '''
+                                        cd ${PROJECT_PATH}/src/BE && \
+                                        chmod +x ./gradlew && \
+                                        ./gradlew :edge-bff:test --no-daemon -PskipIntegrationTests=true
+                                    '''
+                                }
+                            }
+                        }
+
+                        stage('Notification Service Test') {
+                            when { expression { env.NOTIFICATION_CHANGED == 'true' } }
+                            steps {
+                                echo '=== Running Notification Service Tests ==='
+                                withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
+                                    sh '''
+                                        cd ${PROJECT_PATH}/src/BE && \
+                                        chmod +x ./gradlew && \
+                                        ./gradlew :notification-service:test --no-daemon -PskipIntegrationTests=true
+                                    '''
+                                }
+                            }
+                        }
+
+                        stage('Robot Gateway Test') {
+                            when { expression { env.ROBOT_GATEWAY_CHANGED == 'true' } }
+                            steps {
+                                echo '=== Running Robot Gateway Tests ==='
+                                withEnv(['APP_SEED_DEFAULT_PASSWORD=ci-seed-password']) {
+                                    sh '''
+                                        cd ${PROJECT_PATH}/src/BE && \
+                                        chmod +x ./gradlew && \
+                                        ./gradlew :robot-gateway:test --no-daemon -PskipIntegrationTests=true
+                                    '''
+                                }
+                            }
                         }
                     }
                 }
