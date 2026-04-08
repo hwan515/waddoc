@@ -1,16 +1,16 @@
 # 대용량 트래픽 처리 설계 문서
 
-- 작성 기준: 2026-03-23 저장소 스냅샷
-- 범위: `src/BE`, `infra`, `src/AI-IDV`
+- 작성 기준: 2026-04-08 저장소 스냅샷
+- 범위: `src/BE/core-app`, `src/BE/edge-bff`, `src/BE/notification-service`, `src/BE/robot-gateway`, `infra`, `src/AI-IDV`
 - 관점: "현재 코드가 트래픽을 어떻게 흡수하고, 어떤 부하를 어디로 분산시키는가"
 
 ## 1. 결론
 
 현재 구조는 모든 요청을 Spring Boot와 DB가 동기 처리하는 형태가 아니다. 구현 기준으로 보면 아래와 같이 역할이 분리되어 있다.
 
-- `Spring Boot`는 인증, 업무 규칙, 상태 전이 같은 제어 plane을 담당한다.
+- `Spring Boot` 런타임들은 `core-app`, `edge-bff`, `notification-service`, `robot-gateway`로 역할을 나눠 인증, 업무 규칙, 상태 전이 같은 제어 plane을 담당한다.
 - `Kafka`는 배차, SMS, 의사 알림, 텔레메트리 같은 burst 성격의 이벤트를 완충하는 비동기 버퍼 역할을 한다.
-- `Redis`는 refresh token, disconnect timer, webhook idempotency, 본인 확인 TTL 상태처럼 "공유가 필요하지만 영속 DB까지는 필요 없는 상태"를 저장한다.
+- `Redis`는 단일 공유 캐시가 아니라 서비스 소유 저장소로 나뉘어, refresh token, disconnect timer, webhook idempotency, 본인 확인 TTL 상태, SSE fan-out, 로봇 상태 snapshot처럼 "공유가 필요하지만 영속 DB까지는 필요 없는 상태"를 저장한다.
 - `LiveKit`는 화상 진료의 미디어 plane을 분리해서 Spring 애플리케이션이 영상/음성 트래픽을 직접 처리하지 않게 한다.
 - `AI-IDV 서버`는 OCR, 얼굴 인식 같은 GPU/CPU 집중 워크로드를 별도 프로세스로 격리한다.
 
@@ -22,18 +22,19 @@
 
 ### 2.1 예약 생성과 배차는 Outbox + Kafka로 분리
 
-예약 생성 시 `BookingService`는 `booking`, `care_case`, `dispatch_outbox`를 한 트랜잭션 안에서 먼저 저장한다. 배차 요청을 바로 외부로 보내지 않고 DB outbox에 적재한 뒤 별도 relay가 Kafka로 전송한다.
+예약 생성 시 `BookingService`는 `booking`, `care_case`, `dispatch_outbox`를 한 트랜잭션 안에서 먼저 저장하고, 분리 서비스로 전달할 알림 이벤트는 `business_event_outbox`에 적재한다. 배차 요청과 business event는 모두 별도 relay가 Kafka로 전송한다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/domain/booking/service/BookingService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/dispatch/service/DispatchOutboxRelay.java`
-  - `src/BE/src/main/java/com/waddoc/domain/dispatch/service/DispatchConsumer.java`
-  - `src/BE/src/main/resources/db/migration/V20__create_dispatch_outbox_table.sql`
-  - `src/BE/src/main/resources/db/migration/V21__add_dispatch_outbox_retry_pending_index.sql`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/booking/service/BookingService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/shared/event/BusinessEventOutboxRelay.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/dispatch/service/DispatchOutboxRelay.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/dispatch/service/DispatchConsumer.java`
+  - `src/BE/core-app/src/main/resources/db/migration/V20__create_dispatch_outbox_table.sql`
+  - `src/BE/core-app/src/main/resources/db/migration/V21__add_dispatch_outbox_retry_pending_index.sql`
 
 핵심 포인트는 다음과 같다.
 
-- 예약 확정과 배차 이벤트 발행을 직접 묶지 않고 `dispatch_outbox` 테이블로 느슨하게 연결한다.
+- 예약 확정과 분리 서비스용 이벤트 발행을 직접 묶지 않고 `dispatch_outbox`, `business_event_outbox`로 느슨하게 연결한다.
 - relay는 1초마다 polling 하되, `RedisDistributedLock`으로 락을 잡은 인스턴스만 relay를 수행한다.
 - Kafka publish는 `.get()`으로 broker ack를 받은 뒤에만 `PUBLISHED`로 바꾼다.
 - 실제 배차 소비자는 `COMPLETED` 여부, 케이스 취소 여부, 기존 mission 존재 여부를 다시 확인해서 멱등하게 종료한다.
@@ -43,77 +44,83 @@
 
 ### 2.2 외부 부작용은 트랜잭션 커밋 이후 Kafka로 넘김
 
-SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외부 I/O를 호출하지 않는다. `afterCommit`에서 Kafka 메시지를 발행하고, 실제 발송/전달은 consumer가 담당한다.
+SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외부 I/O를 호출하지 않는다. `core-app`은 `booking.confirmed.v1`, `booking.cancelled.v1`, `dispatch.assigned.v1`, `dispatch.delayed.v1`를 `business_event_outbox`에 적재하고, 실제 발송/전달은 `notification-service` consumer가 담당한다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/domain/booking/service/BookingService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/notification/service/SmsConsumer.java`
-  - `src/BE/src/main/java/com/waddoc/global/config/KafkaConfig.java`
-  - `src/BE/src/main/resources/application.yml`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/booking/service/BookingService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/shared/event/BusinessEventOutboxRelay.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationConsumer.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/service/SmsConsumer.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/config/KafkaConfig.java`
 
 구현상 특징은 다음과 같다.
 
-- 예약 트랜잭션이 커밋된 뒤에만 SMS와 의사 알림을 발행한다.
-- Kafka consumer는 `enable-auto-commit: false`, `ack-mode: record`로 동작해서 실패 레코드만 재처리할 수 있다.
-- SMS는 재시도 후에도 실패하면 DLT(`sms.requests.DLT`)로 보내서 본 업무 흐름과 분리한다.
+- 예약 트랜잭션이 커밋되기 전에는 외부 SMS/SSE publish를 하지 않는다.
+- 예약 확정 이벤트는 `DoctorNotificationConsumer`가 받아 의사 projection 저장, Redis Pub/Sub fan-out, 환자 예약 확인 SMS까지 한 번에 처리한다.
+- 예약 취소/배차 완료/배차 지연 이벤트는 `SmsConsumer`가 받아 환자 SMS를 처리한다.
+- Kafka consumer는 `enable-auto-commit: false`, `ack-mode: record`, `DefaultErrorHandler(FixedBackOff(1000ms, 2))`로 동작한다.
 
 이 방식은 외부 SMS 벤더 지연이나 실패가 사용자 요청 경로를 직접 막지 않게 해 준다.
 
-#### 2.2.1 SMS DLT 에러 핸들링 상세
+#### 2.2.1 Notification consumer retry 상세
 
-`KafkaConfig` 기준으로 SMS consumer의 실패 처리는 일반 listener와 분리해서 구성돼 있다.
+`notification-service`의 `KafkaConfig` 기준으로 consumer 실패 처리는 공통 `DefaultErrorHandler`로 구성돼 있다.
 
-- `smsKafkaListenerContainerFactory`가 SMS 전용 `DefaultErrorHandler`를 사용한다.
+- `kafkaListenerContainerFactory`가 공통 `DefaultErrorHandler`를 사용한다.
 - 에러 핸들러는 `FixedBackOff(1000ms, 2)`로 설정돼 있어, 최초 처리 실패 후 1초 간격으로 2회 재시도한다.
-- 2회 재시도 후에도 실패하면 `DeadLetterPublishingRecoverer`가 메시지를 `sms.requests.DLT` 토픽의 `0`번 partition으로 보낸다.
-- `errorHandler.setCommitRecovered(true)`가 설정돼 있으므로 DLT로 넘긴 레코드는 recover 처리 후 offset을 commit한다.
+- 현재는 별도 DLT 토픽을 사용하지 않고, consumer retry와 idempotency 테이블(`processed_event`) 조합으로 중복/재처리를 제어한다.
 
-즉, SMS는 "업무 트랜잭션과 분리된 비동기 처리"일 뿐 아니라, "짧은 재시도 후 DLT 격리"까지 포함한 실패 관리 경로를 갖고 있다.
+즉, SMS와 의사 알림은 "업무 트랜잭션과 분리된 비동기 처리"이며, "짧은 재시도 + idempotency"를 기본 실패 관리 경로로 갖고 있다.
 
 ### 2.3 의사 실시간 알림은 Kafka -> Redis Pub/Sub -> SSE fan-out
 
 의사 알림은 단순 SSE 단일 서버 구조가 아니라, Kafka와 Redis Pub/Sub를 사이에 둔 다단 fan-out 구조다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationConsumer.java`
-  - `src/BE/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationRedisPublisher.java`
-  - `src/BE/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationRedisSubscriber.java`
-  - `src/BE/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationSseService.java`
-  - `src/BE/src/main/java/com/waddoc/global/config/RedisConfig.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationConsumer.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationRedisPublisher.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationRedisSubscriber.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/service/DoctorNotificationSseService.java`
+  - `src/BE/notification-service/src/main/java/com/waddoc/domain/notification/config/RedisConfig.java`
   - `infra/nginx/prod.conf`
 
 동작 방식은 다음과 같다.
 
-- 예약 알림 이벤트는 Kafka 토픽 `doctor.notifications`로 들어간다.
+- 예약 알림 이벤트는 Kafka 토픽 `booking.confirmed.v1`로 들어간다.
 - consumer는 이를 Redis Pub/Sub 채널 `doctor:notifications`에 publish 한다.
-- 각 Spring 인스턴스는 Redis subscriber로 메시지를 받고, 자기 JVM 안에 열려 있는 SSE 연결이 있으면 그 연결에만 전달한다.
+- 각 `notification-service` 인스턴스는 Redis subscriber로 메시지를 받고, 자기 JVM 안에 열려 있는 SSE 연결이 있으면 그 연결에만 전달한다.
 - SSE 연결은 `ConcurrentHashMap`으로 인메모리 관리되며, heartbeat를 주기적으로 보내 끊어진 연결을 정리한다.
 - Nginx는 해당 SSE endpoint에 대해 `proxy_buffering off`, 긴 read timeout, `X-Accel-Buffering no`를 설정해 스트림이 중간에 막히지 않도록 했다.
 
 즉, SSE 연결 자체는 각 인스턴스 로컬 메모리에 있지만, 이벤트 fan-out은 Redis Pub/Sub로 공유되므로 다중 인스턴스 환경에서도 특정 인스턴스에 붙은 의사 브라우저에게 알림을 전달할 수 있다.
 
-### 2.4 텔레메트리 burst는 202 Accepted + Kafka buffer로 완충
+### 2.4 텔레메트리 burst는 202 Accepted, Kafka buffer, gateway 정규화 이벤트로 완충
 
-차량/미션 텔레메트리 수집 API는 요청을 즉시 DB에 반영하지 않는다. API 진입점에서 API Key만 검증하고 Kafka에 넣은 뒤 `202 Accepted`를 반환한다.
+현재 코드 기준 텔레메트리 경로는 두 갈래다. 하나는 차량/미션 텔레메트리 수집 API가 `mission.telemetry`로 넘기는 직접 수집 경로이고, 다른 하나는 `robot-gateway`가 MQTT를 수신해 `robot.telemetry.v1`로 정규화하는 분리 서비스 경로다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/domain/mission/controller/MissionTelemetryController.java`
-  - `src/BE/src/main/java/com/waddoc/domain/mission/service/MissionTelemetryConsumer.java`
-  - `src/BE/src/main/java/com/waddoc/domain/mission/service/MissionTelemetryService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/mission/entity/Mission.java`
-  - `src/BE/src/main/resources/db/migration/V16__add_mission_telemetry_tracking_columns.sql`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/controller/MissionTelemetryController.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/MissionTelemetryConsumer.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/MissionTelemetryService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/RobotTelemetryConsumer.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/entity/Mission.java`
+  - `src/BE/robot-gateway/src/main/java/com/waddoc/domain/robot/service/RobotMqttSubscriber.java`
+  - `src/BE/shared-kernel/src/main/java/com/waddoc/shared/event/payload/RobotTelemetryEventPayload.java`
+  - `src/BE/core-app/src/main/resources/db/migration/V16__add_mission_telemetry_tracking_columns.sql`
 
 구현상 트래픽 대응 포인트는 다음과 같다.
 
-- HTTP 수집 API는 빠르게 `202`를 반환하고, 실제 처리 부담은 Kafka consumer로 넘긴다.
-- `sourceEventId`, `seqNo`, `timestamp`를 이용해 중복 이벤트와 역순 이벤트를 버린다.
-- 최신 위치와 phase만 mission 엔티티에 반영하고, 이전 텔레메트리 전체를 별도 적재하지 않는다.
+- HTTP 수집 API는 빠르게 `202`를 반환하고, 실제 처리 부담은 `mission.telemetry` consumer로 넘긴다.
+- `robot-gateway`는 MQTT broker의 유일한 owner로서 로봇 topic을 받아 Redis/SSE에 반영하고, 이를 `robot.telemetry.v1` Kafka 이벤트로 정규화해 다시 발행한다.
+- `core-app`의 mission 모듈은 더 이상 MQTT를 직접 해석하지 않고, gateway가 만든 `robot.telemetry.v1` contract만 소비해 위치/단계를 갱신한다.
+- 직접 수집 경로에서는 `sourceEventId`, `seqNo`, `timestamp`를 이용해 중복 이벤트와 역순 이벤트를 버린다.
+- 두 경로 모두 최신 위치와 phase 중심으로 반영하며, 이전 텔레메트리 전체를 별도 적재하지 않는다.
 
-이 구조는 텔레메트리 burst가 들어와도 API thread가 DB update에 오래 묶이지 않게 만들고, 순서 뒤섞임과 중복 수신을 애플리케이션 레벨에서 흡수한다.
+이 구조는 텔레메트리 burst가 들어와도 API thread가 DB update에 오래 묶이지 않게 만들고, MQTT transport 소유권을 `robot-gateway`에 몰아두면서도 mission 반영은 Kafka contract로 느슨하게 연결되도록 한다.
 
 ### 2.4.1 현재 Kafka 이벤트 메시지 구조
 
-문서상 자주 언급되는 Kafka 이벤트는 모두 Spring Kafka의 JSON 직렬화를 사용하며, 현재 구현 기준 대표 payload 구조는 아래와 같다.
+문서상 자주 언급되는 Kafka 이벤트는 모두 Spring Kafka의 JSON 직렬화를 사용하며, 현재 구현 기준 대표 payload 구조는 아래와 같다. 텔레메트리는 직접 수집 경로와 `robot-gateway` 정규화 경로가 함께 존재한다.
 
 #### `DispatchRequestMessage`
 
@@ -124,14 +131,19 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
   - `regionCode`: 차량 탐색 및 retry fan-out 기준이 되는 권역 코드
   - `destination`: 환자 목적지 주소
 
-#### `SmsRequestMessage`
+#### `BookingConfirmedEventPayload`
 
-- topic: `sms.requests`
-- key: 없음
+- topic: `booking.confirmed.v1`
+- key: `bookingId`
 - fields
-  - `recipientPhone`: SMS 수신 번호
-  - `message`: 실제 발송 본문
-  - `correlationId`: 감사 로그/실패 추적용 상관관계 ID
+  - `bookingId`: 예약 `public_id`
+  - `careCaseId`: 연동된 케이스 `public_id`
+  - `patientId`: 환자 `public_id`
+  - `doctorId`: 의사 `public_id`
+  - `doctorUserId`: SSE owner 판단용 의사 user ID
+  - `recipientPhone`: 예약 확인 SMS 수신 번호
+  - `appointmentDateTime`: 예약 일시
+  - `departmentName`: 진료과 이름
 
 #### `TelemetryMessage`
 
@@ -152,6 +164,21 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
   - `timestamp`: 이벤트 발생 시각
   - `metadata`: 확장용 부가 정보 맵
 
+#### `RobotTelemetryEventPayload`
+
+- topic: `robot.telemetry.v1`
+- key: `vehicleId`가 있으면 `vehicleId`, 없으면 `sourceTopic`
+- top-level fields
+  - `eventId`, `eventType`, `occurredAt`, `producer`, `aggregateId`, `correlationId`: 공통 `EventEnvelope` 메타데이터
+  - `payload`: 실제 정규화 텔레메트리 payload
+- `payload` fields
+  - `sourceTopic`: 원본 MQTT topic
+  - `sourceEventId`: gateway가 부여한 원본 이벤트 식별자
+  - `occurredAt`: gateway 수신 시각
+  - `missionId`: 로봇 payload에서 추출한 미션 ID, 없으면 `null`
+  - `vehicleId`: 로봇 payload에서 추출한 차량 ID, 없으면 `null`
+  - `snapshot`: 원본 로봇 telemetry JSON snapshot
+
 즉, 현재 이벤트 메시지는 "큰 엔티티 전체를 싣는 구조"가 아니라, consumer가 필요한 식별자와 처리 필드만 담는 비교적 얇은 DTO 중심 구조다.
 
 ### 2.5 화상 진료는 LiveKit으로 미디어 plane을 분리
@@ -159,8 +186,8 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 영상/음성 자체는 Spring 서버가 직접 중계하지 않는다. Spring은 room 생성과 participant token 발급, webhook 처리만 담당하고 실제 미디어는 LiveKit이 처리한다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/service/ConsultationLiveKitService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/service/ConsultationWebhookService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/service/ConsultationLiveKitService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/service/ConsultationWebhookService.java`
   - `infra/docker-compose.prod.yml`
   - `infra/nginx/prod.conf`
   - `infra/livekit/livekit.yaml`
@@ -179,10 +206,10 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 애플리케이션은 서버 메모리 세션을 두지 않는다. access token은 JWT로 검증하고, refresh token만 Redis에 저장한다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/global/config/SecurityConfig.java`
-  - `src/BE/src/main/java/com/waddoc/domain/auth/service/AuthService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/auth/service/RefreshTokenService.java`
-  - `src/BE/src/main/java/com/waddoc/global/security/jwt/JwtTokenProvider.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/global/config/SecurityConfig.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/auth/service/AuthService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/auth/service/RefreshTokenService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/global/security/jwt/JwtTokenProvider.java`
 
 구현상 특징은 다음과 같다.
 
@@ -197,11 +224,11 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 현재 Redis 사용 방식은 조회 캐시보다는 여러 인스턴스가 함께 봐야 하는 짧은 수명의 상태 저장에 집중돼 있다.
 
 - 근거 코드
-  - `src/BE/src/main/java/com/waddoc/domain/auth/service/RefreshTokenService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/mission/service/MissionIdentityCheckCacheService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/service/DisconnectTimerService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/service/RedisKeyExpirationListener.java`
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/service/ConsultationWebhookService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/auth/service/RefreshTokenService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/mission/service/MissionIdentityCheckCacheService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/service/DisconnectTimerService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/service/RedisKeyExpirationListener.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/service/ConsultationWebhookService.java`
   - `infra/docker-compose.prod.yml`
 
 대표 사례는 다음과 같다.
@@ -219,12 +246,12 @@ SMS 발송과 의사 알림은 예약 생성 트랜잭션 안에서 직접 외�
 DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었다.
 
 - 근거 코드
-  - `src/BE/src/main/resources/application.yml`
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/repository/ConsultationSessionRepository.java`
-  - `src/BE/src/main/java/com/waddoc/domain/carecase/repository/CareCaseRepository.java`
-  - `src/BE/src/main/java/com/waddoc/domain/patient/repository/PatientRepository.java`
-  - `src/BE/src/main/java/com/waddoc/domain/carecase/service/CareCaseQueryService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/admin/service/AdminService.java`
+  - `src/BE/core-app/src/main/resources/application.yml`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/repository/ConsultationSessionRepository.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/carecase/repository/CareCaseRepository.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/patient/repository/PatientRepository.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/carecase/service/CareCaseQueryService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/admin/service/AdminService.java`
 
 확인된 포인트는 다음과 같다.
 
@@ -240,9 +267,9 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 특히 예약과 배차는 동시에 많이 들어올 수 있으므로, 애플리케이션 로직만이 아니라 DB 제약까지 같이 사용하고 있다.
 
 - 근거 코드
-  - `src/BE/src/main/resources/db/migration/V1__baseline_current_schema.sql`
-  - `src/BE/src/main/java/com/waddoc/domain/booking/service/BookingService.java`
-  - `src/BE/src/main/java/com/waddoc/domain/dispatch/service/DispatchConsumer.java`
+  - `src/BE/core-app/src/main/resources/db/migration/V1__baseline_current_schema.sql`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/booking/service/BookingService.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/dispatch/service/DispatchConsumer.java`
 
 확인된 방어 장치는 다음과 같다.
 
@@ -257,7 +284,7 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 - 근거 코드
   - `src/AI-IDV/app/main.py`
   - `src/AI-IDV/app/services/idv_model_registry.py`
-  - `src/BE/src/main/java/com/waddoc/domain/consultation/service/ConsultationIdentityVerificationClient.java`
+  - `src/BE/core-app/src/main/java/com/waddoc/domain/consultation/service/ConsultationIdentityVerificationClient.java`
 
 구현상 특징은 다음과 같다.
 
@@ -283,9 +310,9 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 
 아래 항목들은 "설계가 없다"는 뜻이 아니라, 현재 구현 상태에서 대규모 운영으로 가려면 추가 보완이 필요한 지점이다.
 
-### 4.1 배포 스펙은 아직 단일 replica 중심
+### 4.1 배포 스펙은 아직 단일 호스트 중심
 
-- `infra/docker-compose.prod.yml`에는 `spring-api`, `redis`, `kafka`, `livekit` 등이 정의되어 있지만 replica 수, autoscaling, resource request/limit는 없다.
+- `infra/docker-compose.prod.yml`에는 `edge-bff`, `core-app`, `notification-service`, `robot-gateway`, 각 저장소, `kafka`, `livekit` 등이 정의되어 있지만 autoscaling, resource request/limit는 없다.
 - Nginx는 Docker DNS resolver를 써서 scale-out 친화적으로 작성돼 있지만, compose 자체가 자동 scale 전략을 제공하지는 않는다.
 - 추후 쿠버네티스 환경을 사용한다면 HPA를 통해 자동 확장이 가능할 것이다.
 
@@ -295,9 +322,9 @@ DB 병목을 줄이기 위해 읽기 경로를 꽤 의식해서 작성해 두었
 - 따라서 단일 인스턴스 내부에서 listener 병렬도를 적극적으로 올린 구조는 아니다.
 - 현재 설계는 "인스턴스 확장 + 파티션 분산"을 염두에 둔 형태에 더 가깝다.
 
-### 4.3 Outbox relay는 배치 크기 제한 없이 전체 scan
+### 4.3 Outbox relay는 배치 크기 제한 없이 순차 scan
 
-- `DispatchOutboxRelay.fetchByStatus()`는 `PENDING`, `RETRY_PENDING` 전체를 정렬 조회한다.
+- `BusinessEventOutboxRelay.findPending()`와 `DispatchOutboxRelay.fetchByStatus()`는 각각 `PENDING` 이벤트를 정렬 조회한다.
 - backlog가 매우 커지면 한 번의 relay 사이클에서 조회량과 처리 시간이 커질 수 있다.
 - relay publish가 Kafka broker ack를 `.get()`으로 직렬 대기하므로 backlog가 길어질수록 전송 throughput 상한이 낮아질 수 있다.
 - 즉, outbox 패턴은 도입되어 있지만, 대량 backlog 전용 batch chunking까지는 아직 구현되지 않았다.

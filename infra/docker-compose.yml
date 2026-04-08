@@ -7,7 +7,8 @@ services:
     volumes:
       - ./nginx/dev.conf.template:/etc/nginx/nginx.conf:ro
     depends_on:
-      - spring-api
+      - edge-bff
+      - core-app
       - frontend
       - frontend-phone
       - livekit
@@ -52,8 +53,31 @@ services:
       - waddoc-net
 
   # === Backend ===
-  spring-api:
-    build: ../src/BE
+  edge-bff:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: edge-bff
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - CORE_APP_URI=http://core-app:8080
+      - NOTIFICATION_SERVICE_URI=http://notification-service:8080
+      - ROBOT_GATEWAY_URI=http://robot-gateway:8080
+      - JWT_SECRET=${JWT_SECRET:-waddoc-dev-secret-key-must-be-at-least-32-chars-long}
+    depends_on:
+      - core-app
+      - notification-service
+      - robot-gateway
+    networks:
+      - waddoc-net
+
+  core-app:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: core-app
     expose:
       - "8080"
     environment:
@@ -73,15 +97,57 @@ services:
       - APP_SEED_ENABLED=${APP_SEED_ENABLED:-true}
       - APP_SEED_DEFAULT_PASSWORD=${APP_SEED_DEFAULT_PASSWORD}
       - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
-      - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
-      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-wss://www.waddoc.site/mqtt}
-      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-spring-waddoc-dev}
+      - JWT_SECRET=${JWT_SECRET:-waddoc-dev-secret-key-must-be-at-least-32-chars-long}
+      - TELEMETRY_API_KEY=${TELEMETRY_API_KEY:-telemetry-dev-key}
     volumes:
       - ./local-storage/uploads:/data/uploads
     depends_on:
       - postgres
       - redis
       - kafka
+    networks:
+      - waddoc-net
+
+  notification-service:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: notification-service
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - NOTIFICATION_DB_HOST=notification-postgres
+      - NOTIFICATION_DB_PORT=5432
+      - REDIS_HOST=notification-redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - JWT_SECRET=${JWT_SECRET:-waddoc-dev-secret-key-must-be-at-least-32-chars-long}
+      - SMS_CONTACT_NUMBER=${SMS_CONTACT_NUMBER:-01000000000}
+    depends_on:
+      - notification-postgres
+      - notification-redis
+      - kafka
+    networks:
+      - waddoc-net
+
+  robot-gateway:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: robot-gateway
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - REDIS_HOST=robot-redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-ws://mosquitto:9001}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-robot-gateway-dev}
+      - JWT_SECRET=${JWT_SECRET:-waddoc-dev-secret-key-must-be-at-least-32-chars-long}
+    depends_on:
+      - robot-redis
+      - kafka
+      - mosquitto
     networks:
       - waddoc-net
 
@@ -100,7 +166,20 @@ services:
     networks:
       - waddoc-net
 
-  # === Cache ===
+  notification-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: waddoc_notification
+      POSTGRES_USER: waddoc
+      POSTGRES_PASSWORD: waddoc_notification_dev
+    volumes:
+      - notification_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - waddoc-net
+
+  # === Cache (service-owned) ===
   redis:
     image: redis:7-alpine
     command: redis-server --notify-keyspace-events Ex
@@ -108,6 +187,26 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - waddoc-net
+
+  notification-redis:
+    image: redis:7-alpine
+    command: redis-server
+    ports:
+      - "6380:6379"
+    volumes:
+      - notification_redis_data:/data
+    networks:
+      - waddoc-net
+
+  robot-redis:
+    image: redis:7-alpine
+    command: redis-server
+    ports:
+      - "6381:6379"
+    volumes:
+      - robot_redis_data:/data
     networks:
       - waddoc-net
 
@@ -136,6 +235,17 @@ services:
     networks:
       - waddoc-net
 
+  mosquitto:
+    image: eclipse-mosquitto:2
+    expose:
+      - "9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - waddoc-net
+
   # === WebRTC ===
   livekit:
     image: livekit/livekit-server:latest
@@ -152,13 +262,18 @@ services:
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-devsecret}"
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret}"
-      LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://spring-api:8080/api/v1/sessions/webhook/livekit}"
+      LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://core-app:8080/api/v1/sessions/webhook/livekit}"
     networks:
       - waddoc-net
 
 volumes:
   pg_data:
   redis_data:
+  notification_redis_data:
+  robot_redis_data:
+  notification_pg_data:
+  mosquitto_data:
+  mosquitto_log:
 
 
 networks:

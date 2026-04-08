@@ -210,7 +210,7 @@ PostgreSQL을 띄운 뒤 Spring 애플리케이션을 띄우면 Flyway가 migrat
 ```bash
 cd infra
 docker compose up -d postgres
-docker compose up -d spring-api
+docker compose up -d core-app
 ```
 
 ### 7.2 `psql`로 데모 시드 SQL 반영
@@ -279,4 +279,3 @@ Redis는 주 데이터 저장소가 아니라 운영 보조 저장소이다.
 - 다중 인스턴스 알림과 분산락을 위해 Redis는 사실상 필수 운영 구성이다.
 - 스키마 기준 파일은 `src/BE/src/main/resources/db/migration`이다.
 - 저장소에 포함된 SQL은 full backup이 아니라 demo/prod-like seed 스냅샷이다.
-

@@ -1,4 +1,8 @@
-# Unity Camera MediaMTX 소유권 정리 플랜
+# Unity Camera MediaMTX 소유권 정리 문서
+
+- 작성 기준: 2026-04-08 저장소 스냅샷
+- 상태: `infra` compose의 `mediamtx`, FE reverse proxy, ROS2 publisher 분리는 코드에 반영 완료
+- 남은 범위: 운영 네트워크, 실제 publish/view 경로, 보안그룹 점검 체크리스트
 
 ## 목표
 
@@ -56,9 +60,9 @@ frontend nginx
   - 환경별 주소 변경 시 재빌드 범위를 줄일 수 있음
   - 하드코딩된 IP 변경 누락 리스크를 줄일 수 있음
 
-### 3. 프론트도 하드코딩 대신 env 기반 프록시로 전환
+### 3. 프론트도 하드코딩 대신 env 기반 프록시로 유지
 
-- 현재 `src/FE/nginx.conf`의 Tailscale IP 하드코딩을 제거한다.
+- 현재는 `src/FE/nginx.conf.template`와 `src/FE/docker-entrypoint.d/30-nginx-env.sh`를 사용해 Tailscale IP 하드코딩 없이 프록시 대상을 주입한다.
 - `UNITY_CAM_PROXY_TARGET=http://mediamtx:8889/unity_cam` 같은 환경변수 기반으로 Nginx 템플릿을 렌더링한다.
 - 최종 location은 `/unity_cam/` 서브패스 프록시 규칙을 사용한다.
 - 핵심은 upstream 값에 `unity_cam` path를 포함해 `/unity_cam/` prefix strip 이후에도 MediaMTX stream path가 유지되게 하는 것이다.
@@ -70,7 +74,9 @@ frontend nginx
 - `src/ros2_docker/docker-compose.yml` 는 publisher만 관리하고 `mediamtx` 서비스를 포함하지 않는다.
 - `8889`는 가능하면 외부에 직접 publish하지 않고, 컨테이너 내부 통신으로만 사용한다.
 
-## 단계별 구현 플랜
+## 구현 상태 및 운영 체크리스트
+
+아래 phase는 구현 당시 작업 순서를 보존한 것이다. 2026-04-08 기준으로 Phase 1~4는 코드에 반영돼 있고, 현재는 운영 검증과 네트워크 점검 체크리스트로 보는 편이 맞다.
 
 ## Phase 1. infra compose로 MediaMTX 소유권 이동
 
@@ -103,7 +109,7 @@ MediaMTX 예시 설정 방향:
 
 ```yaml
 mediamtx:
-  image: bluenviron/mediamtx:latest
+  image: bluenviron/mediamtx:1
   expose:
     - "8889"
   ports:
@@ -127,20 +133,19 @@ mediamtx:
 - MediaMTX 공식 문서 기준으로 WebRTC 연결은 `8189/udp` 라우팅과 `webrtcAdditionalHosts` 설정이 필요하다.
 - 이 부분은 현재 구조상 `viewer` 트래픽 요구사항이므로, 운영 보안그룹 설계 시 별도로 반영해야 한다.
 
-## Phase 2. 프론트 Nginx를 env 기반으로 전환
+## Phase 2. 프론트 Nginx env 기반 프록시 유지
 
 대상 파일:
 
 - `src/FE/nginx.conf.template`
 - `src/FE/Dockerfile`
-- `src/FE/docker-entrypoint.d/40-runtime-config.sh`
-- 필요 시 `src/FE/docker-entrypoint.d/30-nginx-env.sh` 신규 추가
+- `src/FE/docker-entrypoint.d/30-nginx-env.sh`
 - `infra/docker-compose.prod.yml`
 - `infra/docker-compose.yml`
 
 작업:
 
-- `src/FE/nginx.conf.template`를 기반으로 실제 Nginx 설정을 렌더링하도록 바꾼다.
+- `src/FE/nginx.conf.template`를 기반으로 실제 Nginx 설정을 렌더링하는 구조를 유지한다.
 - 컨테이너 시작 시 `UNITY_CAM_PROXY_TARGET` 값을 사용해 실제 Nginx 설정을 생성한다.
 - `/unity_cam/` reverse proxy는 MediaMTX 공식 subfolder 가이드에 맞춰 구성한다.
 - `envsubst`는 전체 환경변수를 치환하지 않고 `UNITY_CAM_PROXY_TARGET`만 명시적으로 치환한다.
@@ -150,13 +155,15 @@ mediamtx:
 ```nginx
 location /unity_cam/ {
     proxy_pass ${UNITY_CAM_PROXY_TARGET}/;
-    proxy_redirect / /unity_cam/;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    proxy_set_header X-Forwarded-Port $http_x_forwarded_port;
 }
 ```
 
@@ -164,14 +171,14 @@ location /unity_cam/ {
 
 - `location /unity_cam/` + `proxy_pass http://mediamtx:8889/;` 조합은 `/unity_cam/` prefix를 strip 하므로 잘못된 경로로 전달된다.
 - 따라서 `UNITY_CAM_PROXY_TARGET`은 반드시 `http://mediamtx:8889/unity_cam` 처럼 stream path를 포함해야 한다.
-- `proxy_redirect`를 함께 넣어 MediaMTX 응답의 `Location` 헤더가 `/unity_cam/` 하위로 유지되게 한다.
+- 현재 구현은 `X-Forwarded-*` 헤더까지 함께 넘겨 MediaMTX가 원래 요청 origin 정보를 해석할 수 있게 한다.
 - `envsubst`는 `${UNITY_CAM_PROXY_TARGET}`만 치환 대상으로 제한해야 `$http_upgrade`, `$host` 같은 nginx 내장 변수가 손상되지 않는다.
 
 권장 템플릿 렌더링 예시:
 
 ```sh
 envsubst '${UNITY_CAM_PROXY_TARGET}' \
-  < /etc/nginx/templates/default.conf.template \
+  < /opt/waddoc/default.conf.template \
   > /etc/nginx/conf.d/default.conf
 ```
 

@@ -16,7 +16,8 @@ services:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
       - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro # SSL 인증서는 repo 밖 경로를 사용
     depends_on:
-      - spring-api
+      - edge-bff
+      - core-app
       - frontend
       - frontend-phone
       - livekit
@@ -26,7 +27,7 @@ services:
 
   # === Frontend (Web) — 의사/관리자용 웹 앱 ===
   frontend:
-    image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_FE:-hwan515/waddoc-frontend}:${FE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "3000"
     environment:
@@ -57,7 +58,7 @@ services:
 
   # === Frontend (Phone) — 환자용 모바일 웹 앱 ===
   frontend-phone:
-    image: ${DOCKER_IMAGE_FP:-waddoc-phone}:${FP_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
+    image: ${DOCKER_IMAGE_FP:-hwan515/waddoc-phone}:${FP_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "3001"
     restart: unless-stopped
@@ -65,8 +66,26 @@ services:
       - waddoc-net
 
   # === Backend (Spring Boot) ===
-  spring-api:
-    image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
+  edge-bff:
+    image: ${DOCKER_IMAGE_EDGE_BFF:-hwan515/waddoc-edge-bff}:${EDGE_BFF_IMAGE_TAG:-latest}
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - CORE_APP_URI=http://core-app:8080
+      - NOTIFICATION_SERVICE_URI=http://notification-service:8080
+      - ROBOT_GATEWAY_URI=http://robot-gateway:8080
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - core-app
+      - notification-service
+      - robot-gateway
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  core-app:
+    image: ${DOCKER_IMAGE_BE:-hwan515/waddoc-backend}:${BE_IMAGE_TAG:-latest} # Jenkinsfile에서 태그 주입
     expose:
       - "8080"
     extra_hosts:
@@ -77,7 +96,7 @@ services:
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - REDIS_HOST=redis
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CORE_REDIS_PASSWORD=${CORE_REDIS_PASSWORD}
       - AI_IDV_URL=${AI_IDV_URL:-https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify}
       - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-5000}
       - FILE_STORAGE_ROOT=/data/uploads
@@ -100,13 +119,57 @@ services:
       - TELEMETRY_API_KEY=${TELEMETRY_API_KEY}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       - ROBOT_TERMINAL_REGISTRY=${ROBOT_TERMINAL_REGISTRY:-}
-      - MQTT_BROKER_URL=ws://mosquitto:9001
-      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-spring-waddoc-prod}
     volumes:
       - uploads:/data/uploads
     depends_on:
       - postgres
       - redis
+      - kafka
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  notification-service:
+    image: ${DOCKER_IMAGE_NOTIFICATION:-hwan515/waddoc-notification}:${NOTIFICATION_IMAGE_TAG:-latest}
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - NOTIFICATION_DB_HOST=notification-postgres
+      - NOTIFICATION_DB_USER=${NOTIFICATION_DB_USER:-waddoc}
+      - NOTIFICATION_DB_PASSWORD=${NOTIFICATION_DB_PASSWORD}
+      - REDIS_HOST=notification-redis
+      - REDIS_PORT=6379
+      - NOTIFICATION_REDIS_PASSWORD=${NOTIFICATION_REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - JWT_SECRET=${JWT_SECRET}
+      - SOLAPI_API_KEY=${SOLAPI_API_KEY}
+      - SOLAPI_API_SECRET=${SOLAPI_API_SECRET}
+      - SOLAPI_SENDER_NUMBER=${SOLAPI_SENDER_NUMBER}
+      - SMS_CONTACT_NUMBER=${SMS_CONTACT_NUMBER:-029302266}
+    depends_on:
+      - notification-postgres
+      - notification-redis
+      - kafka
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  robot-gateway:
+    image: ${DOCKER_IMAGE_ROBOT_GATEWAY:-hwan515/waddoc-robot-gateway}:${ROBOT_GATEWAY_IMAGE_TAG:-latest}
+    expose:
+      - "8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - REDIS_HOST=robot-redis
+      - REDIS_PORT=6379
+      - ROBOT_REDIS_PASSWORD=${ROBOT_REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - MQTT_BROKER_URL=ws://mosquitto:9001
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID:-robot-gateway-prod}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - robot-redis
       - kafka
       - mosquitto
     restart: unless-stopped
@@ -130,13 +193,49 @@ services:
     networks:
       - waddoc-net
 
-  # === Cache ===
+  notification-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: waddoc_notification
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-waddoc}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+    volumes:
+      - notification_pg_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  # === Cache (service-owned) ===
   redis:
     image: redis:7-alpine
     # --notify-keyspace-events Ex : 키 만료 이벤트 활성화 (세션/토큰 만료 감지용)
-    command: redis-server --requirepass ${REDIS_PASSWORD} --notify-keyspace-events Ex
+    command: redis-server --requirepass ${CORE_REDIS_PASSWORD} --notify-keyspace-events Ex
     volumes:
       - redis_data:/data
+    expose:
+      - "6379"
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  notification-redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${NOTIFICATION_REDIS_PASSWORD}
+    volumes:
+      - notification_redis_data:/data
+    expose:
+      - "6379"
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  robot-redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${ROBOT_REDIS_PASSWORD}
+    volumes:
+      - robot_redis_data:/data
     expose:
       - "6379"
     restart: unless-stopped
@@ -186,7 +285,7 @@ services:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       LIVEKIT_NODE_IP: "${LIVEKIT_NODE_IP}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
-      LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://spring-api:8080/api/v1/sessions/webhook/livekit}"
+      LIVEKIT_WEBHOOK_URL: "${LIVEKIT_WEBHOOK_URL:-http://core-app:8080/api/v1/sessions/webhook/livekit}"
       TURN_SECRET: "${TURN_SECRET}"
     restart: unless-stopped
     networks:
@@ -228,7 +327,10 @@ services:
 volumes:
   pg_data:
   redis_data:
+  notification_redis_data:
+  robot_redis_data:
   uploads:
+  notification_pg_data:
   mosquitto_data:
   mosquitto_log:
 

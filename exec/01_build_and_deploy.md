@@ -139,7 +139,7 @@ docker compose up --build
 - `nginx`
 - `frontend`
 - `frontend-phone`
-- `spring-api`
+- `core-app`
 - `postgres`
 - `redis`
 - `zookeeper`
@@ -199,7 +199,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml 
 - `nginx`
 - `frontend`
 - `frontend-phone`
-- `spring-api`
+- `core-app`
 - `postgres`
 - `redis`
 - `zookeeper`
@@ -252,7 +252,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml 
 - 배포 동작:
   - 변경된 백엔드/웹/폰 이미지를 빌드하여 DockerHub에 push
   - 변경 서비스 pull 및 재기동
-  - `spring-api`를 3 replica로 스케일
+  - `core-app`을 3 replica로 스케일
   - 필요 시 `nginx` 재기동
 
 저장소에서 `.gitlab-ci.yml`이나 GitHub Actions 워크플로우는 발견되지 않았다.
@@ -499,5 +499,4 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - `src/FE/README.md`에는 `seed_admin`, `seed_doc_im_01` 같은 예전 계정 예시가 남아 있다.
   - 현재 시더와 `infra/sql/prod_dummy_seed.sql` 기준으로는 `seed_prod_*` 계정이 실제 근거이다.
 - Jenkins 파이프라인에는 Unity 자동 빌드 단계가 없다.
-
 

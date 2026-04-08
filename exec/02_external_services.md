@@ -234,7 +234,7 @@ Nginx는 두 endpoint 모두에 대해 buffering을 끄도록 명시돼 있다.
 
 `infra/monitoring/prometheus/prometheus.yml`에서 확인된 scrape 대상:
 
-- `spring-api:8080/actuator/prometheus`
+- `core-app:8080/actuator/prometheus`
 - `cadvisor:8080`
 - `postgres-exporter:9187`
 - `redis-exporter:9121`
@@ -253,4 +253,3 @@ Grafana 사용 방식:
 - 애플리케이션 코드 안에서 AWS SDK를 직접 쓰는 흔적은 찾지 못했다.
 - 다만 Jenkinsfile 주석과 경로를 보면 Ubuntu 기반 배포 서버, 즉 EC2 계열 호스트를 전제로 한 운영 흐름이 나타난다.
 - AI-IDV는 별도 GPU 서버를 외부 의존성으로 둔 구조이다.
-
