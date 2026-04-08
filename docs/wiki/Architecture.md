@@ -28,30 +28,36 @@
 │  │ 전화     │  │ 의사 웹  │  │ 관리자 │  │ 보호자    │  │ 차량     │ │
 │  │ 시뮬레이터│  │          │  │ 웹     │  │ 웹(읽기)  │  │ 터미널FE │ │
 │  └────┬─────┘  └────┬─────┘  └───┬────┘  └─────┬─────┘  └────┬─────┘ │
-│       └──────────────┴────────────┴─────────────┘       │
+│       └──────────────┴────────────┴─────────────┴─────────────┘       │
 └───────────────────────────┬─────────────────────────────┘
-                            │ HTTPS
+                            │ HTTPS / SSE / WSS
 ┌───────────────────────────┴─────────────────────────────┐
-│                 Main App Server / Cluster               │
+│            Main App Server / Single Host Compose        │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │               Reverse Proxy (Nginx)               │  │
-│  │         /api → spring       / → react            │  │
-│  └──────┬──────────────┬───────────────┬────────────┘  │
-│         │              │               │               │
-│  ┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐         │
-│  │ Spring Boot │ │  React    │ │   LiveKit   │         │
-│  │ (제어면)    │ │ (프론트)  │ │ (미디어면)  │         │
-│  │ - 인증/권한 │ └───────────┘ └─────────────┘         │
-│  │ - 도메인 API│                                       │
-│  │ - 오케스트레│                                       │
-│  │   이션      │                                       │
-│  │ - 감사 로그 │                                       │
-│  │ - 파일 관리 │                                       │
-│  └──────┬──────┘                                       │
-│         │                                              │
-│   ┌─────┴─────┐ ┌───────┐ ┌─────────────┐              │
-│   │ PostgreSQL │ │ Redis │ │ Kafka + ZK │              │
-│   └────────────┘ └───────┘ └─────────────┘              │
+│  │  /api → edge-bff   / → frontend   /phone → FE    │  │
+│  │  /livekit → livekit  /mqtt → mosquitto           │  │
+│  └───────────────┬───────────────────────┬──────────┘  │
+│                  │                       │              │
+│  ┌───────────────┴───────────────┐   ┌───┴──────────┐  │
+│  │ edge-bff                      │   │ frontend /   │  │
+│  │ - public API entrypoint       │   │ frontend-phone│  │
+│  │ - owner service proxy         │   └──────────────┘  │
+│  └───────┬───────────────┬───────┘                     │
+│          │               │                             │
+│   ┌──────┴──────┐ ┌──────┴────────────┐ ┌───────────┐  │
+│   │ core-app    │ │ notification-     │ │ robot-    │  │
+│   │ (modular    │ │ service            │ │ gateway   │  │
+│   │ monolith)   │ │ - doctor SSE       │ │ - MQTT     │  │
+│   │ - auth      │ │ - SMS              │ │ - robot SSE │  │
+│   │ - booking   │ └─────────┬──────────┘ └────┬──────┘  │
+│   │ - mission   │           │ Kafka / Redis        │     │
+│   └──────┬──────┘           │                      │     │
+│          │              ┌───┴──────────────────────┴──┐ │
+│          └─────────────▶│ postgres family / redis family│ │
+│                         │ kafka + zookeeper / mosquitto │ │
+│                         │ livekit / monitoring stack    │ │
+│                         └───────────────────────────────┘ │
 └───────────────────────────┬─────────────────────────────┘
                             │ REST multipart
 ┌───────────────────────────┴─────────────────────────────┐
@@ -62,9 +68,9 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-- DEV와 PROD 모두 `Spring Boot -> GPU Server` 경로로만 AI 추론을 호출한다.
-- `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
-- `Spring Boot -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
+- DEV와 PROD 모두 `core-app -> GPU Server` 경로로만 AI 추론을 호출한다.
+- 외부 비즈니스 API는 `Nginx -> edge-bff -> owner service` 경로로 진입한다.
+- `core-app -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
 - React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
 
 ---
@@ -337,11 +343,12 @@ Parts:
 
 ### 4.1 구성 원칙
 
-- **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, Kafka, Zookeeper, LiveKit
+- **메인 서버**: Nginx, `edge-bff`, `core-app`, `notification-service`, `robot-gateway`, React, PostgreSQL family, Redis family, Kafka, Zookeeper, Mosquitto, LiveKit, monitoring stack
 - **AI 서버 (별도)**: IDV AI
-- 서버 간 통신: **REST multipart**
-- 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
-- AI 서버는 메인 서버에서만 접근 가능 (외부 직접 노출 금지)
+- 운영 전제는 **단일 호스트 Docker Compose**이며, 이번 단계의 목적은 HA가 아니라 서비스 경계와 계약 정리다.
+- 서버 간 통신은 용도에 따라 **HTTP/SSE, Kafka, MQTT, REST multipart**를 사용한다.
+- 파일 전달은 IDV/OCR만 **HTTP multipart**로 처리하고, AI와의 공유 디렉터리는 사용하지 않는다.
+- AI 서버는 메인 서버에서만 접근 가능하다. 외부 클라이언트는 직접 접근하지 않는다.
 
 ### 4.2 서버 구성도
 
@@ -395,6 +402,8 @@ Parts:
 
 ### 4.3 메인 서버 Docker Compose
 
+운영 배포는 `docker-compose.prod.yml`과 `docker-compose.monitoring.prod.yml`을 함께 사용한다. 아래는 메인 스택 발췌이며, 모니터링 서비스는 생략했다.
+
 ```yaml
 # docker-compose.prod.yml (메인 서버 - 주요 서비스 발췌)
 services:
@@ -410,24 +419,24 @@ services:
       - livekit
 
   edge-bff:
-    image: ${DOCKER_IMAGE_EDGE_BFF:-waddoc-edge-bff}:${EDGE_BFF_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_EDGE_BFF:-hwan515/waddoc-edge-bff}:${EDGE_BFF_IMAGE_TAG:-latest}
     environment:
       - CORE_APP_URI=http://core-app:8080
       - NOTIFICATION_SERVICE_URI=http://notification-service:8080
       - ROBOT_GATEWAY_URI=http://robot-gateway:8080
 
   frontend:
-    image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_FE:-hwan515/waddoc-frontend}:${FE_IMAGE_TAG:-latest}
     expose:
       - "3000"
 
   frontend-phone:
-    image: ${DOCKER_IMAGE_FP:-waddoc-phone}:${FP_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_FP:-hwan515/waddoc-phone}:${FP_IMAGE_TAG:-latest}
     expose:
       - "3001"
 
   core-app:
-    image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_BE:-hwan515/waddoc-backend}:${BE_IMAGE_TAG:-latest}
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis
@@ -437,7 +446,7 @@ services:
       - FILE_STORAGE_ROOT=/data/uploads
 
   notification-service:
-    image: ${DOCKER_IMAGE_NOTIFICATION:-waddoc-notification}:${NOTIFICATION_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_NOTIFICATION:-hwan515/waddoc-notification}:${NOTIFICATION_IMAGE_TAG:-latest}
     environment:
       - NOTIFICATION_DB_HOST=notification-postgres
       - REDIS_HOST=notification-redis
@@ -445,7 +454,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
 
   robot-gateway:
-    image: ${DOCKER_IMAGE_ROBOT_GATEWAY:-waddoc-robot-gateway}:${ROBOT_GATEWAY_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_ROBOT_GATEWAY:-hwan515/waddoc-robot-gateway}:${ROBOT_GATEWAY_IMAGE_TAG:-latest}
     environment:
       - REDIS_HOST=robot-redis
       - ROBOT_REDIS_PASSWORD=${ROBOT_REDIS_PASSWORD}
@@ -1256,17 +1265,21 @@ sudo ufw enable
 
 ## 10. 자원 배분 권장
 
-### 10.1 메인 서버 (권장 최소: 8GB RAM, 4 CPU)
+### 10.1 메인 서버 (권장 최소: 16GB RAM, 8 CPU)
 
-| 컨테이너 | Memory Limit | CPU Limit | 비고 |
+| 컨테이너 묶음 | Memory Limit | CPU Limit | 비고 |
 |-----------|-------------|-----------|------|
-| nginx | 128M | 0.5 | |
-| frontend | 256M | 0.5 | |
-| core-app | 1G | 2.0 | |
-| postgres | 1G | 1.0 | reservations: 512M |
-| redis | 256M | 0.5 | |
-| livekit | 1G | 1.0 | |
-| **합계** | **~3.6G** | **5.5** | OS·버퍼 포함 ~6G |
+| nginx | 128M | 0.5 | SSL 종료, 정적/프록시 |
+| edge-bff + frontend + frontend-phone | 768M | 1.5 | 공개 API 진입점 + 웹 앱 |
+| core-app | 1G | 2.0 | 모듈러 모놀리스 핵심 도메인 |
+| notification-service | 512M | 1.0 | 의사 SSE + SMS |
+| robot-gateway | 512M | 1.0 | MQTT, 로봇 SSE, telemetry |
+| postgres + notification-postgres | 1.5G | 1.5 | core / notification 저장소 |
+| redis + notification-redis + robot-redis | 512M | 0.5 | 서비스 소유 캐시 |
+| kafka + zookeeper | 1.5G | 1.5 | 단일 브로커 기준 |
+| livekit + coturn + mosquitto + mediamtx | 1.5G | 1.5 | 미디어/로봇 통신 |
+| prometheus + grafana + exporters + cadvisor | 1.5G | 1.0 | 운영 관제 |
+| **합계** | **~9G** | **~10.0** | OS, 파일 캐시, Docker 오버헤드 포함 12G+ 여유 권장 |
 
 ### 10.2 AI 서버 (권장 최소: 8GB RAM, 4 CPU, GPU 권장)
 
@@ -1281,7 +1294,7 @@ sudo ufw enable
 
 | 항목 | 타임아웃 | 재시도 | 실패 시 |
 |------|---------|--------|---------|
-| Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
+| Spring → IDV AI | 기본 5초 (`AI_IDV_TIMEOUT_MS` override) | 1회 자동 | MANUAL_REVIEW 전환 |
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |
@@ -1336,7 +1349,11 @@ curl http://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
 
 ### 배포 환경 — 메인 서버
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+cd infra
+docker compose --env-file /home/ubuntu/.waddoc/prod.env \
+  -f docker-compose.prod.yml \
+  -f docker-compose.monitoring.prod.yml \
+  up -d --remove-orphans --scale core-app=3
 ```
 
 ### GPU 서버
@@ -1354,7 +1371,7 @@ sudo systemctl restart idv-ai
 
 | 항목 | 개발 (Dev) | 배포 (Prod) |
 |------|------------|-------------|
-| Compose 파일 | `docker-compose.yml` (메인 스택) + 원격 GPU 서버 | `docker-compose.prod.yml` (메인 스택) + 원격 GPU 서버 |
+| Compose 파일 | `docker-compose.yml` (메인 스택) + `.env.local` + 원격 GPU 서버 | `docker-compose.prod.yml` + `docker-compose.monitoring.prod.yml` + `/home/ubuntu/.waddoc/prod.env` + 원격 GPU 서버 |
 | AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
 | Spring → IDV AI | `AI_IDV_URL` 또는 기본값 `http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify` | `AI_IDV_URL` 또는 기본값 `https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify` |
 | 프로토콜 모델 | IDV=REST multipart | IDV=REST multipart |
@@ -1363,7 +1380,7 @@ sudo systemctl restart idv-ai
 | DB 비밀번호 | 하드코딩 (dev) | 환경 변수 / secrets |
 | TLS | 없음 | Nginx에서 종료 |
 | 방화벽 | GPU 서버에 Dev 메인 서버/VPN 대역만 허용 | GPU 서버에 Prod 메인 서버 IP만 허용 |
-| 자원 제한 | 느슨 | 프로세스별 limits / systemd 제어 권장 |
+| 자원 제한 | 느슨 | 단일 호스트 Compose 기준 메모리/CPU 여유분 확보 권장 |
 | 인증 쿠키 Secure | 없음 (HTTP) | Secure 필수 (HTTPS) |
 | TURN | LiveKit 내장, 3478/udp (publish) | coturn, 8478/udp (listener) + 8600-8699/udp (relay) |
 | LiveKit signaling | 7880 직접 접속 (HTTP) | Nginx WSS 프록시 (`/livekit` → 7880, SSL termination) |
