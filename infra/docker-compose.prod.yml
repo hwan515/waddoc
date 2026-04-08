@@ -231,6 +231,8 @@ services:
       POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
     volumes:
       - notification_pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432" # SSH 터널용(notification DB 접속)
     expose:
       - "5432"
     healthcheck:
