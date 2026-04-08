@@ -247,13 +247,20 @@ services:
   redis:
     image: redis:7-alpine
     # --notify-keyspace-events Ex : 키 만료 이벤트 활성화 (세션/토큰 만료 감지용)
-    command: redis-server --requirepass ${CORE_REDIS_PASSWORD} --notify-keyspace-events Ex
+    command:
+      - redis-server
+      - --requirepass
+      - ${CORE_REDIS_PASSWORD}
+      - --notify-keyspace-events
+      - Ex
+    environment:
+      REDISCLI_AUTH: ${CORE_REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     expose:
       - "6379"
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${CORE_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "ping"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -264,13 +271,18 @@ services:
 
   notification-redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${NOTIFICATION_REDIS_PASSWORD}
+    command:
+      - redis-server
+      - --requirepass
+      - ${NOTIFICATION_REDIS_PASSWORD}
+    environment:
+      REDISCLI_AUTH: ${NOTIFICATION_REDIS_PASSWORD}
     volumes:
       - notification_redis_data:/data
     expose:
       - "6379"
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${NOTIFICATION_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "ping"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -281,13 +293,18 @@ services:
 
   robot-redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${ROBOT_REDIS_PASSWORD}
+    command:
+      - redis-server
+      - --requirepass
+      - ${ROBOT_REDIS_PASSWORD}
+    environment:
+      REDISCLI_AUTH: ${ROBOT_REDIS_PASSWORD}
     volumes:
       - robot_redis_data:/data
     expose:
       - "6379"
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${ROBOT_REDIS_PASSWORD}\" ping | grep -q PONG"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "ping"]
       interval: 15s
       timeout: 5s
       retries: 5
