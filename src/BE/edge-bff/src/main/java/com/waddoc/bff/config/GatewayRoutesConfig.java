@@ -27,6 +27,12 @@ public class GatewayRoutesConfig {
                 .route("core-sessions", r -> r.path("/api/v1/sessions/**").uri(coreAppUri))
                 .route("core-missions", r -> r.path("/api/v1/missions/**").uri(coreAppUri))
                 .route("core-terminal", r -> r.path("/api/v1/terminal/**").uri(coreAppUri))
+                .route("core-admin-vehicles", r -> r
+                        .path("/api/v1/admin/vehicles", "/api/v1/admin/vehicles/**")
+                        .uri(coreAppUri))
+                .route("core-admin-monitoring", r -> r
+                        .path("/api/v1/admin/monitoring/**")
+                        .uri(coreAppUri))
                 .route("notification-stream", r -> r.path("/api/v1/doctors/me/notifications/stream").uri(notificationServiceUri))
                 .route("robot", r -> r.path("/api/v1/robots/**").uri(robotGatewayUri))
                 .route("core-admin-writes", r -> r
