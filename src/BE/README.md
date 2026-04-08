@@ -1,68 +1,92 @@
 # BE Local Run Guide
 
-`src/BE` 폴더만으로도 백엔드 서버를 바로 띄울 수 있게 로컬 실행 경로 
+`src/BE`는 이제 Gradle multi-project workspace다. 로컬 기본 런타임은 아래 4개다.
+
+- `core-app`: auth, patient, intake, booking, consultation, mission, dispatch, vehicle, vital을 소유하는 모듈러 모놀리스
+- `edge-bff`: 외부 `/api/**` 진입점
+- `notification-service`: 의사 알림 SSE / SMS owner
+- `robot-gateway`: 로봇 SSE / command / MQTT owner
 
 기본 포트:
 
-- Spring API: `8080`
-- PostgreSQL: `5432`
-- Redis: `6379`
+- Public API (`edge-bff`): `8080`
+- core DB: `5432`
+- notification DB: `5433`
+- core Redis: `6379`
+- notification Redis: `6380`
+- robot Redis: `6381`
 - Kafka: `9092`
+- Mosquitto WS: `9001`
 
-## 1. Docker로 한 번에 실행
+## 1. 권장 로컬 실행
 
 ```bash
-cd src/BE
-docker compose up --build
+cd infra
+docker compose --env-file .env.local -f docker-compose.yml up -d --build
 ```
 
 접속:
 
-- API: `http://localhost:8080`
-- Swagger: `http://localhost:8080/swagger/spring`
+- Public API: `http://localhost:8080`
+- core-app Swagger: `http://localhost:8080/swagger/spring`
 
 중지:
 
 ```bash
-docker compose down
+docker compose --env-file .env.local -f docker-compose.yml down
 ```
 
 데이터까지 비우려면:
 
 ```bash
-docker compose down -v
+docker compose --env-file .env.local -f docker-compose.yml down -v
 ```
 
-## 2. IDE에서 Spring만 실행
+`src/BE/docker-compose.yml`은 제거했다. 로컬 compose 진입점은 `infra/docker-compose.yml` 하나로 통일한다.
 
-DB, Redis, Kafka만 먼저 띄운 뒤, Spring Boot는 IDE 또는 Gradle로 실행하는 방식
+## 2. 개별 모듈 실행
 
 ```bash
 cd src/BE
-docker compose up -d postgres redis zookeeper kafka
-./scripts/run-local.sh
+./gradlew :core-app:bootRun
+./gradlew :edge-bff:bootRun
+./gradlew :notification-service:bootRun
+./gradlew :robot-gateway:bootRun
 ```
 
-이 스크립트는 Gradle 캐시를 프로젝트 내부의 `.gradle-local`에 두고 `bootRun`을 실행
+host JVM으로 개별 실행할 때 Redis 포트는 서비스별로 다르다.
 
-## 3. 로컬 기본값
+- `core-app`: `REDIS_PORT=6379`
+- `notification-service`: `REDIS_PORT=6380`
+- `robot-gateway`: `REDIS_PORT=6381`
 
-- Spring profile: `local`
-- DB 계정: `waddoc / waddoc_dev`
-- 더미 데이터 seed: 기본 활성화
-- 더미 슬롯 seed: 기본 시간대는 `09:00`~`23:00` 30분 단위이며, 오늘 날짜는 현재 시각 이후 슬롯만 유지하고 이미 지난 오늘 슬롯은 정리
-- 더미 예약 seed: 당일 활성 비대면 예약은 생성하지 않음
-- 파일 업로드 경로: `src/BE/local-storage/uploads`
+Docker 이미지도 모듈별로 같은 Dockerfile을 사용한다.
 
-## 4. 시간 처리 규칙
+```bash
+docker build --build-arg MODULE_NAME=edge-bff -t waddoc-edge-bff .
+docker build --build-arg MODULE_NAME=notification-service -t waddoc-notification .
+docker build --build-arg MODULE_NAME=robot-gateway -t waddoc-robot-gateway .
+docker build --build-arg MODULE_NAME=core-app -t waddoc-core-app .
+```
 
-- 서버가 생성하는 기준 시각은 전부 KST(`Asia/Seoul`)다.
-- 공용 유틸은 `KstTime`을 사용한다. 시간대 변환 상수는 `KstTime.ZONE`, KST 현재 시각이 즉시 필요하면 `KstTime.now()`를 사용한다.
-- 서비스 계층에서 현재 시각이 필요한 경우 `Clock` Bean을 주입받고 `LocalDate.now(clock)`, `LocalTime.now(clock)`, `LocalDateTime.now(clock)`를 사용한다.
-- JPA auditing(`@CreatedDate`, `@LastModifiedDate`)도 `JpaConfig`의 `DateTimeProvider`를 통해 KST로 고정된다.
-- DTO에서 `OffsetDateTime` 변환이 필요한 경우만 `KstTime.ZONE`으로 zone 변환한다.
+## 3. 현재 경계
 
-## 5. 참고
+- `core-app`은 auth, patient, intake, booking, consultation, mission, dispatch, vehicle, vital을 계속 소유한다.
+- `notification-service`는 `booking.confirmed.v1`, `booking.cancelled.v1`, `dispatch.assigned.v1`, `dispatch.delayed.v1`만 소비한다.
+- `robot-gateway`만 MQTT broker에 연결한다.
+- `edge-bff`는 BFF-owned read API만 직접 인증하고, 나머지 proxied API는 Authorization/Cookie/correlation ID를 그대로 전달한다.
 
-- LiveKit, AI IDV 서버 주소는 기본값이 들어가 있어 서버 기동 자체는 가능하고, 관련 API를 실제 호출할 때만 연결이 필요
-- 첫 실행 시 Docker image pull, Gradle dependency download 때문에 시간이 걸릴 수 있음
+## 4. 검증 명령
+
+```bash
+./gradlew :shared-kernel:compileJava :core-app:compileJava :notification-service:compileJava :robot-gateway:compileJava :edge-bff:compileJava
+./gradlew :core-app:compileTestJava :notification-service:compileTestJava :robot-gateway:compileTestJava :edge-bff:compileTestJava
+```
+
+대표 단위 테스트:
+
+```bash
+./gradlew :core-app:test --tests "com.waddoc.domain.booking.service.BookingServiceTest" --tests "com.waddoc.domain.dispatch.service.DispatchConsumerTest"
+./gradlew :notification-service:test --tests "com.waddoc.domain.notification.controller.DoctorNotificationStreamControllerTest" --tests "com.waddoc.domain.notification.service.DoctorNotificationConsumerTest" --tests "com.waddoc.domain.notification.service.DoctorNotificationSseServiceTest" --tests "com.waddoc.domain.notification.service.SmsConsumerTest"
+./gradlew :robot-gateway:test --tests "com.waddoc.domain.robot.service.RobotCommandPublisherTest" --tests "com.waddoc.domain.robot.service.RobotSseServiceTest"
+```

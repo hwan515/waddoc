@@ -1,82 +1,53 @@
+import io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension
+
 plugins {
     java
-    id("org.springframework.boot") version "3.3.7"
-    id("io.spring.dependency-management") version "1.1.7"
+    id("org.springframework.boot") version "3.3.7" apply false
+    id("io.spring.dependency-management") version "1.1.7" apply false
 }
 
 group = "com.waddoc"
 version = "0.0.1-SNAPSHOT"
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
+extra["springBootVersion"] = "3.3.7"
 
-configurations {
-    compileOnly {
-        extendsFrom(configurations.annotationProcessor.get())
+allprojects {
+    group = "com.waddoc"
+    version = "0.0.1-SNAPSHOT"
+
+    repositories {
+        mavenCentral()
     }
 }
 
-repositories {
-    mavenCentral()
-}
+subprojects {
+    apply(plugin = "java")
+    apply(plugin = "io.spring.dependency-management")
 
-dependencies {
-    // Spring Boot starters
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    implementation("org.springframework.boot:spring-boot-starter-security")
-    implementation("org.springframework.boot:spring-boot-starter-validation")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
-    implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.kafka:spring-kafka")
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-    implementation("io.micrometer:micrometer-registry-prometheus")
+    the<DependencyManagementExtension>().apply {
+        imports {
+            mavenBom("org.springframework.boot:spring-boot-dependencies:${property("springBootVersion")}")
+        }
+    }
 
-    // Database / Migration
-    implementation("org.flywaydb:flyway-core")
-    implementation("org.flywaydb:flyway-database-postgresql")
-    runtimeOnly("org.postgresql:postgresql")
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
-    // JWT
-    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    configurations.configureEach {
+        if (name == "compileOnly") {
+            extendsFrom(configurations.getByName("annotationProcessor"))
+        }
+    }
 
-    // SMS
-    implementation("com.solapi:sdk:1.0.3")
+    tasks.withType<Test> {
+        useJUnitPlatform()
 
-    // LiveKit
-    implementation("io.livekit:livekit-server:0.6.1")
-
-    // MQTT (spring-integration-mqtt uses Eclipse Paho v3)
-    implementation("org.springframework.integration:spring-integration-mqtt:6.3.6")
-    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
-
-    // MapStruct
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
-
-    // Lombok
-    compileOnly("org.projectlombok:lombok")
-    annotationProcessor("org.projectlombok:lombok")
-
-    // Lombok + MapStruct binding (lombok must be processed before mapstruct)
-    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
-
-    // Test
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework.security:spring-security-test")
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
-
-    if (project.findProperty("skipIntegrationTests") == "true") {
-        filter {
-            excludeTestsMatching("*IntegrationTest")
+        if (project.findProperty("skipIntegrationTests") == "true") {
+            filter {
+                excludeTestsMatching("*IntegrationTest")
+            }
         }
     }
 }

@@ -1144,7 +1144,7 @@ data: {"type":"NEW_BOOKING","bookingId":"bk_H8qWm2","caseId":"case_T7nLp4","doct
 >
 > `notification` 이벤트는 예약과 케이스 생성 트랜잭션이 정상 커밋된 뒤 발행된다. 활성 SSE 연결이 없더라도 예약 생성 자체는 실패하지 않는다.
 >
-> 내부적으로는 `doctor.notifications` Kafka 토픽을 통해 전달되며, 활성 SSE 연결이 없는 의사는 이벤트를 소비하더라도 push를 생략한다.
+> 내부적으로는 `core-app`이 `booking.confirmed.v1` business event를 발행하고, `notification-service`가 이를 소비해 Redis Pub/Sub와 SSE로 fan-out 한다. 활성 SSE 연결이 없는 경우에도 예약 생성 자체는 실패하지 않는다.
 
 **`notification` payload**
 

@@ -71,7 +71,7 @@ services:
     image: oliver006/redis_exporter:v1.66.0
     command:
       - --redis.addr=redis://redis:6379
-      - --redis.password=${REDIS_PASSWORD}
+      - --redis.password=${CORE_REDIS_PASSWORD}
     expose:
       - "9121"
     depends_on:

@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    # IDE에서 직접 띄울 때는 호스트 매핑 포트(5433)를, Compose 내부에서는 서비스 포트(5432)를 사용한다.
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST:localhost}:${NOTIFICATION_DB_PORT:5433}/waddoc_notification
+    username: waddoc
+    password: waddoc_notification_dev
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+jwt:
+  secret: waddoc-dev-secret-key-must-be-at-least-32-chars-long
+
+sms:
+  provider: mock
+  sender-number: "01000000000"
+  contact-number: "01000000000"

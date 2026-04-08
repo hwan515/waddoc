@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${NOTIFICATION_DB_HOST}:5432/waddoc_notification
+    username: ${NOTIFICATION_DB_USER:${POSTGRES_USER}}
+    password: ${NOTIFICATION_DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${NOTIFICATION_REDIS_PASSWORD}
+
+jwt:
+  secret: ${JWT_SECRET}
+
+sms:
+  provider: solapi
+  api-key: ${SOLAPI_API_KEY}
+  api-secret: ${SOLAPI_API_SECRET}
+  sender-number: ${SOLAPI_SENDER_NUMBER}
+  contact-number: ${SMS_CONTACT_NUMBER:${SOLAPI_SENDER_NUMBER}}

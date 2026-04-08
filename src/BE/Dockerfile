@@ -1,15 +1,27 @@
 FROM eclipse-temurin:17-jdk AS builder
+ARG MODULE_NAME=core-app
+
 WORKDIR /app
+
 COPY gradlew gradlew.bat ./
 COPY gradle/ gradle/
 COPY build.gradle.kts settings.gradle.kts ./
-RUN chmod +x gradlew && ./gradlew dependencies --no-daemon || true
-COPY src/ src/
-RUN ./gradlew bootJar --no-daemon -x test
+COPY shared-kernel/ shared-kernel/
+COPY core-app/ core-app/
+COPY edge-bff/ edge-bff/
+COPY notification-service/ notification-service/
+COPY robot-gateway/ robot-gateway/
+
+RUN chmod +x gradlew
+RUN ./gradlew :${MODULE_NAME}:bootJar --no-daemon -x test
 
 FROM eclipse-temurin:17-jre
+ARG MODULE_NAME=core-app
+
 WORKDIR /app
-COPY --from=builder /app/build/libs/*.jar app.jar
+
+COPY --from=builder /app/${MODULE_NAME}/build/libs/*.jar app.jar
 RUN mkdir -p /data/uploads
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -8,7 +8,7 @@ RUN npm ci
 
 COPY . .
 
-# Vite 빌드 시 API 프록시 경로 주입 (nginx에서 /api → spring-api로 프록시)
+# Vite 빌드 시 API 프록시 경로 주입 (nginx에서 /api → edge-bff → core-app/owner service로 프록시)
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build

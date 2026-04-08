@@ -34,8 +34,8 @@ http {
 
         # Spring용 Swagger UI와 OpenAPI
         location = /swagger/spring {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api;
+            set $core_app core-app:8080;
+            proxy_pass http://$core_app;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -47,8 +47,8 @@ http {
         }
 
         location = /swagger/spring/openapi.json {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api/swagger/spring/openapi.json;
+            set $core_app core-app:8080;
+            proxy_pass http://$core_app/swagger/spring/openapi.json;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -56,8 +56,8 @@ http {
         }
 
         location /swagger/spring/ {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api;
+            set $core_app core-app:8080;
+            proxy_pass http://$core_app;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -67,8 +67,8 @@ http {
         # Springdoc이 /swagger/spring 을 /swagger/swagger-ui/index.html 로 리다이렉트할 수 있다.
         # 나머지 /swagger/* 경로도 모두 Spring 앱으로 보내서 React가 가로채지 않게 한다.
         location /swagger/ {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api;
+            set $core_app core-app:8080;
+            proxy_pass http://$core_app;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -100,10 +100,10 @@ http {
             return 301 /swagger/spring/openapi.json;
         }
 
-        # Robot telemetry SSE
+        # Robot telemetry SSE는 edge-bff를 거쳐 owner 서비스로 전달한다.
         location = /api/v1/robots/stream {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api;
+            set $edge_bff edge-bff:8080;
+            proxy_pass http://$edge_bff;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
             proxy_set_header Host $host;
@@ -117,10 +117,10 @@ http {
             add_header X-Accel-Buffering no always;
         }
 
-        # Doctor notification SSE
+        # Doctor notification SSE도 edge-bff가 라우팅 owner를 결정한다.
         location = /api/v1/doctors/me/notifications/stream {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api;
+            set $edge_bff edge-bff:8080;
+            proxy_pass http://$edge_bff;
             proxy_http_version 1.1;
             proxy_set_header Connection "";
             proxy_set_header Host $host;
@@ -134,10 +134,10 @@ http {
             add_header X-Accel-Buffering no always;
         }
 
-        # 일반 API를 Spring Boot로 전달
+        # 공개 API 진입점은 edge-bff 하나로 고정한다.
         location /api/ {
-            set $spring_api spring-api:8080;
-            proxy_pass http://$spring_api;
+            set $edge_bff edge-bff:8080;
+            proxy_pass http://$edge_bff;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

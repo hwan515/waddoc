@@ -73,9 +73,9 @@ UNITY_CAM_RTSP_URL=rtsp://<EC2_PUBLIC_HOST>:8554/unity_cam
 
 ```bash
 cd infra
-docker compose --env-file .env.local -f docker-compose.yml up -d              # 메인 스택 기동 (nginx/frontend/mediamtx/frontend-phone/spring-api/postgres/redis/zookeeper/kafka/livekit)
-docker compose --env-file .env.local -f docker-compose.yml logs -f spring-api  # 로그 확인
-docker compose --env-file .env.local -f docker-compose.yml up -d --build spring-api  # 특정 서비스 재빌드
+docker compose --env-file .env.local -f docker-compose.yml up -d              # 메인 스택 기동 (nginx/frontend/mediamtx/frontend-phone/edge-bff/core-app/notification-service/robot-gateway/postgres/notification-postgres/redis/notification-redis/robot-redis/zookeeper/kafka/mosquitto/livekit)
+docker compose --env-file .env.local -f docker-compose.yml logs -f core-app  # 로그 확인
+docker compose --env-file .env.local -f docker-compose.yml up -d --build core-app  # 특정 서비스 재빌드
 docker compose --env-file .env.local -f docker-compose.yml down                # 종료
 ```
 
@@ -84,7 +84,7 @@ docker compose --env-file .env.local -f docker-compose.yml down                #
 - 개발 compose의 기본값은 `AI_IDV_URL=http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify` 이다.
 - 커스텀 포트나 `https` 스킴이 필요하면 `AI_IDV_URL` 환경변수로 전체 URL을 override 한다.
 - 진료/LiveKit/webhook 검증은 이 전체 compose 구성을 기본 경로로 사용한다.
-- 이 방식에서는 `spring-api`, `livekit`, `postgres`, `redis`, `zookeeper`, `kafka`가 같은 네트워크에서 뜨므로 진료 세션 상태 전이와 webhook 흐름이 기본 설정과 일치한다.
+- 이 방식에서는 `edge-bff`, `core-app`, `notification-service`, `robot-gateway`, `postgres`, `notification-postgres`, `redis`, `notification-redis`, `robot-redis`, `kafka`가 같은 네트워크에서 떠서 분리된 경계와 실제 통신 경로를 그대로 검증할 수 있다.
 - 웹 앱은 `http://localhost`, 환자용 phone 앱은 `http://localhost/phone`으로 접근한다.
 - 로컬 compose는 `mediamtx`를 포함하며 `frontend`가 `http://mediamtx:8889/unity_cam` 으로 프록시한다.
 - ROS2 local publisher는 별도 `src/ros2_docker/.env.local` + `src/ros2_docker/docker-compose.yml` 조합으로 `rtsp://127.0.0.1:8554/unity_cam` 로 publish 한다.
@@ -103,15 +103,15 @@ docker compose --env-file .env.local -f docker-compose.yml down                #
 
 ```bash
 cd infra
-docker compose --env-file .env.local -f docker-compose.yml up -d postgres redis zookeeper kafka
+docker compose --env-file .env.local -f docker-compose.yml up -d postgres notification-postgres redis notification-redis robot-redis zookeeper kafka mosquitto
 ```
 
-- Backend는 `src/BE/src/main/resources/application.yml`에서 기본 프로파일이 `local`로 설정되어 있으므로 IntelliJ 실행 시 별도 `SPRING_PROFILES_ACTIVE` 지정이 없어도 된다.
-- `application-local.yml`과 `application.yml` 기본값으로 Postgres/Redis/Kafka는 각각 `localhost:5432`, `localhost:6379`, `localhost:9092`에 연결된다.
-- 이 방식은 Backend만 로컬 JVM으로 띄우는 용도다. `spring-api` 컨테이너와 동시에 실행하지 않는다.
+- Backend는 `src/BE/core-app/src/main/resources/application.yml`에서 기본 프로파일이 `local`로 설정되어 있으므로 IntelliJ 실행 시 별도 `SPRING_PROFILES_ACTIVE` 지정이 없어도 된다. `notification-service`, `robot-gateway`, `edge-bff`도 각 모듈의 `application-local.yml`을 기준으로 실행한다.
+- `application-local.yml` 기준 기본 포트는 `core-app` Postgres `localhost:5432`, `notification-service` Postgres `localhost:5433`, `core-app` Redis `localhost:6379`, `notification-service` Redis `localhost:6380`, `robot-gateway` Redis `localhost:6381`, Kafka `localhost:9092`다.
+- 이 방식은 Backend만 로컬 JVM으로 띄우는 용도다. `core-app` 컨테이너와 동시에 실행하지 않는다.
 - AI 연동까지 확인하려면 기본값(`http://${DEV_GPU_SERVER_HOST}/idv/api/v1/verify`) 또는 `AI_IDV_URL` 직접 지정값이 실제 GPU 서버를 가리키도록 맞춘다.
 - Kafka listener가 활성화된 상태로 Backend를 띄우므로, `zookeeper`/`kafka` 없이 로컬 JVM을 실행하면 이벤트 소비 기능이 비정상 동작한다.
-- 진료/LiveKit 검증은 이 혼합 실행 대신 위의 전체 compose 구성을 권장한다. `spring-api`가 컨테이너 밖에서 뜨면 LiveKit webhook 경로를 별도로 맞추지 않는 한 기본 설정과 어긋날 수 있다.
+- 진료/LiveKit 검증은 이 혼합 실행 대신 위의 전체 compose 구성을 권장한다. `core-app`이 컨테이너 밖에서 뜨면 LiveKit webhook 경로를 별도로 맞추지 않는 한 기본 설정과 어긋날 수 있다.
 - 로컬 더미데이터가 필요하면 `APP_SEED_ENABLED=true`로 Backend를 실행한다. 기본 로그인 비밀번호는 `APP_SEED_DEFAULT_PASSWORD` 또는 기본값 `Passw0rd!`를 사용한다.
 - 로컬 seed는 오늘 날짜 전체를 막지 않는다. 슬롯 기본 시간대는 `09:00`~`23:00` 30분 단위이며, 오늘은 현재 시각 이후 슬롯만 유지하고 이미 지난 오늘 슬롯은 정리한다.
 - 로컬 seed는 당일 활성 비대면 예약을 만들지 않으므로, 오늘 예약 검증은 미래 시각 슬롯 기준으로 확인한다.
@@ -143,14 +143,14 @@ docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.y
 ```bash
 docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml restart livekit coturn
 ```
-- 배포 환경의 `spring-api` 기본값은 `https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify` 이며, 필요하면 `AI_IDV_URL` 로 전체 URL을 override 한다.
+- 배포 환경의 `core-app` 기본값은 `https://${PROD_GPU_SERVER_HOST}/idv/api/v1/verify` 이며, 필요하면 `AI_IDV_URL` 로 전체 URL을 override 한다.
 
 #### Monitoring V1 검증 순서
 
 1. `docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml ps`로 `prometheus`, `grafana`, `cadvisor`, `postgres-exporter`, `redis-exporter`가 모두 기동됐는지 확인한다.
 2. `docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml ps`에 `kafka-exporter`도 포함되는지 확인한다.
-3. `spring-api` 각 인스턴스에서 `8080/actuator/prometheus`가 내부 네트워크 기준으로 열려 있는지 확인한다.
-4. Prometheus target 화면에서 `spring-api`, `kafka-exporter`, `livekit`, `postgres-exporter`, `redis-exporter`, `cadvisor`가 모두 `UP`인지 확인한다.
+3. `core-app` 각 인스턴스에서 `8080/actuator/prometheus`가 내부 네트워크 기준으로 열려 있는지 확인한다.
+4. Prometheus target 화면에서 `core-app`, `kafka-exporter`, `livekit`, `postgres-exporter`, `redis-exporter`, `cadvisor`가 모두 `UP`인지 확인한다.
 5. `https://<DOMAIN>/grafana/`를 직접 열었을 때 monitoring 쿠키가 없으면 `403`이 반환되는지 확인한다.
 6. 관리자 관제 화면의 `시스템 모니터링` 탭에 진입했을 때 내장된 Grafana가 하단 전체 영역에 `operator-overview` 대시보드를 로드하는지 확인한다.
 7. 운영 EC2에서 아래 명령으로 `cadvisor` raw metrics에 `container_label_com_docker_compose_service` 또는 `name` 라벨이 실제로 붙는지 확인한다.
@@ -159,7 +159,7 @@ docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.y
 docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml exec cadvisor sh -c "wget -qO- http://localhost:8080/metrics | grep '^container_memory_working_set_bytes{.*container_label_com_docker_compose_service=' | head -n 5"
 docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml exec cadvisor sh -c "wget -qO- http://localhost:8080/metrics | grep '^container_memory_working_set_bytes{.*name=' | head -n 5"
 ```
-8. `operator-overview`에서 `컨테이너 CPU 사용률`과 `컨테이너 메모리 사용량` 패널의 범례가 `docker-<id>`가 아니라 `spring-api`, `redis`, `postgres`, `kafka` 또는 실제 컨테이너명으로 보이는지 확인한다.
+8. `operator-overview`에서 `컨테이너 CPU 사용률`과 `컨테이너 메모리 사용량` 패널의 범례가 `docker-<id>`가 아니라 `core-app`, `redis`, `postgres`, `kafka` 또는 실제 컨테이너명으로 보이는지 확인한다.
 9. `operator-overview`에서 Kafka broker/topic lag, Kafka consumer 처리 결과, LiveKit 상태/방 수/참여자 수, token/webhook 플로우 패널이 수치 또는 `0`으로 표시되는지 확인한다.
 
 #### 애플리케이션 커스텀 메트릭
@@ -182,16 +182,6 @@ Spring Boot(`global/monitoring/`)에서 Micrometer를 통해 등록하는 커스
 | `waddoc.livekit.webhook.events` | Counter | `event`, `result` | webhook 이벤트 처리 횟수 |
 | `waddoc.livekit.api.duration` | Timer | `operation`, `result` | LiveKit API 호출 소요 시간 |
 
-**MQTT 메트릭** (`MqttMonitoringMetrics`)
-
-| 메트릭 | 타입 | 태그 | 설명 |
-|--------|------|------|------|
-| `waddoc.mqtt.inbound.processed` | Counter | `topic`, `result` | 인바운드 MQTT 메시지 처리 건수 (`success`/`fail`/`ignored`) |
-| `waddoc.mqtt.inbound.duration` | Timer | `topic`, `result` | 인바운드 MQTT 메시지 처리 소요 시간 |
-| `waddoc.mqtt.inbound.last.received.epoch` | Gauge | `topic` | 토픽별 마지막 메시지 수신 epoch(초). 장시간 갱신 없으면 로봇 연결 끊김 의심 |
-
-> `result` 태그 값은 `success`, `fail`, `ignored` 중 하나이다.
-
 #### 관제 시스템 모니터링 탭 (FE)
 
 관리자 관제 화면(`ControlCenter`)의 `시스템 모니터링` 탭은 Grafana 대시보드를 iframe으로 임베딩한다.
@@ -200,7 +190,7 @@ Spring Boot(`global/monitoring/`)에서 Micrometer를 통해 등록하는 커스
 - **부트스트랩 흐름**:
   1. 탭 진입 시 `POST /api/v1/admin/monitoring/session` 호출 → Spring이 HMAC-SHA JWT 기반 `monitoring_access` 쿠키를 발급한다 (HttpOnly, Secure, SameSite=Lax, maxAge=8시간).
   2. 쿠키 발급 후 iframe `src`를 `/grafana/d/operator-overview/operator-overview?orgId=1&kiosk=tv`로 설정한다.
-  3. Nginx `auth_request`가 매 요청마다 `/_monitoring_auth` → `spring-api:8080/api/v1/admin/monitoring/authorize`로 쿠키를 검증한다.
+  3. Nginx `auth_request`가 매 요청마다 `/_monitoring_auth` → `core-app:8080/api/v1/admin/monitoring/authorize`로 쿠키를 검증한다.
 - **에러 처리**: 세션 부트스트랩 실패 시 에러 메시지와 `다시 시도` 버튼을 표시한다.
 - **로컬 개발**: `docker-compose.yml`에 monitoring stack이 없으므로 `VITE_ENABLE_MONITORING_TAB=false`(기본)로 탭이 숨겨진다. `MONITORING_COOKIE_SECRET` 환경변수도 dev compose에 미설정이므로, 로컬에서 모니터링을 테스트하려면 별도 Grafana 인스턴스와 해당 환경변수를 수동 구성해야 한다.
 
@@ -231,10 +221,10 @@ GitLab (dev push) → Checkout → 변경 감지 → 테스트 → Docker buildx
 | 스테이지 | 설명 |
 |----------|------|
 | Checkout | GitLab deploy token으로 소스 checkout (shallow clone) |
-| Compute Changes | `src/BE/`, `src/FE/`, `src/FE-phone/`, `infra/`, `infra/nginx/`, `infra/monitoring/` 경로별 변경 감지 |
+| Compute Changes | `src/BE` 공통 영역과 `core-app`/`edge-bff`/`notification-service`/`robot-gateway`, `src/FE/`, `src/FE-phone/`, `infra/`, `infra/nginx/`, `infra/monitoring/` 경로별 변경 감지 |
 | Quality Gate | BE 변경 시 단위 테스트 실행 (`-PskipIntegrationTests=true`) |
 | Build & Push | 변경된 이미지 서비스만 `docker buildx build --push`로 DockerHub에 병렬 푸시 |
-| Deploy | 메인 compose + monitoring compose를 함께 참조하여 배포. `infra/monitoring/**` 변경 시 monitoring 서비스만 교체하고, spring-api는 항상 3개로 보정 |
+| Deploy | 메인 compose + monitoring compose를 함께 참조하여 배포. 변경된 서비스만 교체하고, `infra/monitoring/**` 변경 시 monitoring 서비스만 교체한다. `core-app` replica 보정은 `core-app` 또는 infra 변경 경로에서만 수행한다. |
 
 #### 빌더 아키텍처
 
@@ -268,10 +258,10 @@ Backend를 여러 인스턴스로 띄워 부하를 분산할 수 있다.
 
 ```bash
 cd infra
-docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml up -d --build --scale spring-api=3
+docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.yml up -d --build --scale core-app=3
 ```
 
-- `--scale spring-api=N`으로 인스턴스 수를 지정한다. compose 파일이나 nginx 설정 수정 없이 숫자만 변경하면 된다.
+- `--scale core-app=N`으로 인스턴스 수를 지정한다. compose 파일이나 nginx 설정 수정 없이 숫자만 변경하면 된다.
 - Nginx는 Docker Compose 내부 DNS(`resolver 127.0.0.11`)를 사용하여 scale된 모든 컨테이너로 요청을 분산한다.
 - 인스턴스 수를 변경하려면 같은 명령어를 다른 숫자로 다시 실행한다.
 
@@ -285,7 +275,7 @@ docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.y
                          │ round-robin
               ┌──────────┼──────────┐
               ▼          ▼          ▼
-         spring-api  spring-api  spring-api
+         core-app    core-app    core-app
          (inst 1)    (inst 2)    (inst 3)
               │          │          │
               └──────────┼──────────┘
@@ -346,10 +336,10 @@ cp /etc/letsencrypt/live/your-domain.com/privkey.pem infra/certs/
 
 ## MQTT 브로커 (로봇/차량 통신)
 
-운영 환경의 로봇·차량 통신은 Mosquitto MQTT 브로커를 사용한다. Nginx가 `/mqtt` 경로를 WSS → `mosquitto:9001`로 프록시하며, ROS2 노드와 Spring Boot 모두 이 브로커에 연결한다.
+운영 환경의 로봇·차량 통신은 Mosquitto MQTT 브로커를 사용한다. Nginx가 `/mqtt` 경로를 WSS → `mosquitto:9001`로 프록시하며, ROS2 노드와 `robot-gateway`가 이 브로커에 연결한다.
 
 - ROS2 측 `src/ros2_docker/docker-compose.yml`은 `MQTT_BROKER_HOST=www.waddoc.site`, `MQTT_BROKER_PORT=443`, `MQTT_WS_PATH=/mqtt`로 WSS 연결한다.
-- Spring Boot는 `MQTT_BROKER_URL=ws://mosquitto:9001`로 Docker 내부 네트워크에서 직접 연결한다.
+- `robot-gateway`는 `MQTT_BROKER_URL=ws://mosquitto:9001`로 Docker 내부 네트워크에서 직접 연결한다.
 - MQTT 토픽: `robot/odom`, `robot/minimap`, `robot/state`, `robot/status`, `robot/cmd/estop`, `robot/cmd/waypoint`, `robot/cmd/dispatch`
 
 검증 예시:

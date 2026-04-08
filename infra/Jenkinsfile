@@ -4,12 +4,12 @@
  * 배포 흐름:
  *   1. GitLab (dev 브랜치 - 추후 master로 수정) push
  *   2. Jenkins agent(EC2)에서 코드 checkout
- *   3. 변경 감지: src/BE, src/FE, src/FE-phone, infra 중 변경된 부분만 처리
+ *   3. 변경 감지: src/BE 모듈(core-app/edge-bff/notification-service/robot-gateway), src/FE, src/FE-phone, infra 중 변경된 부분만 처리
  *      - infra/nginx 및 앱 이미지(src/BE, src/FE, src/FE-phone) 변경은 nginx 재시작
  *   4. 변경된 이미지 서비스만 Docker buildx → DockerHub push
  *   5. docker compose pull/build → up -d
  *      - 변경된 서비스만 교체
- *      - spring-api는 배포 후 항상 3개 유지
+ *      - core-app 또는 infra 변경 시에만 core-app replica 수를 3개로 보정
  *
  * 필요한 Jenkins Credentials:
  *   - gitlab-deploy-token  : GitLab Deploy Token (Username+Password)
@@ -35,10 +35,13 @@ pipeline {
         BRANCH = 'dev'
         // DockerHub 이미지 이름
         DOCKER_IMAGE_BE = 'hwan515/waddoc-backend'
+        DOCKER_IMAGE_EDGE_BFF = 'hwan515/waddoc-edge-bff'
+        DOCKER_IMAGE_NOTIFICATION = 'hwan515/waddoc-notification'
+        DOCKER_IMAGE_ROBOT_GATEWAY = 'hwan515/waddoc-robot-gateway'
         DOCKER_IMAGE_FE = 'hwan515/waddoc-frontend'
         DOCKER_IMAGE_FP = 'hwan515/waddoc-phone'
         // 운영에서 유지할 backend 컨테이너 수
-        SPRING_API_REPLICAS = '3'
+        CORE_APP_REPLICAS = '3'
         PROJECT_PATH = '/home/ubuntu/S14P21A603'   // EC2 내 프로젝트 경로
         // 운영 환경변수 파일(.env)은 서버 로컬 파일을 사용한다.
         PROD_ENV_FILE = '/home/ubuntu/.waddoc/prod.env'
@@ -97,13 +100,40 @@ pipeline {
                         echo 'No changes detected; assuming full change.'
                         // 변경 파일을 신뢰할 수 없으면 전체 서비스를 다시 배포 대상으로 본다.
                         env.BE_CHANGED = 'true'
+                        env.CORE_APP_CHANGED = 'true'
+                        env.EDGE_BFF_CHANGED = 'true'
+                        env.NOTIFICATION_CHANGED = 'true'
+                        env.ROBOT_GATEWAY_CHANGED = 'true'
                         env.FE_CHANGED = 'true'
                         env.FP_CHANGED = 'true'
                         env.INFRA_CHANGED = 'true'
                         env.MONITORING_CHANGED = 'true'
                         env.NGINX_CHANGED = 'true'
                     } else {
-                        env.BE_CHANGED    = changedFiles.any { it.startsWith('src/BE/') } ? 'true' : 'false'
+                        def backendSharedChanged = changedFiles.any {
+                            it == 'src/BE/build.gradle.kts' ||
+                            it == 'src/BE/settings.gradle.kts' ||
+                            it == 'src/BE/gradlew' ||
+                            it == 'src/BE/gradlew.bat' ||
+                            it == 'src/BE/Dockerfile' ||
+                            it.startsWith('src/BE/gradle/') ||
+                            it.startsWith('src/BE/shared-kernel/')
+                        }
+                        def coreAppChanged = changedFiles.any { it.startsWith('src/BE/core-app/') }
+                        def edgeBffChanged = changedFiles.any { it.startsWith('src/BE/edge-bff/') }
+                        def notificationChanged = changedFiles.any { it.startsWith('src/BE/notification-service/') }
+                        def robotGatewayChanged = changedFiles.any { it.startsWith('src/BE/robot-gateway/') }
+
+                        env.CORE_APP_CHANGED = (backendSharedChanged || coreAppChanged) ? 'true' : 'false'
+                        env.EDGE_BFF_CHANGED = (backendSharedChanged || edgeBffChanged) ? 'true' : 'false'
+                        env.NOTIFICATION_CHANGED = (backendSharedChanged || notificationChanged) ? 'true' : 'false'
+                        env.ROBOT_GATEWAY_CHANGED = (backendSharedChanged || robotGatewayChanged) ? 'true' : 'false'
+                        env.BE_CHANGED = (
+                                env.CORE_APP_CHANGED == 'true' ||
+                                env.EDGE_BFF_CHANGED == 'true' ||
+                                env.NOTIFICATION_CHANGED == 'true' ||
+                                env.ROBOT_GATEWAY_CHANGED == 'true'
+                        ) ? 'true' : 'false'
                         env.FE_CHANGED    = changedFiles.any { it.startsWith('src/FE/') && !it.startsWith('src/FE-phone/') } ? 'true' : 'false'
                         env.FP_CHANGED    = changedFiles.any { it.startsWith('src/FE-phone/') } ? 'true' : 'false'
                         env.MONITORING_CHANGED = changedFiles.any {
@@ -121,6 +151,10 @@ pipeline {
                     }
 
                     echo "BE_CHANGED: ${env.BE_CHANGED}"
+                    echo "CORE_APP_CHANGED: ${env.CORE_APP_CHANGED}"
+                    echo "EDGE_BFF_CHANGED: ${env.EDGE_BFF_CHANGED}"
+                    echo "NOTIFICATION_CHANGED: ${env.NOTIFICATION_CHANGED}"
+                    echo "ROBOT_GATEWAY_CHANGED: ${env.ROBOT_GATEWAY_CHANGED}"
                     echo "FE_CHANGED: ${env.FE_CHANGED}"
                     echo "FP_CHANGED: ${env.FP_CHANGED}"
                     echo "MONITORING_CHANGED: ${env.MONITORING_CHANGED}"
@@ -191,21 +225,80 @@ pipeline {
         // 변경된 서비스만 Docker buildx로 빌드 후 DockerHub에 push (병렬)
         stage('Build & Push') {
             parallel {
-                stage('Backend') {
-                    when { expression { env.BE_CHANGED == 'true' } }
+                stage('Core App') {
+                    when { expression { env.CORE_APP_CHANGED == 'true' } }
                     steps {
-                        echo '=== Docker Build & Push Backend ==='
+                        echo '=== Docker Build & Push Core App ==='
                         withDockerRegistry([credentialsId: 'dockerhub-credentials', url: '']) {
                             sh '''
-                                # 서비스별 buildx builder를 재사용해 빌드 환경을 안정적으로 유지한다.
-                                docker buildx use ${BUILDX_BUILDER}-be 2>/dev/null || \
-                                docker buildx create --name ${BUILDX_BUILDER}-be --driver docker-container --bootstrap --use
+                                docker buildx use ${BUILDX_BUILDER}-core-app 2>/dev/null || \
+                                docker buildx create --name ${BUILDX_BUILDER}-core-app --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/src/BE && \
-                                # BUILD_NUMBER는 배포 추적용, latest는 수동 확인/기본 fallback용이다.
                                 docker buildx build \
-                                  --builder ${BUILDX_BUILDER}-be \
+                                  --builder ${BUILDX_BUILDER}-core-app \
+                                  --build-arg MODULE_NAME=core-app \
                                   --tag ${DOCKER_IMAGE_BE}:${BUILD_NUMBER} \
                                   --tag ${DOCKER_IMAGE_BE}:latest \
+                                  --push .
+                            '''
+                        }
+                    }
+                }
+
+                stage('Edge BFF') {
+                    when { expression { env.EDGE_BFF_CHANGED == 'true' } }
+                    steps {
+                        echo '=== Docker Build & Push Edge BFF ==='
+                        withDockerRegistry([credentialsId: 'dockerhub-credentials', url: '']) {
+                            sh '''
+                                docker buildx use ${BUILDX_BUILDER}-edge-bff 2>/dev/null || \
+                                docker buildx create --name ${BUILDX_BUILDER}-edge-bff --driver docker-container --bootstrap --use
+                                cd ${PROJECT_PATH}/src/BE && \
+                                docker buildx build \
+                                  --builder ${BUILDX_BUILDER}-edge-bff \
+                                  --build-arg MODULE_NAME=edge-bff \
+                                  --tag ${DOCKER_IMAGE_EDGE_BFF}:${BUILD_NUMBER} \
+                                  --tag ${DOCKER_IMAGE_EDGE_BFF}:latest \
+                                  --push .
+                            '''
+                        }
+                    }
+                }
+
+                stage('Notification Service') {
+                    when { expression { env.NOTIFICATION_CHANGED == 'true' } }
+                    steps {
+                        echo '=== Docker Build & Push Notification Service ==='
+                        withDockerRegistry([credentialsId: 'dockerhub-credentials', url: '']) {
+                            sh '''
+                                docker buildx use ${BUILDX_BUILDER}-notification-service 2>/dev/null || \
+                                docker buildx create --name ${BUILDX_BUILDER}-notification-service --driver docker-container --bootstrap --use
+                                cd ${PROJECT_PATH}/src/BE && \
+                                docker buildx build \
+                                  --builder ${BUILDX_BUILDER}-notification-service \
+                                  --build-arg MODULE_NAME=notification-service \
+                                  --tag ${DOCKER_IMAGE_NOTIFICATION}:${BUILD_NUMBER} \
+                                  --tag ${DOCKER_IMAGE_NOTIFICATION}:latest \
+                                  --push .
+                            '''
+                        }
+                    }
+                }
+
+                stage('Robot Gateway') {
+                    when { expression { env.ROBOT_GATEWAY_CHANGED == 'true' } }
+                    steps {
+                        echo '=== Docker Build & Push Robot Gateway ==='
+                        withDockerRegistry([credentialsId: 'dockerhub-credentials', url: '']) {
+                            sh '''
+                                docker buildx use ${BUILDX_BUILDER}-robot-gateway 2>/dev/null || \
+                                docker buildx create --name ${BUILDX_BUILDER}-robot-gateway --driver docker-container --bootstrap --use
+                                cd ${PROJECT_PATH}/src/BE && \
+                                docker buildx build \
+                                  --builder ${BUILDX_BUILDER}-robot-gateway \
+                                  --build-arg MODULE_NAME=robot-gateway \
+                                  --tag ${DOCKER_IMAGE_ROBOT_GATEWAY}:${BUILD_NUMBER} \
+                                  --tag ${DOCKER_IMAGE_ROBOT_GATEWAY}:latest \
                                   --push .
                             '''
                         }
@@ -299,16 +392,22 @@ pipeline {
                         return imageRef.substring(colon + 1)
                     }
 
-                    def beTag = (env.BE_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('spring-api', 'latest')
+                    def coreAppTag = (env.CORE_APP_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('core-app', 'latest')
+                    def edgeBffTag = (env.EDGE_BFF_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('edge-bff', 'latest')
+                    def notificationTag = (env.NOTIFICATION_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('notification-service', 'latest')
+                    def robotGatewayTag = (env.ROBOT_GATEWAY_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('robot-gateway', 'latest')
                     def feTag = (env.FE_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('frontend', 'latest')
                     def fpTag = (env.FP_CHANGED == 'true') ? env.BUILD_NUMBER : resolveRunningTag('frontend-phone', 'latest')
 
                     // 부분 배포 시 변경되지 않은 서비스가 latest로 덮어써지지 않도록 현재 태그를 그대로 유지한다.
-                    echo "Deploy image tags -> backend: ${beTag}, frontend: ${feTag}, phone: ${fpTag}"
+                    echo "Deploy image tags -> core-app: ${coreAppTag}, edge-bff: ${edgeBffTag}, notification: ${notificationTag}, robot-gateway: ${robotGatewayTag}, frontend: ${feTag}, phone: ${fpTag}"
 
                     // compose가 새 이미지 태그를 사용하도록 환경변수로 주입
                     withEnv([
-                        "BE_IMAGE_TAG=${beTag}",
+                        "BE_IMAGE_TAG=${coreAppTag}",
+                        "EDGE_BFF_IMAGE_TAG=${edgeBffTag}",
+                        "NOTIFICATION_IMAGE_TAG=${notificationTag}",
+                        "ROBOT_GATEWAY_IMAGE_TAG=${robotGatewayTag}",
                         "FE_IMAGE_TAG=${feTag}",
                         "FP_IMAGE_TAG=${fpTag}"
                     ]) {
@@ -320,16 +419,28 @@ pipeline {
                                 docker buildx create --name ${BUILDX_BUILDER} --driver docker-container --bootstrap --use
                                 cd ${PROJECT_PATH}/infra && \
                                 docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} pull ${pullableServices} && \
-                                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --build --scale spring-api=${SPRING_API_REPLICAS}
+                                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --build --scale core-app=${CORE_APP_REPLICAS}
                             '''
                         } else {
                             def pullServices = []
                             def buildServices = []
                             def deployServices = []
 
-                            if (env.BE_CHANGED == 'true') {
-                                pullServices << 'spring-api'
-                                deployServices << 'spring-api'
+                            if (env.CORE_APP_CHANGED == 'true') {
+                                pullServices << 'core-app'
+                                deployServices << 'core-app'
+                            }
+                            if (env.EDGE_BFF_CHANGED == 'true') {
+                                pullServices << 'edge-bff'
+                                deployServices << 'edge-bff'
+                            }
+                            if (env.NOTIFICATION_CHANGED == 'true') {
+                                pullServices << 'notification-service'
+                                deployServices << 'notification-service'
+                            }
+                            if (env.ROBOT_GATEWAY_CHANGED == 'true') {
+                                pullServices << 'robot-gateway'
+                                deployServices << 'robot-gateway'
                             }
                             if (env.FE_CHANGED == 'true') {
                                 pullServices << 'frontend'
@@ -342,9 +453,9 @@ pipeline {
                             if (deployServices) {
                                 def svc = deployServices.join(' ')
                                 def pullSvc = pullServices.join(' ')
-                                // backend가 배포 대상이면 spring-api를 3개로 맞춘다
-                                def scaleArg = deployServices.contains('spring-api')
-                                        ? "--scale spring-api=${env.SPRING_API_REPLICAS}"
+                                // backend가 배포 대상이면 core-app을 3개로 맞춘다
+                                def scaleArg = deployServices.contains('core-app')
+                                        ? "--scale core-app=${env.CORE_APP_REPLICAS}"
                                         : ''
                                 def buildArg = buildServices ? '--build' : ''
                                 echo "=== Deploying services: ${svc} ==="
@@ -373,7 +484,10 @@ pipeline {
 
                             def shouldRestartNginx =
                                     env.NGINX_CHANGED == 'true' ||
-                                    env.BE_CHANGED == 'true' ||
+                                    env.CORE_APP_CHANGED == 'true' ||
+                                    env.EDGE_BFF_CHANGED == 'true' ||
+                                    env.NOTIFICATION_CHANGED == 'true' ||
+                                    env.ROBOT_GATEWAY_CHANGED == 'true' ||
                                     env.FE_CHANGED == 'true' ||
                                     env.FP_CHANGED == 'true'
 
@@ -386,12 +500,14 @@ pipeline {
                             }
                         }
 
-                        // 다른 서비스만 배포해도 backend 수는 항상 3개가 되도록 마지막에 한 번 더 보정
-                        echo "=== Ensuring spring-api replicas: ${SPRING_API_REPLICAS} ==="
-                        sh '''
-                            cd ${PROJECT_PATH}/infra && \
-                            docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --no-deps --scale spring-api=${SPRING_API_REPLICAS} spring-api
-                        '''
+                        if (env.CORE_APP_CHANGED == 'true' && env.INFRA_CHANGED != 'true') {
+                            // 다른 서비스만 배포할 때는 core-app을 건드리지 않고, core-app 자체를 배포할 때만 replica 수를 맞춘다.
+                            echo "=== Ensuring core-app replicas: ${CORE_APP_REPLICAS} ==="
+                            sh '''
+                                cd ${PROJECT_PATH}/infra && \
+                                docker compose --env-file ${PROD_ENV_FILE} ${COMPOSE_FILES} up -d --no-deps --scale core-app=${CORE_APP_REPLICAS} core-app
+                            '''
+                        }
                     }
 
                     echo '=== Checking Container Status ==='
@@ -409,7 +525,10 @@ pipeline {
             script {
                 // 어떤 영역이 실제로 반영됐는지 성공 로그에 남긴다.
                 def msg = 'CI/CD Pipeline 성공!'
-                if (env.BE_CHANGED == 'true') msg += ' [Backend]'
+                if (env.CORE_APP_CHANGED == 'true') msg += ' [CoreApp]'
+                if (env.EDGE_BFF_CHANGED == 'true') msg += ' [EdgeBff]'
+                if (env.NOTIFICATION_CHANGED == 'true') msg += ' [Notification]'
+                if (env.ROBOT_GATEWAY_CHANGED == 'true') msg += ' [RobotGateway]'
                 if (env.FE_CHANGED == 'true') msg += ' [Frontend]'
                 if (env.FP_CHANGED == 'true') msg += ' [Phone]'
                 if (env.MONITORING_CHANGED == 'true') msg += ' [Monitoring]'

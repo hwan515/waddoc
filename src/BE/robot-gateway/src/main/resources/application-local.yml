@@ -1,0 +1,12 @@
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+jwt:
+  secret: waddoc-dev-secret-key-must-be-at-least-32-chars-long
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:wss://www.waddoc.site/mqtt}
+  client-id: ${MQTT_CLIENT_ID:robot-gateway-local}
