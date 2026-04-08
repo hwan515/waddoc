@@ -17,12 +17,14 @@ import com.waddoc.global.security.authorization.AccessControlService;
 import com.waddoc.global.security.jwt.MissionTerminalScopes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.EnumSet;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 본인 확인이 끝난 환자에게만 진료방 입장 토큰을 발급한다.
@@ -34,6 +36,8 @@ public class ConsultationPatientTokenService {
 
     private static final EnumSet<MissionPhase> READY_MISSION_PHASES =
             EnumSet.of(MissionPhase.VERIFYING, MissionPhase.CONSULTING);
+    private static final EnumSet<MissionPhase> DIRECT_READY_MISSION_PHASES =
+            EnumSet.of(MissionPhase.DISPATCHED, MissionPhase.EN_ROUTE, MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
 
     private final ConsultationSessionRepository consultationSessionRepository;
     private final MissionRepository missionRepository;
@@ -42,7 +46,10 @@ public class ConsultationPatientTokenService {
     private final ConsultationLiveKitService consultationLiveKitService;
     private final AuditLogService auditLogService;
 
-    @Transactional(readOnly = true)
+    @Value("${consultation.direct-webrtc-enabled:false}")
+    private boolean directWebrtcEnabled;
+
+    @Transactional
     public IssuePatientTokenResponse issuePatientToken(
             String sessionId,
             Authentication authentication
@@ -55,7 +62,7 @@ public class ConsultationPatientTokenService {
         return issuePatientToken(session, mission, authentication);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public IssuePatientTokenResponse issuePatientTokenByMission(
             String missionId,
             Authentication authentication
@@ -79,7 +86,7 @@ public class ConsultationPatientTokenService {
         }
 
         Patient patient = session.getCareCase().getPatient();
-        if (!READY_MISSION_PHASES.contains(mission.getPhase())) {
+        if (!resolveReadyMissionPhases().contains(mission.getPhase())) {
             throw new BusinessException(ErrorCode.MISSION_NOT_READY);
         }
         AccessActor actor = accessControlService.assertAdminOrMissionTerminal(
@@ -88,9 +95,24 @@ public class ConsultationPatientTokenService {
                 MissionTerminalScopes.ISSUE_PATIENT_TOKEN
         );
 
+        prepareMissionForDirectWebRtc(mission);
+        boolean identityCheckBypassed = false;
+
         // 얼굴/신분증 확인 성공 캐시가 없으면 진료방 입장을 막는다.
-        if (missionIdentityCheckCacheService.findVerified(mission.getPublicId(), patient.getPublicId()).isEmpty()) {
-            throw new BusinessException(ErrorCode.IDENTITY_CHECK_NOT_CONFIRMED);
+        Optional<MissionIdentityCheckCacheService.VerifiedIdentityCheck> verifiedIdentityCheck =
+                missionIdentityCheckCacheService.findVerified(mission.getPublicId(), patient.getPublicId());
+        if (verifiedIdentityCheck.isEmpty()) {
+            if (!directWebrtcEnabled) {
+                throw new BusinessException(ErrorCode.IDENTITY_CHECK_NOT_CONFIRMED);
+            }
+            missionIdentityCheckCacheService.saveVerified(mission.getPublicId(), patient.getPublicId());
+            identityCheckBypassed = true;
+            log.warn(
+                    "Bypassing identity-check gate for direct robot WebRTC. missionId={}, patientId={}, missionPhase={}",
+                    mission.getPublicId(),
+                    patient.getPublicId(),
+                    mission.getPhase()
+            );
         }
 
         String patientToken = consultationLiveKitService.issuePatientToken(session, patient);
@@ -103,7 +125,8 @@ public class ConsultationPatientTokenService {
                 actor.actorRole(),
                 Map.of(
                         "patientId", patient.getPublicId(),
-                        "missionPhase", mission.getPhase().name()
+                        "missionPhase", mission.getPhase().name(),
+                        "identityCheckBypassed", identityCheckBypassed
                 )
         );
 
@@ -112,6 +135,23 @@ public class ConsultationPatientTokenService {
                 patientToken,
                 consultationLiveKitService.getParticipantTokenExpiresInSeconds()
         );
+    }
+
+    private EnumSet<MissionPhase> resolveReadyMissionPhases() {
+        return directWebrtcEnabled ? DIRECT_READY_MISSION_PHASES : READY_MISSION_PHASES;
+    }
+
+    private void prepareMissionForDirectWebRtc(Mission mission) {
+        if (!directWebrtcEnabled) {
+            return;
+        }
+
+        if (mission.getPhase() == MissionPhase.DISPATCHED
+                || mission.getPhase() == MissionPhase.EN_ROUTE
+                || mission.getPhase() == MissionPhase.ARRIVED) {
+            mission.updatePhase(MissionPhase.VERIFYING);
+            missionRepository.save(mission);
+        }
     }
 
     private boolean isTerminal(ConsultationSessionStatus status) {

@@ -18,6 +18,7 @@ import com.waddoc.global.security.authorization.AccessControlService;
 import com.waddoc.global.security.jwt.DeviceTerminalScopes;
 import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,8 +39,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TerminalCheckInService {
 
-    private static final EnumSet<MissionPhase> CLAIMABLE_PHASES =
+    private static final EnumSet<MissionPhase> DEFAULT_CLAIMABLE_PHASES =
             EnumSet.of(MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
+    private static final EnumSet<MissionPhase> DIRECT_WEBRTC_CLAIMABLE_PHASES =
+            EnumSet.of(MissionPhase.DISPATCHED, MissionPhase.EN_ROUTE, MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
     private static final EnumSet<MissionPhase> CURRENT_MISSION_PHASES =
             EnumSet.of(MissionPhase.DISPATCHED, MissionPhase.EN_ROUTE, MissionPhase.ARRIVED, MissionPhase.VERIFYING, MissionPhase.CONSULTING);
 
@@ -51,6 +54,9 @@ public class TerminalCheckInService {
     private final MissionTerminalTokenService missionTerminalTokenService;
     private final AuditLogService auditLogService;
     private final Clock clock;
+
+    @Value("${consultation.direct-webrtc-enabled:false}")
+    private boolean directWebrtcEnabled;
 
     @Transactional(readOnly = true)
     public TerminalCurrentMissionResponse getCurrentMission(Authentication authentication) {
@@ -98,7 +104,7 @@ public class TerminalCheckInService {
                 request.getPhoneLast4(),
                 request.getBirthDate6(),
                 BookingStatus.CONFIRMED,
-                CLAIMABLE_PHASES
+                resolveClaimablePhases()
         ).stream()
                 .filter(mission -> isMissionAccessibleToTerminal(mission, principal))
                 .toList();
@@ -176,7 +182,7 @@ public class TerminalCheckInService {
         );
 
         Mission mission = selectCurrentMission(principal, CURRENT_MISSION_PHASES)
-                .filter(candidate -> CLAIMABLE_PHASES.contains(candidate.getPhase()))
+                .filter(candidate -> resolveClaimablePhases().contains(candidate.getPhase()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.TERMINAL_MISSION_CLAIM_FORBIDDEN));
 
         bindMissionToTerminalIfNeeded(mission, principal);
@@ -219,11 +225,15 @@ public class TerminalCheckInService {
 
         // TODO: 차량 단말과 스케줄 바인딩이 확정되면 예약 일자/시간대 검증을 다시 도입한다.
         return isMissionAccessibleToTerminal(mission, principal)
-                && CLAIMABLE_PHASES.contains(mission.getPhase())
+                && resolveClaimablePhases().contains(mission.getPhase())
                 && booking.getStatus() == BookingStatus.CONFIRMED
                 && patientPhone != null
                 && patientPhone.endsWith(request.getPhoneLast4())
                 && request.getBirthDate6().equals(mission.getCareCase().getPatient().getBirthDate6());
+    }
+
+    private EnumSet<MissionPhase> resolveClaimablePhases() {
+        return directWebrtcEnabled ? DIRECT_WEBRTC_CLAIMABLE_PHASES : DEFAULT_CLAIMABLE_PHASES;
     }
 
     private Optional<Mission> selectCurrentMission(

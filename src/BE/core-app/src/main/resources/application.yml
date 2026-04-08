@@ -58,6 +58,9 @@ app:
   demo-mode:
     enabled: ${APP_DEMO_MODE_ENABLED:false}
 
+consultation:
+  direct-webrtc-enabled: ${CONSULTATION_DIRECT_WEBRTC_ENABLED:false}
+
 dispatch:
   outbox-relay-interval-ms: 1000
   default-vehicle-id: ${DISPATCH_DEFAULT_VEHICLE_ID:veh_GIMCHEON_01}

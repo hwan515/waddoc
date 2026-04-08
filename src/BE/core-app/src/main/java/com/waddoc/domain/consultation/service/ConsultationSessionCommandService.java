@@ -13,6 +13,7 @@ import com.waddoc.global.error.ErrorCode;
 import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ import java.util.Map;
 /**
  * 케이스 기준으로 진료 세션을 생성하거나 재사용하는 쓰기 작업을 담당한다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConsultationSessionCommandService {
@@ -71,30 +73,49 @@ public class ConsultationSessionCommandService {
                 .livekitUrl(consultationLiveKitService.getLivekitUrl())
                 .build();
 
-        consultationLiveKitService.createRoom(session.getRoomId());
-        ConsultationSession savedSession = consultationSessionRepository.save(session);
-        String doctorToken = consultationLiveKitService.issueDoctorToken(savedSession, doctorProfile);
+        ConsultationSession savedSession = consultationSessionRepository.saveAndFlush(session);
 
-        auditLogService.log(
-                "CONSULTATION_SESSION_CREATED",
-                "CONSULTATION_SESSION",
-                savedSession.getPublicId(),
-                "corr_ses_" + savedSession.getPublicId(),
-                authenticatedUser.userId(),
-                authenticatedUser.role().name(),
-                Map.of(
-                        "caseId", careCase.getPublicId(),
-                        "roomId", savedSession.getRoomId()
-                )
-        );
+        try {
+            consultationLiveKitService.createRoom(savedSession.getRoomId());
+            String doctorToken = consultationLiveKitService.issueDoctorToken(savedSession, doctorProfile);
 
-        return new CreateSessionResult(true, CreateConsultationSessionResponse.of(savedSession, doctorToken));
+            auditLogService.log(
+                    "CONSULTATION_SESSION_CREATED",
+                    "CONSULTATION_SESSION",
+                    savedSession.getPublicId(),
+                    "corr_ses_" + savedSession.getPublicId(),
+                    authenticatedUser.userId(),
+                    authenticatedUser.role().name(),
+                    Map.of(
+                            "caseId", careCase.getPublicId(),
+                            "roomId", savedSession.getRoomId()
+                    )
+            );
+
+            return new CreateSessionResult(true, CreateConsultationSessionResponse.of(savedSession, doctorToken));
+        } catch (RuntimeException e) {
+            cleanupLiveKitRoom(savedSession.getRoomId(), savedSession.getPublicId());
+            throw e;
+        }
     }
 
     private boolean isTerminal(ConsultationSessionStatus status) {
         return status == ConsultationSessionStatus.COMPLETED
                 || status == ConsultationSessionStatus.FAILED
                 || status == ConsultationSessionStatus.ABANDONED;
+    }
+
+    private void cleanupLiveKitRoom(String roomId, String sessionId) {
+        try {
+            consultationLiveKitService.deleteRoom(roomId);
+        } catch (RuntimeException cleanupException) {
+            log.warn(
+                    "Failed to clean up LiveKit room after session creation error. sessionId={}, roomId={}",
+                    sessionId,
+                    roomId,
+                    cleanupException
+            );
+        }
     }
 
     public record CreateSessionResult(boolean created, CreateConsultationSessionResponse response) {

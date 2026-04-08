@@ -192,6 +192,38 @@ class ConsultationPatientTokenServiceTest {
         verify(consultationSessionRepository).findByCareCase(mission.getCareCase());
     }
 
+    @Test
+    void issuePatientToken_directWebRtcMode_allowsEnRouteMissionWithoutIdentityCheck() {
+        setField(consultationPatientTokenService, "directWebrtcEnabled", true);
+
+        Authentication authentication = adminAuthentication();
+        ConsultationSession session = buildSession("pat_test123");
+        Mission mission = buildMission(session);
+        mission.updatePhase(MissionPhase.EN_ROUTE);
+
+        when(consultationSessionRepository.findWithParticipantsByPublicId("ses_test123")).thenReturn(Optional.of(session));
+        when(missionRepository.findByCareCase(session.getCareCase())).thenReturn(Optional.of(mission));
+        when(accessControlService.assertAdminOrMissionTerminal(
+                authentication,
+                "ms_test123",
+                MissionTerminalScopes.ISSUE_PATIENT_TOKEN
+        )).thenReturn(new AccessActor("usr_admin", "ADMIN"));
+        when(missionIdentityCheckCacheService.findVerified("ms_test123", "pat_test123")).thenReturn(Optional.empty());
+        when(consultationLiveKitService.issuePatientToken(session, session.getCareCase().getPatient())).thenReturn("patient-token");
+        when(consultationLiveKitService.getParticipantTokenExpiresInSeconds()).thenReturn(7200);
+
+        IssuePatientTokenResponse response = consultationPatientTokenService.issuePatientToken(
+                "ses_test123",
+                authentication
+        );
+
+        assertThat(response.getSessionId()).isEqualTo("ses_test123");
+        assertThat(response.getPatientToken()).isEqualTo("patient-token");
+        assertThat(mission.getPhase()).isEqualTo(MissionPhase.VERIFYING);
+        verify(missionIdentityCheckCacheService).saveVerified("ms_test123", "pat_test123");
+        verify(missionRepository).save(mission);
+    }
+
     private Mission buildMission(ConsultationSession session) {
         Mission mission = Mission.builder()
                 .careCase(session.getCareCase())

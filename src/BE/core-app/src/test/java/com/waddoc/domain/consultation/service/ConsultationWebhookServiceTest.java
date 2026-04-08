@@ -206,9 +206,29 @@ class ConsultationWebhookServiceTest {
                 .count()).isEqualTo(1.0);
     }
 
+    @Test
+    void handleWebhook_clearsProcessingMarkerWhenHandlerFails() {
+        String body = participantEventBody("participant_joined", "room_missing", "doctor:doc_usr_doctor");
+        LivekitWebhook.WebhookEvent event = buildParticipantEvent("participant_joined", "room_missing", "doctor:doc_usr_doctor");
+
+        stubIdempotencyCheck();
+        when(webhookReceiver.receive(body, "signed-header")).thenReturn(event);
+        when(consultationSessionRepository.findWithParticipantsByRoomId("room_missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> consultationWebhookService.handleWebhook(body, "signed-header"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
+
+        verify(valueOperations, never()).set(anyString(), eq("1"), any(Duration.class));
+        verify(redisTemplate).delete("webhook:event:processing:" + event.getId());
+    }
+
     private void stubIdempotencyCheck() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.hasKey(anyString())).thenReturn(false);
         when(valueOperations.setIfAbsent(anyString(), eq("1"), any(Duration.class))).thenReturn(true);
+        when(redisTemplate.delete(anyString())).thenReturn(true);
     }
 
     private ConsultationSession buildSession() {

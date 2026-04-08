@@ -55,6 +55,9 @@ const DEMO_VITALS = {
     measuredAt: new Date().toISOString(),
 };
 
+const DOCTOR_RECONNECT_WINDOW_MS = 30000;
+const DOCTOR_RECONNECT_INTERVAL_MS = 3000;
+
 const normalizeVitals = (vitals) => ({
     ...EMPTY_VITALS,
     ...(vitals || {}),
@@ -93,7 +96,13 @@ const VideoConference = () => {
     const [sessionId, setSessionId] = useState(null);
     const [joinError, setJoinError] = useState('');
     const [isJoining, setIsJoining] = useState(false);
+    const [isReconnecting, setIsReconnecting] = useState(false);
+    const [roomRenderKey, setRoomRenderKey] = useState(0);
     const isDoctorEndingRef = useRef(false);
+    const isUnmountedRef = useRef(false);
+    const reconnectTimerRef = useRef(null);
+    const reconnectDeadlineRef = useRef(0);
+    const isReconnectingRef = useRef(false);
 
     const [micEnabled, setMicEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
@@ -110,6 +119,99 @@ const VideoConference = () => {
         sessionId,
         isDemoMode,
     });
+
+    const clearReconnectTimer = () => {
+        if (reconnectTimerRef.current) {
+            window.clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+        }
+    };
+
+    const applyRoomConnection = ({ doctorToken, nextLivekitUrl, nextSessionId }) => {
+        if (isUnmountedRef.current) {
+            return;
+        }
+        setLivekitToken(doctorToken);
+        setLivekitUrl(nextLivekitUrl);
+        setSessionId(nextSessionId);
+        setRoomRenderKey((previous) => previous + 1);
+    };
+
+    const fetchDoctorRoomConnection = async () => {
+        const response = await apiClient.post(`/cases/${id}/sessions`);
+        const doctorToken = response.data?.doctorToken;
+        const nextLivekitUrl = response.data?.room?.livekitUrl;
+        const nextSessionId = response.data?.sessionId;
+
+        if (!doctorToken || !nextLivekitUrl || !nextSessionId) {
+            throw new Error('진료실 연결 정보가 올바르지 않습니다.');
+        }
+
+        return { doctorToken, nextLivekitUrl, nextSessionId };
+    };
+
+    const stopReconnectFlow = () => {
+        clearReconnectTimer();
+        isReconnectingRef.current = false;
+        if (!isUnmountedRef.current) {
+            setIsReconnecting(false);
+        }
+    };
+
+    const handleReconnectFailure = () => {
+        stopReconnectFlow();
+        if (isUnmountedRef.current) {
+            return;
+        }
+        setLivekitToken('');
+        setLivekitUrl('');
+        setSessionId(null);
+        setJoinError('진료실 연결이 끊겼습니다. 다시 입장해 주세요.');
+        setIsJoined(false);
+    };
+
+    const attemptReconnect = async () => {
+        try {
+            const connection = await fetchDoctorRoomConnection();
+            if (isUnmountedRef.current) {
+                return;
+            }
+            clearReconnectTimer();
+            applyRoomConnection(connection);
+            setJoinError('');
+            stopReconnectFlow();
+        } catch {
+            if (isUnmountedRef.current) {
+                return;
+            }
+
+            if (Date.now() < reconnectDeadlineRef.current && !isDoctorEndingRef.current) {
+                reconnectTimerRef.current = window.setTimeout(() => {
+                    void attemptReconnect();
+                }, DOCTOR_RECONNECT_INTERVAL_MS);
+                return;
+            }
+
+            handleReconnectFailure();
+        }
+    };
+
+    const startReconnectFlow = () => {
+        if (isDemoMode || isDoctorEndingRef.current || isReconnectingRef.current) {
+            return;
+        }
+
+        clearReconnectTimer();
+        reconnectDeadlineRef.current = Date.now() + DOCTOR_RECONNECT_WINDOW_MS;
+        isReconnectingRef.current = true;
+        setIsReconnecting(true);
+        void attemptReconnect();
+    };
+
+    useEffect(() => () => {
+        isUnmountedRef.current = true;
+        clearReconnectTimer();
+    }, []);
 
     // 진료 내역 데이터 조회
     useEffect(() => {
@@ -197,24 +299,13 @@ const VideoConference = () => {
                 setLivekitToken('test-token');
                 setLivekitUrl('wss://test.livekit.cloud');
                 setSessionId(null);
+                setRoomRenderKey((previous) => previous + 1);
                 setIsJoined(true);
                 return;
             }
 
-            // [API 연동] 의사의 진료 세션 생성 및 LiveKit 토큰 발급 요청
-            // POST /api/v1/cases/{caseId}/sessions
-            const response = await apiClient.post(`/cases/${id}/sessions`);
-            const doctorToken = response.data?.doctorToken;
-            const nextLivekitUrl = response.data?.room?.livekitUrl;
-            const nextSessionId = response.data?.sessionId;
-
-            if (!doctorToken || !nextLivekitUrl || !nextSessionId) {
-                throw new Error('진료실 연결 정보가 올바르지 않습니다.');
-            }
-
-            setLivekitToken(doctorToken);
-            setLivekitUrl(nextLivekitUrl);
-            setSessionId(nextSessionId);
+            const connection = await fetchDoctorRoomConnection();
+            applyRoomConnection(connection);
 
             // 현재 단계(LiveKit 적용)에서는 발급받은 토큰으로 방에 입장
             setIsJoined(true);
@@ -253,6 +344,7 @@ const VideoConference = () => {
     // 메인 화상 진료실 (의사 권한으로 접속)
     return (
         <LiveKitRoom
+            key={roomRenderKey}
             connect={!!livekitToken && livekitToken !== 'test-token'} // 실제 토큰이 아니면 오프라인 모드 유지 (웹소켓 401 방지)
             video={videoEnabled ? LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS : false}
             audio={micEnabled}
@@ -260,14 +352,23 @@ const VideoConference = () => {
             serverUrl={livekitUrl}
             options={LIVEKIT_HIGH_QUALITY_ROOM_OPTIONS}
             data-lk-theme="default"
-            className="w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
+            className="relative w-full h-full flex flex-col p-0 m-0 border-0 bg-transparent"
             onDisconnected={() => {
                 if (isDoctorEndingRef.current) {
                     return;
                 }
-                handleEndCall(null);
+                startReconnectFlow();
             }}
         >
+            {isReconnecting && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-slate-950/88 text-center text-white">
+                    <div className="h-16 w-16 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
+                    <div>
+                        <p className="text-2xl font-semibold">진료실 연결을 복구하는 중입니다.</p>
+                        <p className="mt-2 text-sm text-slate-300">네트워크가 잠시 불안정할 수 있습니다. 잠시만 기다려 주세요.</p>
+                    </div>
+                </div>
+            )}
             <ConsultationRoom
                 details={consultationDetails}
                 vitals={vitals}

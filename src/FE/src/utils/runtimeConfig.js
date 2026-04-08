@@ -34,6 +34,15 @@ export const isMonitoringTabEnabled = () => {
     return isTruthyFlag(configuredValue);
 };
 
+export const isRobotDirectWebRtcEnabled = () => {
+    const runtimeConfig = readRuntimeConfig();
+    const configuredValue = runtimeConfig.VITE_ROBOT_DIRECT_WEBRTC_ENABLED
+        ?? import.meta.env.VITE_ROBOT_DIRECT_WEBRTC_ENABLED
+        ?? 'false';
+
+    return isTruthyFlag(configuredValue);
+};
+
 export const isDemoModeEnabled = () => {
     const runtimeConfig = readRuntimeConfig();
     const configuredValue = runtimeConfig.VITE_DEMO_MODE_ENABLED ?? import.meta.env.VITE_DEMO_MODE_ENABLED ?? 'false';

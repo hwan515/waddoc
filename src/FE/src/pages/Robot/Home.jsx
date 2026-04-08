@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import apiClient from '../../utils/api';
-import { getRobotTerminalConfig } from '../../utils/runtimeConfig';
+import { getRobotTerminalConfig, isRobotDirectWebRtcEnabled } from '../../utils/runtimeConfig';
 
 const CURRENT_MISSION_POLL_INTERVAL_MS = 3000;
 const GREETING_REDIRECT_DELAY_MS = 1800;
@@ -25,6 +25,7 @@ const extractApiErrorMessage = (error, fallbackMessage) => (
 
 const Home = () => {
     const navigate = useNavigate();
+    const directWebRtcEnabled = isRobotDirectWebRtcEnabled();
     const [screenState, setScreenState] = useState('bootstrapping');
     const [currentMission, setCurrentMission] = useState(null);
     const [errorMsg, setErrorMsg] = useState('');
@@ -98,7 +99,10 @@ const Home = () => {
 
                 if (response?.hasMission) {
                     setCurrentMission(response);
-                    setScreenState(response.phase === 'ARRIVED' ? 'ready' : 'waiting');
+                    const startableMissionPhases = directWebRtcEnabled
+                        ? new Set(['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'])
+                        : new Set(['ARRIVED']);
+                    setScreenState(startableMissionPhases.has(response.phase) ? 'ready' : 'waiting');
                     return;
                 }
 
@@ -134,7 +138,7 @@ const Home = () => {
                 window.clearTimeout(greetingTimerRef.current);
             }
         };
-    }, []);
+    }, [directWebRtcEnabled]);
 
     const handleStart = async () => {
         const deviceTerminalToken = localStorage.getItem('robot_device_terminal_token');
@@ -166,13 +170,17 @@ const Home = () => {
                 ...prev,
                 missionId,
                 patientName,
-                phase: 'ARRIVED',
+                phase: directWebRtcEnabled ? (prev?.phase || 'EN_ROUTE') : 'ARRIVED',
             }));
-            setScreenState('intro');
+            if (directWebRtcEnabled) {
+                navigate('/robot/conference', { replace: true });
+            } else {
+                setScreenState('intro');
 
-            greetingTimerRef.current = window.setTimeout(() => {
-                navigate('/robot/auth', { replace: true });
-            }, GREETING_REDIRECT_DELAY_MS);
+                greetingTimerRef.current = window.setTimeout(() => {
+                    navigate('/robot/auth', { replace: true });
+                }, GREETING_REDIRECT_DELAY_MS);
+            }
         } catch (error) {
             setErrorMsg(extractApiErrorMessage(error, '현재 차량 진료를 시작할 수 없습니다.'));
             setIsStarting(false);
@@ -181,6 +189,19 @@ const Home = () => {
 
     const patientName = currentMission?.patientName || localStorage.getItem('current_patient_name') || '환자';
     const isReadyToStart = screenState === 'ready';
+    const isDirectReadyBeforeArrival = directWebRtcEnabled
+        && currentMission?.phase
+        && currentMission.phase !== 'ARRIVED';
+    const titleText = isReadyToStart
+        ? (isDirectReadyBeforeArrival ? '원격 진료를 바로 시작할 수 있습니다.' : '차량이 도착했습니다.')
+        : '차량이 자율 주행중입니다.';
+    const descriptionText = isReadyToStart
+        ? (isDirectReadyBeforeArrival
+            ? `${patientName}님 진료를 현장 도착 대기 없이 바로 연결할 수 있습니다.`
+            : `${patientName}님 진료를 시작할 준비가 완료되었습니다.`)
+        : (directWebRtcEnabled
+            ? '차량이 출발하면 진료 시작 버튼이 바로 활성화됩니다.'
+            : '차량 도착 후 진료 시작 버튼이 자동으로 활성화됩니다.');
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-dark font-sans relative overflow-hidden">
@@ -200,12 +221,10 @@ const Home = () => {
                 ) : (
                     <>
                         <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight leading-tight">
-                            {isReadyToStart ? '차량이 도착했습니다.' : '차량이 자율 주행중입니다.'}
+                            {titleText}
                         </h1>
                         <p className="text-lg md:text-2xl text-slate-300 leading-relaxed">
-                            {isReadyToStart
-                                ? `${patientName}님 진료를 시작할 준비가 완료되었습니다.`
-                                : '차량 도착 후 진료 시작 버튼이 자동으로 활성화됩니다.'}
+                            {descriptionText}
                         </p>
                         {currentMission?.hasMission && (
                             <p className="text-base md:text-lg text-slate-400">

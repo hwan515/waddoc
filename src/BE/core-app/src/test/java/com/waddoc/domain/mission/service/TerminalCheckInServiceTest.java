@@ -240,6 +240,52 @@ class TerminalCheckInServiceTest {
         verify(missionTerminalTokenService).issueTokenForDeviceClaim("ms_claimable", "robot-terminal-01");
     }
 
+    @Test
+    void claimCurrentMission_allowsEnRouteMissionWhenDirectWebRtcEnabled() {
+        setField(terminalCheckInService, "directWebrtcEnabled", true);
+
+        Authentication authentication = mock(Authentication.class);
+        DeviceTerminalPrincipal principal = new DeviceTerminalPrincipal(
+                "device-terminal:robot-terminal-01",
+                "robot-terminal-01",
+                "veh_GIMCHEON_01",
+                "GIMCHEON",
+                List.of(DeviceTerminalScopes.CLAIM_MISSION)
+        );
+        when(accessControlService.assertDeviceTerminalPrincipal(
+                authentication,
+                DeviceTerminalScopes.CLAIM_MISSION
+        )).thenReturn(principal);
+
+        Mission mission = createCurrentClaimableMission(
+                "ms_en_route",
+                null,
+                "GIMCHEON",
+                MissionPhase.EN_ROUTE
+        );
+        when(missionRepository.findCurrentVehicleMissions(
+                eq("veh_GIMCHEON_01"),
+                any(),
+                eq(BookingStatus.CONFIRMED),
+                any()
+        )).thenReturn(List.of(mission));
+        when(missionTerminalTokenService.issueTokenForDeviceClaim("ms_en_route", "robot-terminal-01"))
+                .thenReturn(IssueMissionTerminalTokenResponse.builder()
+                        .missionId("ms_en_route")
+                        .caseId("case_test123")
+                        .patientName("홍길동")
+                        .terminalToken("mission-terminal-token")
+                        .expiresIn(1800L)
+                        .scopes(List.of("mission:identity-check", "session:issue-patient-token"))
+                        .build());
+
+        IssueMissionTerminalTokenResponse response = terminalCheckInService.claimCurrentMission(authentication);
+
+        assertThat(response.getMissionId()).isEqualTo("ms_en_route");
+        assertThat(mission.getVehicleId()).isEqualTo("veh_GIMCHEON_01");
+        verify(missionTerminalTokenService).issueTokenForDeviceClaim("ms_en_route", "robot-terminal-01");
+    }
+
     private Mission createLookupMission(
             String missionId,
             String vehicleId,

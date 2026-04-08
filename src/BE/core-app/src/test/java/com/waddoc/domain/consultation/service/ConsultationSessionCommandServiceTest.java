@@ -68,7 +68,7 @@ class ConsultationSessionCommandServiceTest {
         when(careCaseRepository.findWithDetailsByPublicId(careCase.getPublicId())).thenReturn(Optional.of(careCase));
         when(consultationSessionRepository.findByCareCase(careCase)).thenReturn(Optional.empty());
         when(consultationLiveKitService.getLivekitUrl()).thenReturn("wss://livekit.example.com");
-        when(consultationSessionRepository.save(any(ConsultationSession.class))).thenAnswer(invocation -> {
+        when(consultationSessionRepository.saveAndFlush(any(ConsultationSession.class))).thenAnswer(invocation -> {
             ConsultationSession session = invocation.getArgument(0);
             setField(session, "createdAt", LocalDateTime.of(2026, 3, 18, 15, 0));
             return session;
@@ -86,6 +86,7 @@ class ConsultationSessionCommandServiceTest {
         assertThat(response.getRoom().getRoomId()).startsWith("room_ses_");
         assertThat(response.getRoom().getLivekitUrl()).isEqualTo("wss://livekit.example.com");
         verify(consultationLiveKitService).createRoom(response.getRoom().getRoomId());
+        verify(consultationSessionRepository).saveAndFlush(any(ConsultationSession.class));
         verify(auditLogService).log(any(), any(), any(), any(), any(), any(), any());
     }
 
@@ -113,8 +114,34 @@ class ConsultationSessionCommandServiceTest {
         assertThat(result.created()).isFalse();
         assertThat(result.response().getSessionId()).isEqualTo(existingSession.getPublicId());
         assertThat(result.response().getStatus()).isEqualTo(ConsultationSessionStatus.READY);
-        verify(consultationSessionRepository, never()).save(any());
+        verify(consultationSessionRepository, never()).saveAndFlush(any());
         verify(consultationLiveKitService, never()).createRoom(any());
+    }
+
+    @Test
+    void createOrReuseSession_deletesRoomWhenDownstreamStepFails() {
+        DoctorProfile doctorProfile = buildDoctorProfile("usr_doctor", "doc_doctor");
+        CareCase careCase = buildCareCase(doctorProfile);
+        AuthenticatedUser actor = new AuthenticatedUser("usr_doctor", Role.DOCTOR);
+
+        when(accessControlService.getDoctorProfileOrThrow(actor)).thenReturn(doctorProfile);
+        when(careCaseRepository.findWithDetailsByPublicId(careCase.getPublicId())).thenReturn(Optional.of(careCase));
+        when(consultationSessionRepository.findByCareCase(careCase)).thenReturn(Optional.empty());
+        when(consultationLiveKitService.getLivekitUrl()).thenReturn("wss://livekit.example.com");
+        when(consultationSessionRepository.saveAndFlush(any(ConsultationSession.class))).thenAnswer(invocation -> {
+            ConsultationSession session = invocation.getArgument(0);
+            setField(session, "createdAt", LocalDateTime.of(2026, 3, 18, 15, 0));
+            return session;
+        });
+        when(consultationLiveKitService.issueDoctorToken(any(ConsultationSession.class), eq(doctorProfile)))
+                .thenThrow(new IllegalStateException("token issuance failed"));
+
+        assertThatThrownBy(() -> consultationSessionCommandService.createOrReuseSession(careCase.getPublicId(), actor))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("token issuance failed");
+
+        verify(consultationLiveKitService).deleteRoom(any());
+        verify(auditLogService, never()).log(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

@@ -33,8 +33,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ConsultationWebhookService {
 
-    private static final String WEBHOOK_IDEMPOTENCY_PREFIX = "webhook:event:";
+    private static final String WEBHOOK_PROCESSED_PREFIX = "webhook:event:processed:";
+    private static final String WEBHOOK_PROCESSING_PREFIX = "webhook:event:processing:";
     private static final Duration WEBHOOK_IDEMPOTENCY_TTL = Duration.ofMinutes(5);
+    private static final Duration WEBHOOK_PROCESSING_TTL = Duration.ofMinutes(1);
 
     private final ConsultationSessionRepository consultationSessionRepository;
     private final MissionRepository missionRepository;
@@ -63,24 +65,66 @@ public class ConsultationWebhookService {
         }
 
         liveKitMonitoringMetrics.recordWebhookEvent(eventName, () -> {
-            // 웹훅 멱등성: 이미 처리된 이벤트는 무시
             String eventId = event.getId();
-            if (eventId != null && !eventId.isBlank()) {
-                String idempotencyKey = WEBHOOK_IDEMPOTENCY_PREFIX + eventId;
-                Boolean wasAbsent = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "1", WEBHOOK_IDEMPOTENCY_TTL);
-                if (!Boolean.TRUE.equals(wasAbsent)) {
-                    log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
-                    return;
-                }
+            WebhookProcessingState processingState = tryStartWebhookProcessing(eventId);
+            if (processingState == WebhookProcessingState.ALREADY_PROCESSED) {
+                log.info("Ignoring duplicate LiveKit webhook event: id={}, event={}", eventId, eventName);
+                return;
+            }
+            if (processingState == WebhookProcessingState.ALREADY_PROCESSING) {
+                log.info("Ignoring LiveKit webhook event already being processed: id={}, event={}", eventId, eventName);
+                return;
             }
 
-            switch (eventName) {
-                case "participant_joined" -> handleParticipantJoined(event);
-                case "participant_left" -> handleParticipantLeft(event);
-                case "room_finished" -> handleRoomFinished(event);
-                default -> log.info("Ignoring unsupported LiveKit webhook event: {}", eventName);
+            boolean processedSuccessfully = false;
+            try {
+                switch (eventName) {
+                    case "participant_joined" -> handleParticipantJoined(event);
+                    case "participant_left" -> handleParticipantLeft(event);
+                    case "room_finished" -> handleRoomFinished(event);
+                    default -> log.info("Ignoring unsupported LiveKit webhook event: {}", eventName);
+                }
+                processedSuccessfully = true;
+            } finally {
+                if (processingState == WebhookProcessingState.STARTED) {
+                    finishWebhookProcessing(eventId, processedSuccessfully);
+                }
             }
         });
+    }
+
+    private WebhookProcessingState tryStartWebhookProcessing(String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            return WebhookProcessingState.NO_IDEMPOTENCY_KEY;
+        }
+
+        String processedKey = WEBHOOK_PROCESSED_PREFIX + eventId;
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(processedKey))) {
+            return WebhookProcessingState.ALREADY_PROCESSED;
+        }
+
+        String processingKey = WEBHOOK_PROCESSING_PREFIX + eventId;
+        Boolean started = redisTemplate.opsForValue().setIfAbsent(processingKey, "1", WEBHOOK_PROCESSING_TTL);
+        return Boolean.TRUE.equals(started)
+                ? WebhookProcessingState.STARTED
+                : WebhookProcessingState.ALREADY_PROCESSING;
+    }
+
+    private void finishWebhookProcessing(String eventId, boolean processedSuccessfully) {
+        if (eventId == null || eventId.isBlank()) {
+            return;
+        }
+
+        String processingKey = WEBHOOK_PROCESSING_PREFIX + eventId;
+        try {
+            if (processedSuccessfully) {
+                redisTemplate.opsForValue().set(WEBHOOK_PROCESSED_PREFIX + eventId, "1", WEBHOOK_IDEMPOTENCY_TTL);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Failed to persist LiveKit webhook idempotency marker. eventId={}", eventId, e);
+        } finally {
+            redisTemplate.delete(processingKey);
+        }
     }
 
     private void handleParticipantJoined(LivekitWebhook.WebhookEvent event) {
@@ -249,5 +293,12 @@ public class ConsultationWebhookService {
         DOCTOR,
         PATIENT,
         UNKNOWN
+    }
+
+    private enum WebhookProcessingState {
+        NO_IDEMPOTENCY_KEY,
+        STARTED,
+        ALREADY_PROCESSED,
+        ALREADY_PROCESSING
     }
 }
