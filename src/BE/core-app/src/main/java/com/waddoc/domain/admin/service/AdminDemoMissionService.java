@@ -14,6 +14,7 @@ import com.waddoc.global.security.AuthenticatedUser;
 import com.waddoc.global.security.authorization.AccessControlService;
 import com.waddoc.global.util.KstTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +57,9 @@ public class AdminDemoMissionService {
     private final DemoModePolicy demoModePolicy;
     private final Clock clock;
 
+    @Value("${consultation.direct-webrtc-enabled:false}")
+    private boolean directWebrtcEnabled;
+
     public AdminDemoMissionActionResponse dispatchMission(
             AuthenticatedUser authenticatedUser,
             String missionId
@@ -82,6 +86,10 @@ public class AdminDemoMissionService {
             );
             advanceMissionTo(mission, MissionPhase.EN_ROUTE);
             waypointCommandSent = true;
+        } else if (directWebrtcEnabled) {
+            // 즉시 진료 모드에서는 waypoint가 없어도 active mission을 유지해야
+            // 단말이 current mission을 잡고 WebRTC fast path로 진입할 수 있다.
+            advanceMissionTo(mission, MissionPhase.EN_ROUTE);
         } else {
             advanceMissionTo(mission, MissionPhase.COMPLETED);
             dummyCompleted = true;

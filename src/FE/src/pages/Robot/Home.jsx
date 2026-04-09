@@ -99,6 +99,8 @@ const Home = () => {
 
                 if (response?.hasMission) {
                     setCurrentMission(response);
+                    // 즉시 진료 모드에서는 MQTT ARRIVED를 기다리지 않고
+                    // 출발 직후 단계부터 진료 시작 버튼을 노출한다.
                     const startableMissionPhases = directWebRtcEnabled
                         ? new Set(['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING', 'CONSULTING'])
                         : new Set(['ARRIVED']);
@@ -173,6 +175,7 @@ const Home = () => {
                 phase: directWebRtcEnabled ? (prev?.phase || 'EN_ROUTE') : 'ARRIVED',
             }));
             if (directWebRtcEnabled) {
+                // 즉시 진료 모드에서는 본인확인 화면을 거치지 않고 곧바로 conference로 진입한다.
                 navigate('/robot/conference', { replace: true });
             } else {
                 setScreenState('intro');

@@ -233,6 +233,7 @@ public class TerminalCheckInService {
     }
 
     private EnumSet<MissionPhase> resolveClaimablePhases() {
+        // 즉시 진료 모드에서는 MQTT ARRIVED를 기다리지 않고 출발 직후 단계부터 단말 claim을 허용한다.
         return directWebrtcEnabled ? DIRECT_WEBRTC_CLAIMABLE_PHASES : DEFAULT_CLAIMABLE_PHASES;
     }
 

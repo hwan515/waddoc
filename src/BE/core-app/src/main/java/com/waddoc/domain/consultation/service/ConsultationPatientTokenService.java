@@ -105,6 +105,8 @@ public class ConsultationPatientTokenService {
             if (!directWebrtcEnabled) {
                 throw new BusinessException(ErrorCode.IDENTITY_CHECK_NOT_CONFIRMED);
             }
+            // 즉시 진료 모드에서는 차량 도착 전 진입을 허용하므로,
+            // 현장 본인확인 캐시가 아직 없더라도 환자 토큰 발급을 진행한다.
             missionIdentityCheckCacheService.saveVerified(mission.getPublicId(), patient.getPublicId());
             identityCheckBypassed = true;
             log.warn(
@@ -138,6 +140,7 @@ public class ConsultationPatientTokenService {
     }
 
     private EnumSet<MissionPhase> resolveReadyMissionPhases() {
+        // 즉시 진료 모드에서는 ARRIVED 이전 단계도 진료방 입장 준비 상태로 본다.
         return directWebrtcEnabled ? DIRECT_READY_MISSION_PHASES : READY_MISSION_PHASES;
     }
 
@@ -149,6 +152,8 @@ public class ConsultationPatientTokenService {
         if (mission.getPhase() == MissionPhase.DISPATCHED
                 || mission.getPhase() == MissionPhase.EN_ROUTE
                 || mission.getPhase() == MissionPhase.ARRIVED) {
+            // LiveKit 입장 직전에는 mission을 VERIFYING으로 올려
+            // 이후 webhook/상담 흐름이 기존 phase 전이를 그대로 재사용하게 한다.
             mission.updatePhase(MissionPhase.VERIFYING);
             missionRepository.save(mission);
         }

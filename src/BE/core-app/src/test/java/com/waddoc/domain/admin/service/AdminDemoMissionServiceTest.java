@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -114,6 +115,34 @@ class AdminDemoMissionServiceTest {
         assertThat(response.getPhase()).isEqualTo(MissionPhase.COMPLETED);
         assertThat(response.isWaypointCommandSent()).isFalse();
         assertThat(response.isDummyCompleted()).isTrue();
+        assertThat(outbox.isCompleted()).isTrue();
+        verify(robotWaypointCommandClient, never()).dispatchMission(anyString(), anyString(), anyInt(), anyString());
+    }
+
+    @Test
+    void dispatchMission_keepsUnmappedMissionActiveWhenDirectWebrtcEnabled() {
+        AuthenticatedUser admin = new AuthenticatedUser("usr_admin", Role.ADMIN);
+        Mission mission = buildMission(null);
+        DispatchOutbox outbox = DispatchOutbox.builder()
+                .careCase(mission.getCareCase())
+                .regionCode("GIMCHEON")
+                .destination(mission.getDestination())
+                .build();
+
+        ReflectionTestUtils.setField(adminDemoMissionService, "directWebrtcEnabled", true);
+
+        when(demoModePolicy.isOperatorDispatchOnly()).thenReturn(true);
+        when(missionRepository.findWithDetailsByPublicId(mission.getPublicId())).thenReturn(Optional.of(mission));
+        when(missionRepository.findAllByVehicleIdAndPhaseIn(eq(mission.getVehicleId()), any())).thenReturn(java.util.List.of());
+        when(dispatchOutboxRepository.findWithPatientByCareCasePublicId(anyString())).thenReturn(Optional.of(outbox));
+        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AdminDemoMissionActionResponse response =
+                adminDemoMissionService.dispatchMission(admin, mission.getPublicId());
+
+        assertThat(response.getPhase()).isEqualTo(MissionPhase.EN_ROUTE);
+        assertThat(response.isWaypointCommandSent()).isFalse();
+        assertThat(response.isDummyCompleted()).isFalse();
         assertThat(outbox.isCompleted()).isTrue();
         verify(robotWaypointCommandClient, never()).dispatchMission(anyString(), anyString(), anyInt(), anyString());
     }
