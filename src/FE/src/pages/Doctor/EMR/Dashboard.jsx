@@ -7,6 +7,7 @@ import apiClient from '../../../utils/api';
 import { sanitizeSelectionReason } from '../../../utils/intakeSelectionReason';
 import { logoutSession } from '../../../utils/logout';
 import { parsePrescriptionNote } from '../../../utils/prescriptionNote';
+import { isRobotDirectWebRtcEnabled } from '../../../utils/runtimeConfig';
 
 const getSymptomCandidates = (deptName = '') => {
     if (deptName.includes('정형')) {
@@ -62,7 +63,8 @@ const formatDateKey = (date) => {
 
 const CASE_SYNC_INTERVAL_MS = 10000;
 const STARTABLE_CASE_STATUSES = new Set(['CREATED', 'PREPARING']);
-const STARTABLE_MISSION_PHASES = new Set(['ARRIVED', 'VERIFYING']);
+const DEFAULT_STARTABLE_MISSION_PHASES = new Set(['ARRIVED', 'VERIFYING']);
+const DIRECT_STARTABLE_MISSION_PHASES = new Set(['DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'VERIFYING']);
 const TERMINAL_CASE_STATUSES = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
 const REJOINABLE_SESSION_STATUSES = new Set(['CREATED', 'READY', 'IN_PROGRESS']);
 const REMOTE_BOOKING_CHANNELS = new Set(['WEB_SIMULATOR', 'PHONE']);
@@ -216,8 +218,12 @@ const shouldShowConsultationAction = (reservation) => (
     hasRejoinableConsultationSession(reservation) || isConsultationStartTarget(reservation)
 );
 
+const resolveStartableMissionPhases = (directWebRtcEnabled) => (
+    directWebRtcEnabled ? DIRECT_STARTABLE_MISSION_PHASES : DEFAULT_STARTABLE_MISSION_PHASES
+);
+
 // 비대면 예약이면서 예약일이 오늘이고 환자 도착 이후 단계(본인 확인 포함)일 때만 진료 시작을 허용한다.
-const canStartConsultation = (reservation, now) => {
+const canStartConsultation = (reservation, now, directWebRtcEnabled) => {
     if (hasRejoinableConsultationSession(reservation)) {
         return true;
     }
@@ -227,19 +233,22 @@ const canStartConsultation = (reservation, now) => {
     if (!reservation.date) {
         return false;
     }
-    return reservation.date === formatDateKey(now) && STARTABLE_MISSION_PHASES.has(reservation.missionPhase);
+    return reservation.date === formatDateKey(now)
+        && resolveStartableMissionPhases(directWebRtcEnabled).has(reservation.missionPhase);
 };
 
 // 버튼이 비활성화된 이유를 바로 이해할 수 있도록 안내 문구를 분기한다.
-const getConsultationStartButtonTitle = (reservation, now) => {
+const getConsultationStartButtonTitle = (reservation, now, directWebRtcEnabled) => {
     if (hasRejoinableConsultationSession(reservation)) {
         return '진행 중인 진료실로 다시 들어갑니다.';
     }
     if (!reservation.date || reservation.date !== formatDateKey(now)) {
         return '진료 시작은 예약 당일에만 가능합니다.';
     }
-    if (!STARTABLE_MISSION_PHASES.has(reservation.missionPhase)) {
-        return '환자 도착 후 활성화됩니다.';
+    if (!resolveStartableMissionPhases(directWebRtcEnabled).has(reservation.missionPhase)) {
+        return directWebRtcEnabled
+            ? '차량 출발 후 활성화됩니다.'
+            : '환자 도착 후 활성화됩니다.';
     }
     return '진료를 시작합니다.';
 };
@@ -247,6 +256,7 @@ const getConsultationStartButtonTitle = (reservation, now) => {
 const LegacyEMRDashboard = () => {
     const navigate = useNavigate();
     const doctorDisplayName = useAuthStore((state) => state.user?.name || state.user?.username || '원장');
+    const directWebRtcEnabled = isRobotDirectWebRtcEnabled();
 
     // SSE 알림 연동
     const { isConnected, notifications, removeNotification, getNotificationKey } = useSSE();
@@ -592,8 +602,12 @@ const LegacyEMRDashboard = () => {
                         ) : (
                             filteredReservations.map((res, idx) => {
                                 const consultationActionVisible = shouldShowConsultationAction(res);
-                                const consultationStartEnabled = canStartConsultation(res, currentTime);
-                                const consultationStartButtonTitle = getConsultationStartButtonTitle(res, currentTime);
+                                const consultationStartEnabled = canStartConsultation(res, currentTime, directWebRtcEnabled);
+                                const consultationStartButtonTitle = getConsultationStartButtonTitle(
+                                    res,
+                                    currentTime,
+                                    directWebRtcEnabled
+                                );
 
                                 return (
                                     <div
