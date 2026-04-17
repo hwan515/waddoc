@@ -28,30 +28,36 @@
 │  │ 전화     │  │ 의사 웹  │  │ 관리자 │  │ 보호자    │  │ 차량     │ │
 │  │ 시뮬레이터│  │          │  │ 웹     │  │ 웹(읽기)  │  │ 터미널FE │ │
 │  └────┬─────┘  └────┬─────┘  └───┬────┘  └─────┬─────┘  └────┬─────┘ │
-│       └──────────────┴────────────┴─────────────┘       │
+│       └──────────────┴────────────┴─────────────┴─────────────┘       │
 └───────────────────────────┬─────────────────────────────┘
-                            │ HTTPS
+                            │ HTTPS / SSE / WSS
 ┌───────────────────────────┴─────────────────────────────┐
-│                 Main App Server / Cluster               │
+│            Main App Server / Single Host Compose        │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │               Reverse Proxy (Nginx)               │  │
-│  │         /api → spring       / → react            │  │
-│  └──────┬──────────────┬───────────────┬────────────┘  │
-│         │              │               │               │
-│  ┌──────┴──────┐ ┌─────┴─────┐ ┌──────┴──────┐         │
-│  │ Spring Boot │ │  React    │ │   LiveKit   │         │
-│  │ (제어면)    │ │ (프론트)  │ │ (미디어면)  │         │
-│  │ - 인증/권한 │ └───────────┘ └─────────────┘         │
-│  │ - 도메인 API│                                       │
-│  │ - 오케스트레│                                       │
-│  │   이션      │                                       │
-│  │ - 감사 로그 │                                       │
-│  │ - 파일 관리 │                                       │
-│  └──────┬──────┘                                       │
-│         │                                              │
-│   ┌─────┴─────┐ ┌───────┐ ┌─────────────┐              │
-│   │ PostgreSQL │ │ Redis │ │ Kafka + ZK │              │
-│   └────────────┘ └───────┘ └─────────────┘              │
+│  │  /api → edge-bff   / → frontend   /phone → FE    │  │
+│  │  /livekit → livekit  /mqtt → mosquitto           │  │
+│  └───────────────┬───────────────────────┬──────────┘  │
+│                  │                       │              │
+│  ┌───────────────┴───────────────┐   ┌───┴──────────┐  │
+│  │ edge-bff                      │   │ frontend /   │  │
+│  │ - public API entrypoint       │   │ frontend-phone│  │
+│  │ - owner service proxy         │   └──────────────┘  │
+│  └───────┬───────────────┬───────┘                     │
+│          │               │                             │
+│   ┌──────┴──────┐ ┌──────┴────────────┐ ┌───────────┐  │
+│   │ core-app    │ │ notification-     │ │ robot-    │  │
+│   │ (modular    │ │ service            │ │ gateway   │  │
+│   │ monolith)   │ │ - doctor SSE       │ │ - MQTT     │  │
+│   │ - auth      │ │ - SMS              │ │ - robot SSE │  │
+│   │ - booking   │ └─────────┬──────────┘ └────┬──────┘  │
+│   │ - mission   │           │ Kafka / Redis        │     │
+│   └──────┬──────┘           │                      │     │
+│          │              ┌───┴──────────────────────┴──┐ │
+│          └─────────────▶│ postgres family / redis family│ │
+│                         │ kafka + zookeeper / mosquitto │ │
+│                         │ livekit / monitoring stack    │ │
+│                         └───────────────────────────────┘ │
 └───────────────────────────┬─────────────────────────────┘
                             │ REST multipart
 ┌───────────────────────────┴─────────────────────────────┐
@@ -62,48 +68,52 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-- DEV와 PROD 모두 `Spring Boot -> GPU Server` 경로로만 AI 추론을 호출한다.
-- `Spring Boot -> IDV AI` 는 REST multipart를 사용한다.
-- `Spring Boot -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
+- DEV와 PROD 모두 `core-app -> GPU Server` 경로로만 AI 추론을 호출한다.
+- 외부 비즈니스 API는 `Nginx -> edge-bff -> owner service` 경로로 진입한다.
+- `core-app -> Kafka` 는 내부 비동기 이벤트 버스로만 사용하며, 외부 클라이언트는 직접 접근하지 않는다.
 - React, 관리자 웹, 차량 단말은 GPU 서버를 직접 호출하지 않는다.
 
 ---
 
 ### 2.1 Kafka 이벤트 흐름
 
-- `sms.requests` → `SmsConsumer` → `SmsService` (실패 시 `sms.requests.DLT`에 적재)
-- `doctor.notifications` → `DoctorNotificationConsumer` → Redis Pub/Sub publish → `RedisMessageListenerContainer` → 활성 SSE 연결에 전달 (다중 인스턴스 대응)
-- `mission.telemetry` → `MissionTelemetryConsumer` → `MISSION` 위치/단계 반영
-- `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 기존 `MISSION`에 `vehicleId` 반영 및 출동 상태 전이
+- `dispatch.requests` → `DispatchConsumer` → 가용 차량 배정 후 `MISSION` 상태 전이
 - `dispatch.retry` → `DispatchRetryConsumer` → 동일 권역 배차 재평가 트리거
-- `dispatch_outbox` 테이블은 예약 확정과 Kafka publish 사이를 느슨하게 연결하는 outbox 역할을 담당한다.
+- `booking.confirmed.v1` → `notification-service`의 `DoctorNotificationConsumer` → 의사 알림 projection 저장 + Redis Pub/Sub fan-out + 예약 확정 SMS 발송
+- `booking.cancelled.v1` → `notification-service`의 `SmsConsumer` → 환자 예약 취소 SMS 발송
+- `dispatch.assigned.v1` → `notification-service`의 `SmsConsumer` → 환자 배차 완료 SMS 발송
+- `dispatch.delayed.v1` → `notification-service`의 `SmsConsumer` → 환자 배차 지연 SMS 발송
+- `robot.command.*.v1` → `robot-gateway` → MQTT 명령 publish
+- `robot.telemetry.v1` → `RobotTelemetryConsumer` → `MISSION` 위치/단계 반영
+- `dispatch_outbox`는 배차 요청을 Kafka `dispatch.requests`로 넘기기 위한 outbox이고, `business_event_outbox`는 분리 서비스로 전달할 business event를 적재하는 outbox다.
 
 ### 2.2 MQTT 로봇/차량 통신
 
-로봇·차량 통신은 Mosquitto MQTT 브로커를 통해 이루어진다. Spring Boot는 Spring Integration MQTT를 사용하여 브로커에 연결하며, ROS2 노드는 WSS(`wss://<DOMAIN>/mqtt`)를 통해 같은 브로커에 연결한다.
+로봇·차량 통신은 Mosquitto MQTT 브로커를 통해 이루어진다. `robot-gateway`는 Spring Integration MQTT를 사용하여 브로커에 연결하며, ROS2 노드는 WSS(`wss://<DOMAIN>/mqtt`)를 통해 같은 브로커에 연결한다.
 
 **토픽 구조:**
 
 | 토픽 | 방향 | 설명 |
 |------|------|------|
-| `robot/odom` | ROS2 → Spring | 로봇 오도메트리 (위치/자세) |
-| `robot/minimap` | ROS2 → Spring | 미니맵 데이터 |
-| `robot/state` | ROS2 → Spring | 로봇 상태 (배터리, 센서 등) |
-| `robot/status` | ROS2 → Spring | 로봇 운영 상태 |
-| `robot/cmd/waypoint` | Spring → ROS2 | 웨이포인트 이동 명령 |
-| `robot/cmd/dispatch` | Spring → ROS2 | 미션 출동 명령 (missionId, vehicleId, waypoint, destination) |
-| `robot/cmd/estop` | Spring → ROS2 | 비상정지 명령 |
+| `robot/odom` | ROS2 → robot-gateway | 로봇 오도메트리 (위치/자세) |
+| `robot/minimap` | ROS2 → robot-gateway | 미니맵 데이터 |
+| `robot/state` | ROS2 → robot-gateway | 로봇 상태 (배터리, 센서 등) |
+| `robot/status` | ROS2 → robot-gateway | 로봇 운영 상태 |
+| `robot/cmd/waypoint` | robot-gateway → ROS2 | 웨이포인트 이동 명령 |
+| `robot/cmd/dispatch` | robot-gateway → ROS2 | 미션 출동 명령 (missionId, vehicleId, waypoint, destination) |
+| `robot/cmd/estop` | robot-gateway → ROS2 | 비상정지 명령 |
 
 **Spring Boot 내부 흐름:**
-- `RobotMqttSubscriber` → 수신 메시지를 `RobotMqttPayloadService`로 전달 → `RobotStateCache` 갱신
-- `MqttMissionLocationUpdater`, `MqttMissionPhaseUpdater` → 수신 데이터로 미션 위치/단계 자동 갱신
-- `RobotSseService` → 캐시된 로봇 상태를 `GET /api/v1/robots/stream` SSE로 운영 콘솔에 중계
-- `RobotCommandController` → 운영 콘솔 명령을 MQTT 토픽으로 publish
-- `RobotWaypointCommandClient` → 배차 서비스에서 호출하여 `robot/cmd/dispatch`로 출동 명령 publish
+- `RobotCommandController` → 운영 콘솔 명령을 Kafka `robot.command.*.v1`로 적재하고 `202 Accepted` 반환
+- `RobotCommandEventConsumer` → Kafka command event를 소비해 MQTT 토픽으로 publish
+- `RobotMqttSubscriber` → 수신 메시지로 `RobotStateCache` 갱신, 운영용 SSE 브로드캐스트, `robot.telemetry.v1` 발행
+- `RobotTelemetryConsumer` → `robot.telemetry.v1`를 소비해 `MqttMissionLocationUpdater`, `MqttMissionPhaseUpdater`로 미션 위치/단계 반영
+- `RobotWaypointCommandClient` → 배차 서비스에서 호출하여 `robot.command.dispatch-requested.v1` business event를 적재
 
 **네트워크 경로:**
 - 운영: ROS2 → `wss://<DOMAIN>/mqtt` → Nginx → `mosquitto:9001`
-- Spring Boot → `ws://mosquitto:9001` (Docker 내부 네트워크)
+- 외부 API: 클라이언트 → `/api/v1/robots/**` → Nginx → `edge-bff` → `robot-gateway`
+- 내부 제어: `robot-gateway` → `ws://mosquitto:9001` (Docker 내부 네트워크)
 
 ---
 
@@ -128,10 +138,61 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - spring-api
+      - edge-bff
+      - core-app
       - frontend
       - frontend-phone
       - livekit
+
+  # === API Gateway ===
+  edge-bff:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: edge-bff
+    expose:
+      - "8080"
+    environment:
+      - CORE_APP_URI=http://core-app:8080
+      - NOTIFICATION_SERVICE_URI=http://notification-service:8080
+      - ROBOT_GATEWAY_URI=http://robot-gateway:8080
+
+  # === Core App ===
+  core-app:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: core-app
+    expose:
+      - "8080"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
+  notification-service:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: notification-service
+    expose:
+      - "8080"
+    environment:
+      - NOTIFICATION_DB_HOST=notification-postgres
+      - REDIS_HOST=notification-redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
+  robot-gateway:
+    build:
+      context: ../src/BE
+      args:
+        MODULE_NAME: robot-gateway
+    expose:
+      - "8080"
+    environment:
+      - REDIS_HOST=robot-redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - MQTT_BROKER_URL=ws://mosquitto:9001
 
   # === Frontend ===
   frontend:
@@ -144,82 +205,69 @@ services:
     expose:
       - "3001"
 
-  # === Backend ===
-  spring-api:
-    build: ../src/BE
-    expose:
-      - "8080"
+  # === Databases / Cache ===
+  postgres:
+  notification-postgres:
+  redis:
+  notification-redis:
+  robot-redis:
+
+  # === Infra ===
+  zookeeper:
+  kafka:
+  mosquitto:
+  livekit:
+```
+
+개발 compose의 핵심은 `nginx -> edge-bff -> owner service` 경로와, `core-app`/`notification-service`/`robot-gateway`가 각자 다른 저장소를 사용한다는 점이다.
+
+```yaml
+# docker-compose.prod.yml (운영 환경 - 백엔드 발췌)
+services:
+  nginx:
+    depends_on:
+      - edge-bff
+      - core-app
+      - frontend
+      - frontend-phone
+      - livekit
+      - notification-service
+      - robot-gateway
+
+  edge-bff:
+    image: ${DOCKER_IMAGE_EDGE_BFF}:${EDGE_BFF_IMAGE_TAG}
+
+  core-app:
+    image: ${DOCKER_IMAGE_CORE_APP}:${CORE_APP_IMAGE_TAG}
     environment:
-      - SPRING_PROFILES_ACTIVE=local
       - DB_HOST=postgres
       - REDIS_HOST=redis
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - LIVEKIT_HOST=http://livekit:7880
-      - AI_IDV_URL=http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify
-      - AI_IDV_TIMEOUT_MS=${AI_IDV_TIMEOUT_MS:-20000}
-      - FILE_STORAGE_ROOT=/data/uploads
-      - AI_IDV_TRANSFER_MODE=multipart
-      - ROBOT_COMMAND_BASE_URL=${ROBOT_COMMAND_BASE_URL:-http://nginx}
-      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-wss://www.waddoc.site/mqtt}
-    volumes:
-      - ./local-storage/uploads:/data/uploads
-    depends_on:
-      - postgres
-      - redis
-      - kafka
+      - CORE_REDIS_PASSWORD=${CORE_REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
 
-  # === Database ===
+  notification-service:
+    image: ${DOCKER_IMAGE_NOTIFICATION}:${NOTIFICATION_IMAGE_TAG}
+    environment:
+      - NOTIFICATION_DB_HOST=notification-postgres
+      - REDIS_HOST=notification-redis
+      - NOTIFICATION_REDIS_PASSWORD=${NOTIFICATION_REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+
+  robot-gateway:
+    image: ${DOCKER_IMAGE_ROBOT_GATEWAY}:${ROBOT_GATEWAY_IMAGE_TAG}
+    environment:
+      - REDIS_HOST=robot-redis
+      - ROBOT_REDIS_PASSWORD=${ROBOT_REDIS_PASSWORD}
+      - MQTT_BROKER_URL=ws://mosquitto:9001
+
   postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: waddoc
-      POSTGRES_USER: waddoc
-      POSTGRES_PASSWORD: waddoc_dev
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
-
-  # === Cache ===
+  notification-postgres:
   redis:
-    image: redis:7-alpine
-    command: redis-server --notify-keyspace-events Ex
-    expose:
-      - "6379"
-    volumes:
-      - redis_data:/data
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-
+  notification-redis:
+  robot-redis:
   kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
-  # === WebRTC ===
+  mosquitto:
   livekit:
-    image: livekit/livekit-server:latest
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
-      - "3478:3478/udp"
-    environment:
-      - LIVEKIT_KEYS=devkey:devsecret
-
-volumes:
-  pg_data:
-  redis_data:
 ```
 
 ### 3.3 네트워크 구성
@@ -236,20 +284,27 @@ docker network: waddoc-net (bridge, 메인 스택 컨테이너 연결)
   - 3478/udp  → livekit (TURN UDP)
 
 Nginx 내부 라우팅:
-  - /api      → spring-api:8080
+  - /api      → edge-bff:8080
+  - /api/v1/doctors/me/notifications/stream → edge-bff → notification-service
+  - /api/v1/robots/** → edge-bff → robot-gateway
   - /         → frontend:3000
 
 내부 전용 (expose only):
-  - 8080  → spring-api
+  - 8080  → edge-bff / core-app / notification-service / robot-gateway
   - 3000  → frontend
+  - 3001  → frontend-phone
   - 5432  → postgres
-  - 6379  → redis
+  - 5432  → notification-postgres
+  - 6379  → redis / notification-redis / robot-redis
   - 2181  → zookeeper
   - 29092 → kafka (container 간 통신)
 
 원격 의존성:
-  - spring-api → kafka:29092 (SMS / 알림 / 텔레메트리 / 배차 이벤트)
-  - spring-api → http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (기본값, 필요 시 AI_IDV_URL override)
+  - edge-bff → core-app / notification-service / robot-gateway
+  - core-app → kafka:29092 (배차 / business event / 미션 텔레메트리)
+  - core-app → http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify (기본값, 필요 시 AI_IDV_URL override)
+  - notification-service → notification-postgres / notification-redis / kafka:29092
+  - robot-gateway → robot-redis / kafka:29092 / mosquitto:9001
 ```
 
 ### 3.4 파일 저장 방식 (개발)
@@ -288,11 +343,12 @@ Parts:
 
 ### 4.1 구성 원칙
 
-- **메인 서버**: Spring Boot, React, Nginx, PostgreSQL, Redis, Kafka, Zookeeper, LiveKit
+- **메인 서버**: Nginx, `edge-bff`, `core-app`, `notification-service`, `robot-gateway`, React, PostgreSQL family, Redis family, Kafka, Zookeeper, Mosquitto, LiveKit, monitoring stack
 - **AI 서버 (별도)**: IDV AI
-- 서버 간 통신: **REST multipart**
-- 파일 전달: IDV/OCR만 **HTTP multipart** (공유 디렉터리 없음)
-- AI 서버는 메인 서버에서만 접근 가능 (외부 직접 노출 금지)
+- 운영 전제는 **단일 호스트 Docker Compose**이며, 이번 단계의 목적은 HA가 아니라 서비스 경계와 계약 정리다.
+- 서버 간 통신은 용도에 따라 **HTTP/SSE, Kafka, MQTT, REST multipart**를 사용한다.
+- 파일 전달은 IDV/OCR만 **HTTP multipart**로 처리하고, AI와의 공유 디렉터리는 사용하지 않는다.
+- AI 서버는 메인 서버에서만 접근 가능하다. 외부 클라이언트는 직접 접근하지 않는다.
 
 ### 4.2 서버 구성도
 
@@ -300,29 +356,29 @@ Parts:
 ┌─────────────────────────────────────────────────────┐
 │                  메인 서버 (Ubuntu)                   │
 │                                                      │
-│  Docker Compose                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │                                                │  │
-│  │  ┌───────────────────────────────────────────┐ │  │
-│  │  │              Nginx (SSL termination)      │ │  │
-│  │  │  :80 :443                                 │ │  │
-│  │  │  /api → spring-api   / → react              │ │  │
-│  │  │  /livekit → livekit (WSS→WS proxy)        │ │  │
-│  │  └───┬──────────┬──────────┬─────────────────┘ │  │
-│  │      │          │          │                     │  │
-│  │  ┌───┴──────┐ ┌─┴────────┐ ┌──────────┐        │  │
-│  │  │ Spring   │ │ React    │ │ LiveKit  │        │  │
-│  │  │ Boot     │ │ :3000    │ │ :7880    │        │  │
-│  │  │ :8080    │ └──────────┘ │ :7881-82 │        │  │
-│  │  └─────┬────┘              └──────────┘        │  │
-│  │        │                                        │  │
-│  │  ┌─────┴──────┐  ┌──────────┐  ┌───────────┐  │  │
-│  │  │ PostgreSQL │  │  Redis   │  │ Kafka+ZK  │  │  │
-│  │  │ :5432      │  │  :6379   │  │ :29092    │  │  │
-│  │  └────────────┘  └──────────┘  └───────────┘  │  │
-│  │        │                                       │  │
-│  └────────┼───────────────────────────────────────┘  │
-│           │ REST multipart                            │
+│  Docker Compose                                              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ Nginx :80 :443                                         │  │
+│  │  /api → edge-bff   / → react   /livekit → livekit     │  │
+│  │  /mqtt → mosquitto                                     │  │
+│  └──────┬─────────────────────────────────────────────────┘  │
+│         │ HTTP / SSE / WebSocket                              │
+│  ┌──────┴────────┬───────────────┬────────────────────────┐  │
+│  │ edge-bff      │ core-app      │ notification-service   │  │
+│  │ :8080         │ :8080         │ :8080                  │  │
+│  └───────────────┴──────┬────────┴──────────────┬─────────┘  │
+│                          │                       │            │
+│                    ┌─────┴─────┐         ┌──────┴──────┐     │
+│                    │ robot-    │         │ frontend /  │     │
+│                    │ gateway   │         │ phone       │     │
+│                    │ :8080     │         │ :3000/3001  │     │
+│                    └─────┬─────┘         └─────────────┘     │
+│                          │ MQTT / Kafka / Redis               │
+│     ┌────────────────────┴────────────────────────────────┐   │
+│     │ postgres / notification-postgres / redis family     │   │
+│     │ kafka+zookeeper / mosquitto / livekit               │   │
+│     └─────────────────────────────────────────────────────┘   │
+│                          │ REST multipart                      │
 └───────────┼──────────────────────────────────────────┘
             │ HTTPS (내부 네트워크 or VPN)
 ┌───────────┴──────────────────────────────────────────┐
@@ -346,80 +402,70 @@ Parts:
 
 ### 4.3 메인 서버 Docker Compose
 
+운영 배포는 `docker-compose.prod.yml`과 `docker-compose.monitoring.prod.yml`을 함께 사용한다. 아래는 메인 스택 발췌이며, 모니터링 서비스는 생략했다.
+
 ```yaml
 # docker-compose.prod.yml (메인 서버 - 주요 서비스 발췌)
 services:
   nginx:
     image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
-      - ${CERTS_DIR:-/home/ubuntu/.waddoc/certs}:/etc/nginx/certs:ro
     depends_on:
-      - spring-api
+      - edge-bff
+      - core-app
+      - notification-service
+      - robot-gateway
       - frontend
       - frontend-phone
       - livekit
 
+  edge-bff:
+    image: ${DOCKER_IMAGE_EDGE_BFF:-hwan515/waddoc-edge-bff}:${EDGE_BFF_IMAGE_TAG:-latest}
+    environment:
+      - CORE_APP_URI=http://core-app:8080
+      - NOTIFICATION_SERVICE_URI=http://notification-service:8080
+      - ROBOT_GATEWAY_URI=http://robot-gateway:8080
+
   frontend:
-    image: ${DOCKER_IMAGE_FE:-waddoc-frontend}:${FE_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_FE:-hwan515/waddoc-frontend}:${FE_IMAGE_TAG:-latest}
     expose:
       - "3000"
 
   frontend-phone:
-    image: ${DOCKER_IMAGE_FP:-waddoc-phone}:${FP_IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_FP:-hwan515/waddoc-phone}:${FP_IMAGE_TAG:-latest}
     expose:
       - "3001"
 
-  spring-api:
-    image: ${DOCKER_IMAGE_BE:-waddoc-backend}:${BE_IMAGE_TAG:-latest}
-    expose:
-      - "8080"
+  core-app:
+    image: ${DOCKER_IMAGE_CORE_APP:-hwan515/waddoc-backend}:${CORE_APP_IMAGE_TAG:-latest}
     environment:
-      - SPRING_PROFILES_ACTIVE=prod
       - DB_HOST=postgres
       - REDIS_HOST=redis
+      - CORE_REDIS_PASSWORD=${CORE_REDIS_PASSWORD}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       - AI_IDV_URL=${AI_IDV_URL:-https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify}
       - FILE_STORAGE_ROOT=/data/uploads
-      - AI_IDV_TRANSFER_MODE=multipart              # 배포: 본인확인 파일 전송
-    volumes:
-      - uploads:/data/uploads
-    depends_on:
-      - postgres
-      - redis
-      - kafka
-    deploy:
-      resources:
-        limits:
-          memory: 1G
+
+  notification-service:
+    image: ${DOCKER_IMAGE_NOTIFICATION:-hwan515/waddoc-notification}:${NOTIFICATION_IMAGE_TAG:-latest}
+    environment:
+      - NOTIFICATION_DB_HOST=notification-postgres
+      - REDIS_HOST=notification-redis
+      - NOTIFICATION_REDIS_PASSWORD=${NOTIFICATION_REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+
+  robot-gateway:
+    image: ${DOCKER_IMAGE_ROBOT_GATEWAY:-hwan515/waddoc-robot-gateway}:${ROBOT_GATEWAY_IMAGE_TAG:-latest}
+    environment:
+      - REDIS_HOST=robot-redis
+      - ROBOT_REDIS_PASSWORD=${ROBOT_REDIS_PASSWORD}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      - MQTT_BROKER_URL=ws://mosquitto:9001
 
   postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: waddoc
-      POSTGRES_USER: waddoc
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
-
+  notification-postgres:
   redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis_data:/data
-    deploy:
-      resources:
-        limits:
-          memory: 256M
+  notification-redis:
+  robot-redis:
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -777,7 +823,7 @@ ICE/TCP, ICE/UDP, TURN은 미디어 전용이므로 직접 노출한다.
 ```nginx
 # nginx/prod.conf (발취)
 upstream spring_api {
-    server spring-api:8080;
+    server core-app:8080;
 }
 
 upstream livekit_ws {
@@ -1117,7 +1163,7 @@ fetchEventSource('/api/v1/doctors/me/notifications/stream', {
 | 재연결 | 네트워크 오류 시 exponential backoff |
 | 표준 EventSource | 사용 금지 (커스텀 헤더 불가) |
 
-> 신규 예약 알림은 예약/케이스 생성 트랜잭션 커밋 후 `doctor.notifications` Kafka 토픽으로 발행되고, `DoctorNotificationConsumer`가 활성 SSE 연결이 있는 의사에게만 전달한다.
+> 신규 예약 알림은 `core-app`의 `business_event_outbox`에 `booking.confirmed.v1`로 적재된 뒤 Kafka를 거쳐 `notification-service`의 `DoctorNotificationConsumer`가 처리한다. 활성 SSE 연결이 없더라도 예약 생성 자체는 실패하지 않는다.
 
 ---
 
@@ -1126,16 +1172,18 @@ fetchEventSource('/api/v1/doctors/me/notifications/stream', {
 환자는 시스템 계정이 없으므로 웹 내 알림 수신이 불가능하다. **예약 생성/취소 결과는 SOLAPI SMS 게이트웨이를 통해 환자 휴대전화로 발송**한다.
 
 ```
-Spring Boot → Kafka(sms.requests) → SmsConsumer → SOLAPI SDK → 환자 SMS 발송
+core-app → business_event_outbox → Kafka(booking.confirmed.v1 / booking.cancelled.v1 / dispatch.assigned.v1 / dispatch.delayed.v1)
+notification-service → DoctorNotificationConsumer / SmsConsumer → SOLAPI SDK → 환자 SMS 발송
 
 발송 대상:
   - 예약 확정 시: 예약 일시/의사/진료과 안내 SMS
   - 예약 취소 시: 취소 완료 안내 SMS
+  - 배차 완료/지연 시: 배차 상태 안내 SMS
 
 환경별 처리:
   - 개발 (local): SMS를 실제 발송하지 않고 로그로 기록 (MockSmsService)
   - 배포 (prod):  SOLAPI API로 실제 발송 (SolapiSmsService)
-  - 발송 실패: Kafka 재시도 후 `sms.requests.DLT`에 적재
+  - 발송 실패: Kafka listener 재시도 후 다음 poll에서 다시 처리
 ```
 
 ```
@@ -1217,17 +1265,21 @@ sudo ufw enable
 
 ## 10. 자원 배분 권장
 
-### 10.1 메인 서버 (권장 최소: 8GB RAM, 4 CPU)
+### 10.1 메인 서버 (권장 최소: 16GB RAM, 8 CPU)
 
-| 컨테이너 | Memory Limit | CPU Limit | 비고 |
+| 컨테이너 묶음 | Memory Limit | CPU Limit | 비고 |
 |-----------|-------------|-----------|------|
-| nginx | 128M | 0.5 | |
-| frontend | 256M | 0.5 | |
-| spring-api | 1G | 2.0 | |
-| postgres | 1G | 1.0 | reservations: 512M |
-| redis | 256M | 0.5 | |
-| livekit | 1G | 1.0 | |
-| **합계** | **~3.6G** | **5.5** | OS·버퍼 포함 ~6G |
+| nginx | 128M | 0.5 | SSL 종료, 정적/프록시 |
+| edge-bff + frontend + frontend-phone | 768M | 1.5 | 공개 API 진입점 + 웹 앱 |
+| core-app | 1G | 2.0 | 모듈러 모놀리스 핵심 도메인 |
+| notification-service | 512M | 1.0 | 의사 SSE + SMS |
+| robot-gateway | 512M | 1.0 | MQTT, 로봇 SSE, telemetry |
+| postgres + notification-postgres | 1.5G | 1.5 | core / notification 저장소 |
+| redis + notification-redis + robot-redis | 512M | 0.5 | 서비스 소유 캐시 |
+| kafka + zookeeper | 1.5G | 1.5 | 단일 브로커 기준 |
+| livekit + coturn + mosquitto + mediamtx | 1.5G | 1.5 | 미디어/로봇 통신 |
+| prometheus + grafana + exporters + cadvisor | 1.5G | 1.0 | 운영 관제 |
+| **합계** | **~9G** | **~10.0** | OS, 파일 캐시, Docker 오버헤드 포함 12G+ 여유 권장 |
 
 ### 10.2 AI 서버 (권장 최소: 8GB RAM, 4 CPU, GPU 권장)
 
@@ -1242,7 +1294,7 @@ sudo ufw enable
 
 | 항목 | 타임아웃 | 재시도 | 실패 시 |
 |------|---------|--------|---------|
-| Spring → IDV AI | 10초 | 1회 자동 | MANUAL_REVIEW 전환 |
+| Spring → IDV AI | 기본 5초 (`AI_IDV_TIMEOUT_MS` override) | 1회 자동 | MANUAL_REVIEW 전환 |
 | Spring → PostgreSQL | 5초 | 3회 (exponential backoff) | 503 응답 |
 | Spring → Redis | 3초 | 2회 | DB fallback |
 | Spring → LiveKit | 5초 | 1회 | 세션 생성 실패 안내 |
@@ -1282,13 +1334,14 @@ sudo ufw enable
 ### 개발 환경
 ```bash
 # 메인 스택 올리기 (AI 제외)
-docker compose up -d
+cd infra
+docker compose --env-file .env.local -f docker-compose.yml up -d
 
 # 로그 확인
-docker compose logs -f spring-api
+docker compose --env-file .env.local -f docker-compose.yml logs -f edge-bff core-app notification-service robot-gateway
 
 # 특정 서비스만 재빌드
-docker compose up -d --build spring-api
+docker compose --env-file .env.local -f docker-compose.yml up -d --build core-app
 
 # 원격 GPU 서버 헬스체크 예시
 curl http://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
@@ -1296,7 +1349,11 @@ curl http://<DEV_GPU_SERVER_HOST>/idv/api/v1/health
 
 ### 배포 환경 — 메인 서버
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+cd infra
+docker compose --env-file /home/ubuntu/.waddoc/prod.env \
+  -f docker-compose.prod.yml \
+  -f docker-compose.monitoring.prod.yml \
+  up -d --remove-orphans --scale core-app=3
 ```
 
 ### GPU 서버
@@ -1314,7 +1371,7 @@ sudo systemctl restart idv-ai
 
 | 항목 | 개발 (Dev) | 배포 (Prod) |
 |------|------------|-------------|
-| Compose 파일 | `docker-compose.yml` (메인 스택) + 원격 GPU 서버 | `docker-compose.prod.yml` (메인 스택) + 원격 GPU 서버 |
+| Compose 파일 | `docker-compose.yml` (메인 스택) + `.env.local` + 원격 GPU 서버 | `docker-compose.prod.yml` + `docker-compose.monitoring.prod.yml` + `/home/ubuntu/.waddoc/prod.env` + 원격 GPU 서버 |
 | AI 서버 위치 | 별도 GPU 서버 | 별도 GPU 서버 |
 | Spring → IDV AI | `AI_IDV_URL` 또는 기본값 `http://<DEV_GPU_SERVER_HOST>/idv/api/v1/verify` | `AI_IDV_URL` 또는 기본값 `https://<PROD_GPU_SERVER_HOST>/idv/api/v1/verify` |
 | 프로토콜 모델 | IDV=REST multipart | IDV=REST multipart |
@@ -1323,7 +1380,7 @@ sudo systemctl restart idv-ai
 | DB 비밀번호 | 하드코딩 (dev) | 환경 변수 / secrets |
 | TLS | 없음 | Nginx에서 종료 |
 | 방화벽 | GPU 서버에 Dev 메인 서버/VPN 대역만 허용 | GPU 서버에 Prod 메인 서버 IP만 허용 |
-| 자원 제한 | 느슨 | 프로세스별 limits / systemd 제어 권장 |
+| 자원 제한 | 느슨 | 단일 호스트 Compose 기준 메모리/CPU 여유분 확보 권장 |
 | 인증 쿠키 Secure | 없음 (HTTP) | Secure 필수 (HTTPS) |
 | TURN | LiveKit 내장, 3478/udp (publish) | coturn, 8478/udp (listener) + 8600-8699/udp (relay) |
 | LiveKit signaling | 7880 직접 접속 (HTTP) | Nginx WSS 프록시 (`/livekit` → 7880, SSL termination) |

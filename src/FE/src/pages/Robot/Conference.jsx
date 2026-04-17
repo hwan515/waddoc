@@ -64,8 +64,13 @@ const Conference = () => {
     const [livekitUrl, setLivekitUrl] = useState('');
     const [isWaiting, setIsWaiting] = useState(true);
     const [errorMsg, setErrorMsg] = useState('');
+    const [roomRenderKey, setRoomRenderKey] = useState(0);
 
     useEffect(() => {
+        if (!isWaiting) {
+            return undefined;
+        }
+
         let isPolling = true;
 
         const terminalToken = localStorage.getItem('robot_mission_terminal_token');
@@ -89,12 +94,12 @@ const Conference = () => {
                     setLivekitToken(patientToken);
                     setLivekitUrl(nextLivekitUrl);
                     setErrorMsg('');
+                    setRoomRenderKey((previous) => previous + 1);
                     setIsWaiting(false);
                     return;
                 }
             } catch (error) {
                 console.warn("세션 접속 대기 중...", error?.response?.data || error.message);
-                setErrorMsg('');
                 if (isPolling) {
                     setTimeout(pollForToken, 3000);
                 }
@@ -106,7 +111,7 @@ const Conference = () => {
         return () => {
             isPolling = false;
         };
-    }, []);
+    }, [isWaiting]);
 
     useEffect(() => {
         let isPolling = true;
@@ -153,7 +158,10 @@ const Conference = () => {
     }, [navigate]);
 
     const handleDisconnected = () => {
-        navigate('/robot/finish', { replace: true });
+        setLivekitToken('');
+        setLivekitUrl('');
+        setErrorMsg('진료실 연결이 끊겼습니다. 다시 연결을 시도하고 있습니다.');
+        setIsWaiting(true);
     };
 
     if (isWaiting) {
@@ -171,6 +179,7 @@ const Conference = () => {
 
     return (
         <LiveKitRoom
+            key={roomRenderKey}
             connect={Boolean(livekitToken && livekitUrl)}
             video={LIVEKIT_HIGH_QUALITY_VIDEO_CONSTRAINTS}
             audio={true}

@@ -3,11 +3,35 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: spring-api
+  - job_name: core-app
     metrics_path: /actuator/prometheus
     dns_sd_configs:
       - names:
-          - spring-api
+          - core-app
+        type: A
+        port: 8080
+
+  - job_name: edge-bff
+    metrics_path: /actuator/prometheus
+    dns_sd_configs:
+      - names:
+          - edge-bff
+        type: A
+        port: 8080
+
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    dns_sd_configs:
+      - names:
+          - notification-service
+        type: A
+        port: 8080
+
+  - job_name: robot-gateway
+    metrics_path: /actuator/prometheus
+    dns_sd_configs:
+      - names:
+          - robot-gateway
         type: A
         port: 8080
 
@@ -20,11 +44,14 @@ scrape_configs:
     static_configs:
       - targets:
           - postgres-exporter:9187
+          - notification-postgres-exporter:9187
 
   - job_name: redis-exporter
     static_configs:
       - targets:
           - redis-exporter:9121
+          - notification-redis-exporter:9121
+          - robot-redis-exporter:9121
 
   - job_name: kafka-exporter
     static_configs:

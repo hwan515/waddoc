@@ -1,0 +1,13 @@
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${ROBOT_REDIS_PASSWORD}
+
+jwt:
+  secret: ${JWT_SECRET}
+
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:ws://mosquitto:9001}
+  client-id: ${MQTT_CLIENT_ID:robot-gateway}

@@ -18,9 +18,27 @@ export const getRobotTerminalConfig = () => {
     };
 };
 
+export const getActiveOperatorVehicleId = () => {
+    const runtimeConfig = readRuntimeConfig();
+    const configuredVehicleId = runtimeConfig.VITE_ACTIVE_OPERATOR_VEHICLE_ID
+        ?? import.meta.env.VITE_ACTIVE_OPERATOR_VEHICLE_ID
+        ?? 'veh_GIMCHEON_01';
+
+    return String(configuredVehicleId).trim() || 'veh_GIMCHEON_01';
+};
+
 export const isMonitoringTabEnabled = () => {
     const runtimeConfig = readRuntimeConfig();
     const configuredValue = runtimeConfig.VITE_ENABLE_MONITORING_TAB ?? import.meta.env.VITE_ENABLE_MONITORING_TAB ?? 'false';
+
+    return isTruthyFlag(configuredValue);
+};
+
+export const isRobotDirectWebRtcEnabled = () => {
+    const runtimeConfig = readRuntimeConfig();
+    const configuredValue = runtimeConfig.VITE_ROBOT_DIRECT_WEBRTC_ENABLED
+        ?? import.meta.env.VITE_ROBOT_DIRECT_WEBRTC_ENABLED
+        ?? 'false';
 
     return isTruthyFlag(configuredValue);
 };

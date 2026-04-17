@@ -67,12 +67,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m])) or vector(0)",
-          "legendFormat": "req/s",
+          "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"core-app|edge-bff|notification-service|robot-gateway\",uri!~\"/actuator.*\"}[5m]))",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Spring 요청률",
+      "title": "Spring 요청률 (서비스별)",
       "type": "stat"
     },
     {
@@ -125,12 +125,12 @@
       },
       "targets": [
         {
-          "expr": "100 * ((sum(rate(http_server_requests_seconds_count{status=~\"5..\",uri!~\"/actuator.*\"}[5m])) or vector(0)) / clamp_min((sum(rate(http_server_requests_seconds_count{uri!~\"/actuator.*\"}[5m])) or vector(0)), 0.000001))",
-          "legendFormat": "5xx %",
+          "expr": "100 * (sum by (job) (rate(http_server_requests_seconds_count{job=~\"core-app|edge-bff|notification-service|robot-gateway\",status=~\"5..\",uri!~\"/actuator.*\"}[5m])) / clamp_min(sum by (job) (rate(http_server_requests_seconds_count{job=~\"core-app|edge-bff|notification-service|robot-gateway\",uri!~\"/actuator.*\"}[5m])), 0.000001))",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Spring 오류율",
+      "title": "Spring 오류율 (서비스별)",
       "type": "stat"
     },
     {
@@ -179,12 +179,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{uri!~\"/actuator.*\"}[5m])) by (le)) or vector(0)",
-          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (job, le) (rate(http_server_requests_seconds_bucket{job=~\"core-app|edge-bff|notification-service|robot-gateway\",uri!~\"/actuator.*\"}[5m])))",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Spring p95 응답시간",
+      "title": "Spring p95 응답시간 (서비스별)",
       "type": "stat"
     },
     {
@@ -233,12 +233,12 @@
       },
       "targets": [
         {
-          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})",
-          "legendFormat": "heap",
+          "expr": "sum by (job) (jvm_memory_used_bytes{job=~\"core-app|edge-bff|notification-service|robot-gateway\",area=\"heap\"})",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "JVM Heap 사용량",
+      "title": "JVM Heap 사용량 (서비스별)",
       "type": "stat"
     },
     {
@@ -273,12 +273,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (instance) (jvm_memory_used_bytes{area=\"heap\"})",
-          "legendFormat": "{{instance}}",
+          "expr": "sum by (job, instance) (jvm_memory_used_bytes{job=~\"core-app|edge-bff|notification-service|robot-gateway\",area=\"heap\"})",
+          "legendFormat": "{{job}} / {{instance}}",
           "refId": "A"
         }
       ],
-      "title": "JVM Heap 추이",
+      "title": "JVM Heap 추이 (서비스/인스턴스)",
       "type": "timeseries"
     },
     {
@@ -379,8 +379,12 @@
                 "value": null
               },
               {
-                "color": "green",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
               }
             ]
           }
@@ -410,12 +414,12 @@
       },
       "targets": [
         {
-          "expr": "pg_up",
+          "expr": "sum(pg_up{job=\"postgres-exporter\"}) or vector(0)",
           "legendFormat": "postgres",
           "refId": "A"
         }
       ],
-      "title": "Postgres 상태",
+      "title": "Postgres 상태 (2개)",
       "type": "stat"
     },
     {
@@ -436,8 +440,16 @@
                 "value": null
               },
               {
-                "color": "green",
+                "color": "orange",
                 "value": 1
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 3
               }
             ]
           }
@@ -467,12 +479,12 @@
       },
       "targets": [
         {
-          "expr": "redis_up",
+          "expr": "sum(redis_up{job=\"redis-exporter\"}) or vector(0)",
           "legendFormat": "redis",
           "refId": "A"
         }
       ],
-      "title": "Redis 상태",
+      "title": "Redis 상태 (3개)",
       "type": "stat"
     },
     {

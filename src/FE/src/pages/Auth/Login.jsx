@@ -90,28 +90,34 @@ const Login = () => {
                         </p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on">
 
                         {/* 아이디 입력 */}
                         <Input
                             label="아이디"
+                            id="guardian-login-username"
                             name="id"
                             type="text"
                             required
                             value={formData.id}
                             onChange={handleChange}
                             placeholder="아이디를 입력해주세요"
+                            autoComplete="username"
+                            autoCapitalize="none"
+                            spellCheck={false}
                         />
 
                         {/* 비밀번호 입력 */}
                         <Input
                             label="비밀번호"
+                            id="guardian-login-password"
                             name="password"
                             type={showPassword ? "text" : "password"}
                             required
                             value={formData.password}
                             onChange={handleChange}
                             placeholder="비밀번호를 입력해주세요"
+                            autoComplete="current-password"
                             iconRight={
                                 <button
                                     type="button"

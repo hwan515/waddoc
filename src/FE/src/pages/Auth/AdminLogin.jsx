@@ -86,25 +86,31 @@ const AdminLogin = () => {
                         </p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on">
                         <Input
                             label="관리자 아이디"
+                            id="admin-login-username"
                             name="id"
                             type="text"
                             required
                             value={formData.id}
                             onChange={handleChange}
                             placeholder="관리자 아이디를 입력하세요"
+                            autoComplete="username"
+                            autoCapitalize="none"
+                            spellCheck={false}
                         />
 
                         <Input
                             label="비밀번호"
+                            id="admin-login-password"
                             name="password"
                             type={showPassword ? 'text' : 'password'}
                             required
                             value={formData.password}
                             onChange={handleChange}
                             placeholder="비밀번호를 입력하세요"
+                            autoComplete="current-password"
                             iconRight={(
                                 <button
                                     type="button"

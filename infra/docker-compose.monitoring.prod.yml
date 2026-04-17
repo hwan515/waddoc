@@ -67,15 +67,55 @@ services:
     networks:
       - waddoc-net
 
+  notification-postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1
+    environment:
+      - DATA_SOURCE_URI=notification-postgres:5432/waddoc_notification?sslmode=disable
+      - DATA_SOURCE_USER=${NOTIFICATION_DB_USER:-waddoc}
+      - DATA_SOURCE_PASS=${NOTIFICATION_DB_PASSWORD}
+    expose:
+      - "9187"
+    depends_on:
+      - notification-postgres
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
   redis-exporter:
     image: oliver006/redis_exporter:v1.66.0
     command:
       - --redis.addr=redis://redis:6379
-      - --redis.password=${REDIS_PASSWORD}
+      - --redis.password=${CORE_REDIS_PASSWORD}
     expose:
       - "9121"
     depends_on:
       - redis
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  notification-redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    command:
+      - --redis.addr=redis://notification-redis:6379
+      - --redis.password=${NOTIFICATION_REDIS_PASSWORD}
+    expose:
+      - "9121"
+    depends_on:
+      - notification-redis
+    restart: unless-stopped
+    networks:
+      - waddoc-net
+
+  robot-redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    command:
+      - --redis.addr=redis://robot-redis:6379
+      - --redis.password=${ROBOT_REDIS_PASSWORD}
+    expose:
+      - "9121"
+    depends_on:
+      - robot-redis
     restart: unless-stopped
     networks:
       - waddoc-net

@@ -77,16 +77,20 @@ const EMRLogin = () => {
 
                 {/* 로그인 카드 */}
                 <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100">
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on">
 
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 mb-2">의료진 사번 (ID)</label>
                             <input
+                                id="emr-login-username"
                                 name="id"
                                 type="text"
                                 required
                                 value={formData.id}
                                 onChange={handleChange}
+                                autoComplete="username"
+                                autoCapitalize="none"
+                                spellCheck={false}
                                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-primary focus:border-primary transition-all bg-slate-50 focus:bg-white"
                                 placeholder="사번을 입력하세요 (예: D10023)"
                             />
@@ -98,11 +102,13 @@ const EMRLogin = () => {
                                 <a href="#" className="text-sm font-semibold text-primary hover:underline">비밀번호 찾기</a>
                             </div>
                             <input
+                                id="emr-login-password"
                                 name="password"
                                 type="password"
                                 required
                                 value={formData.password}
                                 onChange={handleChange}
+                                autoComplete="current-password"
                                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-primary focus:border-primary transition-all bg-slate-50 focus:bg-white"
                                 placeholder="비밀번호를 입력하세요"
                             />

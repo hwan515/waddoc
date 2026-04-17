@@ -1,0 +1,53 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:5432/waddoc
+    username: ${DB_USER:${POSTGRES_USER}}
+    password: ${DB_PASSWORD}
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${CORE_REDIS_PASSWORD}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiry: 900
+  refresh-token-expiry: 604800
+  mission-terminal-token-expiry: ${MISSION_TERMINAL_TOKEN_EXPIRY:1800}
+
+robot-terminal:
+  registry: ${ROBOT_TERMINAL_REGISTRY:}
+
+ai:
+  file-transfer-mode: ${AI_IDV_TRANSFER_MODE:multipart}
+  idv-url: ${AI_IDV_URL}
+  idv-timeout-ms: ${AI_IDV_TIMEOUT_MS:5000}
+
+file:
+  storage-root: ${FILE_STORAGE_ROOT:/data/uploads}
+
+sms:
+  provider: solapi
+  api-key: ${SOLAPI_API_KEY}
+  api-secret: ${SOLAPI_API_SECRET}
+  sender-number: ${SOLAPI_SENDER_NUMBER}
+
+livekit:
+  host: ${LIVEKIT_HOST:http://livekit:7880}
+  api-key: ${LIVEKIT_API_KEY}
+  api-secret: ${LIVEKIT_API_SECRET}
+  url: ${LIVEKIT_URL:wss://${SERVER_DOMAIN}/livekit}
+
+telemetry:
+  api-key: ${TELEMETRY_API_KEY}
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+
+monitoring:
+  access:
+    cookie-secret: ${MONITORING_COOKIE_SECRET}
