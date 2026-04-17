@@ -7,6 +7,31 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+function normalizeBasePath(basePath) {
+  if (!basePath || basePath === '/') {
+    return '/'
+  }
+
+  const withLeadingSlash = basePath.startsWith('/') ? basePath : `/${basePath}`
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`
+}
+
+function resolveBasePath(env) {
+  if (env.VITE_APP_BASE_PATH) {
+    return normalizeBasePath(env.VITE_APP_BASE_PATH)
+  }
+
+  const githubRepository = process.env.GITHUB_REPOSITORY
+  const isGitHubPagesBuild = process.env.GITHUB_PAGES === 'true' && githubRepository
+
+  if (isGitHubPagesBuild) {
+    const [, repoName] = githubRepository.split('/')
+    return normalizeBasePath(repoName)
+  }
+
+  return '/'
+}
+
 function localSavePlugin() {
   return {
     name: 'local-save-plugin',
@@ -47,6 +72,7 @@ export default defineConfig(({ mode }) => {
     || 'http://localhost'
 
   return {
+    base: resolveBasePath(env),
     plugins: [react(), tailwindcss(), localSavePlugin()],
     server: {
       port: 5173,

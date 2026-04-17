@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoleRoute from './components/auth/ProtectedRoleRoute';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
@@ -24,8 +24,16 @@ import EMRLogin from './pages/Doctor/EMR/Login';
 import EMRDashboard from './pages/Doctor/EMR/Dashboard';
 
 function App() {
+    const isGitHubPagesHost = typeof window !== 'undefined' && /github\.io$/i.test(window.location.hostname);
+    const shouldUseHashRouter = import.meta.env.VITE_ROUTER_MODE === 'hash' || isGitHubPagesHost;
+    const RouterComponent = shouldUseHashRouter ? HashRouter : BrowserRouter;
+    const browserBasename = import.meta.env.BASE_URL === '/'
+        ? undefined
+        : import.meta.env.BASE_URL.replace(/\/$/, '');
+    const routerProps = shouldUseHashRouter ? {} : { basename: browserBasename };
+
     return (
-        <Router>
+        <RouterComponent {...routerProps}>
             <Routes>
                 {/* 메인 진입 페이지 */}
                 <Route path="/" element={<MainEntrance />} />
@@ -97,7 +105,7 @@ function App() {
                 <Route path="/robot/conference" element={<Conference />} />
                 <Route path="/robot/finish" element={<Finish />} />
             </Routes>
-        </Router>
+        </RouterComponent>
     );
 }
 
