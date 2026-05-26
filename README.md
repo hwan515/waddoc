@@ -50,15 +50,17 @@ Client
 
 ## 주요 기여와 Jira 추적
 
-아래는 담당/작성한 Jira 이슈 중 프로젝트 설명에 필요한 대표 이슈와 범위입니다.
+아래는 정지환이 생성하거나 작성한 Jira 이슈 중 프로젝트 설명에 필요한 대표 이슈와 범위입니다.
 
 | 영역 | 대표 Jira 이슈 |
 | --- | --- |
-| 인프라/배포 | `S14P21A603-7`, `S14P21A603-413`, `S14P21A603-520`, `S14P21A603-521` |
+| Backend 기반/API | `S14P21A603-152`, `S14P21A603-153`, `S14P21A603-154`, `S14P21A603-155` |
+| 인프라/배포/품질 게이트 | `S14P21A603-413`, `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-535` |
 | Kafka/Outbox/배차 | `S14P21A603-353`, `S14P21A603-354`, `S14P21A603-355`~`S14P21A603-366`, `S14P21A603-377` |
-| 로봇/MQTT/관제 | `S14P21A603-519`, `S14P21A603-526`, `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
-| 본인확인/보안/시드 | `S14P21A603-15`, `S14P21A603-17`, `S14P21A603-20`, `S14P21A603-513`, `S14P21A603-517`, `S14P21A603-518` |
-| EMR/환자/Phone UX | `S14P21A603-348`, `S14P21A603-514`, `S14P21A603-515`, `S14P21A603-516`, `S14P21A603-524`, `S14P21A603-528` |
+| LiveKit/진료 세션 | `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528` |
+| 로봇/MQTT/관제 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526`, `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
+| 본인확인/보안/시드 | `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518`, `S14P21A603-535` |
+| EMR/환자/Phone UX | `S14P21A603-515`, `S14P21A603-516`, `S14P21A603-528` |
 
 ## 트러블슈팅 정리
 
@@ -87,9 +89,20 @@ docker compose --env-file /home/ubuntu/.waddoc/prod.env -f docker-compose.prod.y
 | 현상 | `/livekit/` 경로 WebSocket 연결 실패, EMR 신규 예약 SSE 알림 유실 또는 지연 |
 | 원인 | 프록시 경로 prefix가 LiveKit upstream으로 그대로 전달되거나, SSE가 Nginx buffering/timeout 영향을 받음 |
 | 조치 | `/livekit/` rewrite로 prefix 제거, SSE 전용 location에 buffering off와 긴 timeout 적용 |
-| 관련 이슈 | `S14P21A603-413` |
+| 관련 이슈 | `S14P21A603-413`, `S14P21A603-535` |
 
 SSE는 표준 `EventSource` 대신 `@microsoft/fetch-event-source`를 사용해 `Authorization: Bearer` 헤더를 유지합니다.
+
+### LiveKit / 진료 세션 상태
+
+| 이슈 | 원인 | 조치 |
+| --- | --- | --- |
+| empty timeout 이후 세션 조기 완료 | 실제 진료 전 `room_finished` webhook이 들어와도 session을 `COMPLETED`로 전이함 | `IN_PROGRESS` 상태일 때만 완료 처리하도록 제한 |
+| 세션 시작 후 mission phase 불일치 | doctor/patient가 모두 입장해도 mission은 `VERIFYING`에 머묾 | session `IN_PROGRESS` 전이 시 mission을 `CONSULTING`으로 동기화 |
+| 의사 진료 완료 후 환자 단말 잔류 | 진료 완료가 서버 기준 종료 이벤트로 정리되지 않음 | LiveKit room/session 정리와 환자 완료 화면 전환을 서버 흐름에 연결 |
+| 진료실 재입장 불가 | 활성 consultation session 정보가 케이스 목록/EMR 액션에 노출되지 않음 | 케이스 목록 DTO에 session 상태를 포함하고 `진료실 복귀` 액션 추가 |
+
+관련 이슈: `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528`
 
 ### Scale-out / Redis / Outbox
 
@@ -113,6 +126,17 @@ Redis keyspace notification은 disconnect 타이머에도 쓰이므로 Redis 실
 
 운영 경로는 ROS2가 `wss://<DOMAIN>/mqtt`로 접속하고, 내부 `robot-gateway`는 `ws://mosquitto:9001`로 접근합니다.
 
+### 관제 / 로봇 SSE / 미니맵
+
+| 이슈 | 원인 | 조치 |
+| --- | --- | --- |
+| 미니맵 위치 순간이동 | reconnect 또는 out-of-order SSE payload가 최신 telemetry를 덮어씀 | payload별 `updatedAt` 비교로 오래된 snapshot/telemetry 무시 |
+| waypoint 전송 전후 마커 롤백 | 경로/odom/source 우선순위가 일관되지 않아 이전 좌표가 재반영됨 | trajectory와 최신 pose 기준으로 좌표 반영 순서 보정 |
+| GPS 없음 시 차량 위치 공백 | GPS 좌표가 비어 있을 때 pose fallback이 부족함 | pose 기반 좌표 fallback과 좌표 출처 표시 보정 |
+| 데모 시작 시 이전 환자 미션 노출 | 같은 차량의 이전 활성 미션이 current mission 우선순위를 차지함 | 데모 dispatch 전에 동일 차량의 기존 활성 데모 미션을 정리 |
+
+관련 이슈: `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526`
+
 ### MediaMTX / Unity Camera
 
 | 이슈 | 원인 | 조치 |
@@ -133,6 +157,17 @@ Redis keyspace notification은 disconnect 타이머에도 쓰이므로 Redis 실
 | 조치 | FE/FE-phone quality gate를 Node 22 컨테이너 기준으로 실행 |
 | Seed env 이슈 | 기본 seed 비밀번호 fallback을 제거하고 `APP_SEED_DEFAULT_PASSWORD` 누락 시 실패하도록 조정 |
 | 관련 이슈 | `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-518` |
+
+### 본인확인 / 보안 / 시드
+
+| 이슈 | 원인 | 조치 |
+| --- | --- | --- |
+| 차량 본인확인 false negative | 얼굴 검출 실패가 있어도 OCR은 일치하는 케이스가 있었음 | 임시로 OCR 1개 이상 일치 시 통과하도록 완화하고 기술부채를 명시 |
+| JWT 통합 테스트 FK 실패 | seed cleanup이 참조 중인 `IntakeSession`까지 삭제함 | orphan `IntakeSession`만 삭제하도록 정리 |
+| seed 기본 비밀번호 fallback | 운영/로컬 seed 비밀번호가 없어도 기본값으로 동작할 수 있음 | `APP_SEED_DEFAULT_PASSWORD` 누락 시 명시적으로 실패 |
+| prod 기본 보안 사용자 로그 | Spring Security 기본 in-memory user가 자동 생성됨 | auto configuration 제외, SSE disconnect 로그 노이즈 정리 |
+
+관련 이슈: `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518`, `S14P21A603-535`
 
 ### 운영 DB 접근
 
