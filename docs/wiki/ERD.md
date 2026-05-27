@@ -1,5 +1,13 @@
 # 도서·산간 방문형 비대면 진료 서비스 — ERD
 
+> Status: Canonical
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Purpose: 도메인 엔티티, 상태 enum, 핵심 관계, DB 제약 조건을 정의하는 데이터 모델 기준 문서입니다.
+
 > **기준 문서**: `MVP_Requirements_v2.md`, `API_Specification.md`, `Architecture.md`
 >
 > **범위**: 본 문서는 `core-app`의 주 영속 스키마를 중심으로 표현한다. `notification-service`의 별도 DB(`waddoc_notification`)는 4장 메모에서 함께 설명한다.
@@ -369,7 +377,7 @@ USER(DOCTOR) → DOCTOR_PROFILE → SCHEDULE_SLOT → BOOKING     (의사 배정
 
 > 알림 적재는 별도 `notification-service` DB(`waddoc_notification`)에서 수행한다. `core-app`의 `BUSINESS_EVENT_OUTBOX`에 적재된 예약 이벤트가 발행되면 `processed_event`, `notification_log`, `sms_delivery`, `doctor_notification_projection` 같은 알림용 테이블이 채워진다.
 
-> `PATIENT_CONSENT`를 포함한 동의 도메인 ERD는 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
+> `PATIENT_CONSENT`를 포함한 동의 도메인 ERD 초안은 [archive/P1_Consent_Extension.md](./archive/P1_Consent_Extension.md) 문서를 참조한다.
 
 ---
 

@@ -1,5 +1,13 @@
 # Waddoc 인프라 설정
 
+> Status: Canonical
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Purpose: 로컬/운영 실행, Jenkins, monitoring, MQTT, 포트 매핑을 정리한 운영 기준 문서입니다.
+
 ## 디렉터리 구조
 
 ```

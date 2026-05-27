@@ -1,5 +1,15 @@
 # Unity Camera MediaMTX 소유권 정리 문서
 
+> Status: Archived
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Current canonical documents: [../Infrastructure_Setup.md](../Infrastructure_Setup.md), [../Troubleshooting.md](../Troubleshooting.md)
+>
+> Note: 이 문서는 구현 당시 전환 계획과 체크리스트 기록입니다. 현재 운영 기준은 Canonical 문서를 확인합니다.
+
 - 작성 기준: 2026-04-08 저장소 스냅샷
 - 상태: `infra` compose의 `mediamtx`, FE reverse proxy, ROS2 publisher 분리는 코드에 반영 완료
 - 남은 범위: 운영 네트워크, 실제 publish/view 경로, 보안그룹 점검 체크리스트

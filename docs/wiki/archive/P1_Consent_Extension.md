@@ -1,5 +1,15 @@
 # 도서·산간 방문형 비대면 진료 서비스 — 동의 기능 P1 확장 문서
 
+> Status: Archived
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Current canonical documents: [../MVP_Requirements_v2.md](../MVP_Requirements_v2.md), [../API_Specification.md](../API_Specification.md), [../ERD.md](../ERD.md)
+>
+> Note: 이 문서는 P1 동의 기능 초안입니다. MVP 기준은 Canonical 문서를 확인합니다.
+
 > **기준 문서**: `MVP_Requirements_v2.md`, `API_Specification.md`, `ERD.md`
 >
 > **범위**: 비대면 진료 동의 UI, 동의 기록, `PATIENT_CONSENT` 도메인

@@ -1,5 +1,13 @@
 # 대용량 트래픽 처리 설계 문서
 
+> Status: Canonical
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Purpose: Outbox/Kafka, Redis Pub/Sub, SSE, LiveKit, 병목과 보완 우선순위를 정리한 확장성 설계 기준 문서입니다.
+
 - 작성 기준: 2026-04-08 저장소 스냅샷
 - 범위: `src/BE/core-app`, `src/BE/edge-bff`, `src/BE/notification-service`, `src/BE/robot-gateway`, `infra`, `src/AI-IDV`
 - 관점: "현재 코드가 트래픽을 어떻게 흡수하고, 어떤 부하를 어디로 분산시키는가"

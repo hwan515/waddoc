@@ -1,5 +1,13 @@
 # 도서·산간 방문형 비대면 진료 서비스 — API 명세서 v1 (MVP)
 
+> Status: Canonical
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Purpose: 인증, 예약, 미션, 진료 세션, 보호자/관리자/로봇 API의 요청과 응답 계약을 정의하는 기준 문서입니다.
+
 > **기준 문서**: `MVP_Requirements_v2.md`, `Architecture.md`
 >
 > **Base URL**: `/api/v1`
@@ -1097,7 +1105,7 @@
 
 > 동의 UI 및 동의 기록은 MVP 제외 범위다.
 >
-> 상세 API 초안은 [P1_Consent_Extension.md](./P1_Consent_Extension.md) 문서를 참조한다.
+> 상세 API 초안은 [archive/P1_Consent_Extension.md](./archive/P1_Consent_Extension.md) 문서를 참조한다.
 
 ---
 

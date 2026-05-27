@@ -1,4 +1,14 @@
-# 예상 질문 리스트 
+# 예상 질문 리스트
+
+> Status: Archived
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Current canonical document: [../FAQ.md](../FAQ.md)
+>
+> Note: 이 문서는 FAQ 통합 전 원본 기록입니다.
 
 **본 프로젝트는 기술 구현 자체보다 실제 운영 가능한 방문형 원격진료 서비스 구조를 검증하는 데 목적이 있다**
 

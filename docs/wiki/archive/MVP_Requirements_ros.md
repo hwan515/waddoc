@@ -1,5 +1,15 @@
 # ROS2–Unity 기반 차량 시뮬레이션 관제 시스템 — MVP 요구사항 계획서 v1
 
+> Status: Archived
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Current canonical documents: [../Architecture.md](../Architecture.md), [../Infrastructure_Setup.md](../Infrastructure_Setup.md)
+>
+> Note: 이 문서는 ROS2/Unity 관제 초기 요구사항입니다. 최신 MQTT, SSE, MediaMTX 운영 기준은 Canonical 문서를 확인합니다.
+
 ## 1. 문서 목적
 
 본 문서는 Unity 기반 차량 시뮬레이션 환경에서 생성되는 로봇 상태와 차량 시점 카메라 이미지를 웹 관제 시스템으로 전달하기 위한 **MVP 아키텍처, 데이터 흐름, 기능 요구사항**을 정의한다.

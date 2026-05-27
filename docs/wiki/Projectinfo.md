@@ -1,5 +1,13 @@
 # 프로젝트 소개
 
+> Status: Canonical
+>
+> Owner: Team
+>
+> Last updated: 2026-05-27
+>
+> Purpose: Waddoc의 서비스 목표, 배경, 핵심 기능, 기대 효과를 설명하는 프로젝트 소개 기준 문서입니다.
+
 # 왔닥 (Waddoc)
 
 전화로 예약하면 집 앞까지 찾아오는 방문형 비대면 원격 진료 자율주행 로봇
