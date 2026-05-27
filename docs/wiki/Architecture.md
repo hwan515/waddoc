@@ -346,6 +346,7 @@ Parts:
   - referenceImage: (binary, optional)
   - faceImage: (binary)
   - idCardImage: (binary)
+```
 
 ## 4. 배포 환경 (Production)
 
@@ -598,6 +599,8 @@ Response (JSON):
   "similarityScore": 0.93,
   "reasonCodes": []
 }
+```
+
 ## 5. AI 통신 추상화 레이어
 
 현재 표준 운영 모델은 **IDV/OCR: multipart REST**다.
