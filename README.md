@@ -17,6 +17,70 @@ Waddoc은 도서·산간 의료취약지 고령층이 스마트폰 앱 없이 �
 | 안정적인 실시간 통신 | LiveKit WebRTC, SSE, Kafka, MQTT를 역할별로 분리 |
 | 확장 가능한 서버 경계 | `edge-bff`, `core-app`, `notification-service`, `robot-gateway` 분리 |
 
+## 팀원 소개
+
+| 이름 | 역할 | 담당 |
+| --- | --- | --- |
+| 김주호 | 팀장 | `#ROS` `#Unity` |
+| 권미정 | 팀원 | `#BE` |
+| 배경근 | 팀원 | `#ROS` |
+| 이송연 | 팀원 | `#ROS` `#Unity` |
+| 이영종 | 팀원 | `#FE` `#AI` |
+| 정지환 | 팀원 | `#BE` `#Infra` `#Monitoring` `#AI` |
+
+## 대표 성과
+
+아래 사례는 단순 구현량보다 운영 중 어떤 문제를 얼마나 깊게 파고들었는지를 보여주는 기여입니다.
+
+| 사례 | 문제 | 깊게 들어간 지점 | 결과/검증 | 관련 이슈 |
+| --- | --- | --- | --- | --- |
+| 백엔드 RESTful API 설계 | 전화 예약, 보호자, 의사, 관리자, 차량 단말, 로봇 관제 흐름이 섞이면서 API 경계와 ID 노출 정책이 복잡해지는 문제 | `/api/v1` 기준 리소스 중심 endpoint, public_id 기반 외부 식별자, 역할별 인증, DTO 응답 계약, 상태 enum, 에러 코드, SSE/내부 API 경계를 문서화 | API 명세와 ERD를 기준으로 FE/BE 연동 계약을 맞추고, 환자 무계정 인테이크와 차량 단말 토큰 흐름까지 동일한 규칙으로 정리 | `S14P21A603-152`, `S14P21A603-153`, `S14P21A603-154`, `S14P21A603-155` |
+| 실시간 진료 세션 안정화 | WebRTC 연결 실패, `room_finished` empty timeout 이후 실제 진료 전 세션이 조기 완료되는 문제 | TURN/coturn 포트와 credential, Nginx WebSocket/SSE proxy, LiveKit webhook, consultation session 상태 전이, mission phase 동기화까지 end-to-end로 추적 | relay candidate와 LiveKit/coturn 로그 확인, 의사-환자 smoke test, session `IN_PROGRESS`와 mission `CONSULTING` 정합성 확보 | `S14P21A603-413`, `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528` |
+| scale-out 알림/이벤트 신뢰성 개선 | Spring 다중 인스턴스에서 SSE 알림이 특정 인스턴스의 local emitter에 묶이고, Outbox relay가 중복 실행될 수 있는 문제 | Kafka consumer 배치, Redis Pub/Sub fan-out, Redis 분산 락, keyspace notification, Nginx SSE timeout을 함께 정리 | `core-app` 다중 인스턴스 환경에서 예약 알림 수신 확인, Outbox relay 단일 실행 로그 확인 | `S14P21A603-377`, `S14P21A603-413`, `S14P21A603-520`, `S14P21A603-521` |
+| CI/CD와 운영 모니터링/품질 게이트 구축 | 배포 후 컨테이너, Kafka, Redis, PostgreSQL, LiveKit 상태를 한 화면에서 확인하기 어렵고, FE/BE 품질 게이트와 Grafana 접근 보호도 필요한 문제 | Jenkins 변경 감지 배포, Node 22 기반 FE quality gate, Docker buildx image push, compose rolling update, Prometheus/Grafana, cAdvisor, exporter, Nginx `auth_request`를 함께 정리 | Jenkins stage 통과, 변경 서비스 단위 배포, Prometheus target `UP`, Grafana `operator-overview` 대시보드, `/grafana/` 미인증 403 검증 | `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-535` |
+| 로봇 관제 통신 구조 개선 | polling/Zenoh 중심 구조에서 오프라인 감지, 명령 신뢰성, 최신 telemetry 반영이 불안정한 문제 | Mosquitto MQTT, Spring `robot-gateway`, ROS2 bridge, Last Will, retained message, SSE `updatedAt` ordering, mission cleanup까지 통신 경계를 재정리 | stale telemetry 덮어쓰기 방지, GPS 부재 시 pose fallback, 데모 시작 시 이전 활성 미션 정리 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526` |
+| Unity Camera 운영 장애 복구 | MediaMTX WebRTC 세션은 생성되지만 mixed content, ICE timeout, 보라색/검은 화면으로 브라우저 재생이 실패하는 문제 | edge/frontend Nginx forwarded header, `/unity_cam/` proxy, MediaMTX TCP fallback, H264 pixel format/profile, ROS camera topic fallback을 단계별로 분리 | 공개 HTTPS 경로 고정, `8189/tcp` fallback 추가, `yuv420p`/B-frame 비활성화, inner camera 미수신 시 front camera fallback | `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
+| AI 본인확인/IDV 연동 안정화 | 차량 단말에서 촬영한 얼굴/신분증 이미지의 OCR·얼굴 대조 결과를 진료 준비 단계와 안정적으로 연결해야 하는 문제 | Spring Boot -> GPU AI 서버 multipart 계약, IDV/OCR 응답 검증, timeout/failure/manual review 흐름, AI 서버 분리 배포 경계를 정리 | 얼굴 검출 실패와 OCR 일치 케이스를 분리하고, 본인확인 성공 캐시와 환자 토큰 발급 흐름을 연결 | `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518` |
+
+## 개인 기여 요약
+
+제가(정지환) 맡은 영역은 백엔드 RESTful API 설계, 백엔드 기반 구축, 실시간 진료 세션 안정화, Kafka/Outbox 기반 이벤트 처리, 로봇 관제/MQTT 전환, Jenkins 기반 CI/CD와 운영 인프라 품질 게이트, Prometheus/Grafana 기반 모니터링, AI 본인확인 연동까지 이어집니다.
+
+백엔드 API 영역에서는 `/api/v1` 기준으로 인증, 환자 식별, 인테이크, 예약, 케이스, 미션, 화상진료 세션, 보호자, 관리자, 로봇 운영 API를 리소스 중심으로 설계했습니다. DB 내부 PK는 외부로 노출하지 않고 `public_id`를 API 계약으로 사용하도록 정리했으며, 환자 무계정 인테이크 세션, 차량 단말 토큰, 관리자/의사/보호자 권한 경계를 분리했습니다. API 명세에는 요청/응답 DTO, 상태 enum, 에러 코드, SSE 스트림, 내부 서비스 API까지 함께 정리해 FE/BE 연동 기준으로 사용했습니다.
+
+CI/CD 영역에서는 Jenkins가 변경 경로를 감지해 FE, FE-phone, BE, infra, monitoring stack의 quality gate와 배포 대상을 나누도록 정리했습니다. FE 빌드는 Node 22 컨테이너 기준으로 고정하고, Docker buildx image push 후 compose가 변경된 서비스만 교체하도록 구성했습니다.
+
+모니터링 영역에서는 운영 compose에 Prometheus, Grafana, cAdvisor, PostgreSQL/Redis/Kafka exporter를 붙이고, Spring Actuator 기반 커스텀 메트릭을 `operator-overview` 대시보드에서 확인할 수 있도록 정리했습니다. Grafana는 외부에 그대로 열지 않고 관리자 세션에서 발급한 `monitoring_access` 쿠키와 Nginx `auth_request`로 접근을 제한하는 구조로 잡았습니다.
+
+특히 AI 영역에서는 IDV/OCR 본인확인 서버를 애플리케이션 내부에 섞지 않고 GPU 서버로 분리했습니다. Spring Boot는 차량 단말에서 촬영한 얼굴 이미지와 신분증 이미지를 multipart로 전달하고, AI 응답의 OCR 이름·생년월일·주소 일치 여부와 얼굴 대조 결과를 서버 도메인 규칙으로 재검증합니다. AI timeout, 호출 실패, 얼굴 검출 실패, OCR 일부 일치 케이스는 진료 플로우를 막지 않도록 manual review 또는 완화 조건으로 분리했습니다.
+
+단순 기능 구현보다 장애 재현, 원인 분리, 운영 검증까지 남기는 방식으로 기여를 관리했습니다.
+
+## Jira 기준 기여 요약
+
+아래 수치는 대표 사례를 뒷받침하는 보조 지표입니다. Jira JQL 기준으로 조회 가능한 전체 프로젝트 이슈 432건 중 제가(정지환) 담당한 이슈는 201건, 제가(정지환) 생성/보고한 이슈는 219건입니다. 담당 기준으로는 전체의 46.5%, 문제 정의와 기록까지 포함하면 50.7%를 차지합니다.
+
+| 지표 | 수치 | 해석 |
+| --- | ---: | --- |
+| 전체 프로젝트 이슈 | 432건 | 프로젝트 전체에서 조회 가능한 Jira 이슈 |
+| 제가(정지환) 담당한 이슈 | 201건 | assignee 기준 실제 수행/소유 이슈 |
+| 제가(정지환) 생성/보고한 이슈 | 219건 | creator/reporter 기준 문제 정의와 기록 이슈 |
+| 트러블슈팅/버그 이슈 | 21건 | 운영 장애, 품질 게이트, 실시간 통신, 카메라/로봇 상태 문제를 원인-조치-검증으로 닫은 이슈 |
+
+아래는 제가(정지환) 생성하거나 작성한 Jira 이슈 중 프로젝트 설명에 필요한 대표 이슈와 범위입니다.
+
+| 영역 | 대표 Jira 이슈 |
+| --- | --- |
+| Backend RESTful API 설계 | `S14P21A603-152`, `S14P21A603-153`, `S14P21A603-154`, `S14P21A603-155` |
+| 인프라/배포/품질 게이트 | `S14P21A603-413`, `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-535` |
+| CI/CD | `S14P21A603-520`, `S14P21A603-521` |
+| 모니터링/운영 가시성 | `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-535` |
+| Kafka/Outbox/배차 | `S14P21A603-353`, `S14P21A603-354`, `S14P21A603-355`~`S14P21A603-366`, `S14P21A603-377` |
+| LiveKit/진료 세션 | `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528` |
+| 로봇/MQTT/관제 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526`, `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
+| 본인확인/보안/시드 | `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518`, `S14P21A603-535` |
+| EMR/환자/Phone UX | `S14P21A603-515`, `S14P21A603-516`, `S14P21A603-528` |
+
 ## 시스템 구성
 
 | 영역 | 주요 역할 |
@@ -52,44 +116,6 @@ Client
 - [트러블슈팅](./docs/wiki/Troubleshooting.md)
 - [팀 개발 규칙](./docs/wiki/Conventions.md)
 - [FAQ](./docs/wiki/FAQ.md)
-
-## 주요 기여와 Jira 추적
-
-### 대표 문제 해결 사례
-
-아래 4개 사례는 단순 구현량보다 운영 중 어떤 문제를 얼마나 깊게 파고들었는지를 보여주는 기여입니다.
-
-| 사례 | 문제 | 깊게 들어간 지점 | 결과/검증 | 관련 이슈 |
-| --- | --- | --- | --- | --- |
-| 실시간 진료 세션 안정화 | WebRTC 연결 실패, `room_finished` empty timeout 이후 실제 진료 전 세션이 조기 완료되는 문제 | TURN/coturn 포트와 credential, Nginx WebSocket/SSE proxy, LiveKit webhook, consultation session 상태 전이, mission phase 동기화까지 end-to-end로 추적 | relay candidate와 LiveKit/coturn 로그 확인, 의사-환자 smoke test, session `IN_PROGRESS`와 mission `CONSULTING` 정합성 확보 | `S14P21A603-413`, `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528` |
-| scale-out 알림/이벤트 신뢰성 개선 | Spring 다중 인스턴스에서 SSE 알림이 특정 인스턴스의 local emitter에 묶이고, Outbox relay가 중복 실행될 수 있는 문제 | Kafka consumer 배치, Redis Pub/Sub fan-out, Redis 분산 락, keyspace notification, Nginx SSE timeout을 함께 정리 | `core-app` 다중 인스턴스 환경에서 예약 알림 수신 확인, Outbox relay 단일 실행 로그 확인 | `S14P21A603-377`, `S14P21A603-413`, `S14P21A603-520`, `S14P21A603-521` |
-| 로봇 관제 통신 구조 개선 | polling/Zenoh 중심 구조에서 오프라인 감지, 명령 신뢰성, 최신 telemetry 반영이 불안정한 문제 | Mosquitto MQTT, Spring `robot-gateway`, ROS2 bridge, Last Will, retained message, SSE `updatedAt` ordering, mission cleanup까지 통신 경계를 재정리 | stale telemetry 덮어쓰기 방지, GPS 부재 시 pose fallback, 데모 시작 시 이전 활성 미션 정리 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526` |
-| Unity Camera 운영 장애 복구 | MediaMTX WebRTC 세션은 생성되지만 mixed content, ICE timeout, 보라색/검은 화면으로 브라우저 재생이 실패하는 문제 | edge/frontend Nginx forwarded header, `/unity_cam/` proxy, MediaMTX TCP fallback, H264 pixel format/profile, ROS camera topic fallback을 단계별로 분리 | 공개 HTTPS 경로 고정, `8189/tcp` fallback 추가, `yuv420p`/B-frame 비활성화, inner camera 미수신 시 front camera fallback | `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
-
-### Jira 기준 기여 요약
-
-아래 수치는 대표 사례를 뒷받침하는 보조 지표입니다. Jira JQL 기준으로 조회 가능한 전체 프로젝트 이슈 432건 중 제가(정지환) 담당한 이슈는 201건, 제가(정지환) 생성/보고한 이슈는 219건입니다. 담당 기준으로는 전체의 46.5%, 문제 정의와 기록까지 포함하면 50.7%를 차지합니다.
-
-| 지표 | 수치 | 해석 |
-| --- | ---: | --- |
-| 전체 프로젝트 이슈 | 432건 | 프로젝트 전체에서 조회 가능한 Jira 이슈 |
-| 제가(정지환) 담당한 이슈 | 201건 | assignee 기준 실제 수행/소유 이슈 |
-| 제가(정지환) 생성/보고한 이슈 | 219건 | creator/reporter 기준 문제 정의와 기록 이슈 |
-| 트러블슈팅/버그 이슈 | 21건 | 운영 장애, 품질 게이트, 실시간 통신, 카메라/로봇 상태 문제를 원인-조치-검증으로 닫은 이슈 |
-
-제가(정지환) 맡은 영역은 백엔드 기반 구축, 실시간 진료 세션 안정화, Kafka/Outbox 기반 이벤트 처리, 로봇 관제/MQTT 전환, 운영 인프라 품질 게이트까지 이어집니다. 단순 기능 구현보다 장애 재현, 원인 분리, 운영 검증까지 남기는 방식으로 기여를 관리했습니다.
-
-아래는 제가(정지환) 생성하거나 작성한 Jira 이슈 중 프로젝트 설명에 필요한 대표 이슈와 범위입니다.
-
-| 영역 | 대표 Jira 이슈 |
-| --- | --- |
-| Backend 기반/API | `S14P21A603-152`, `S14P21A603-153`, `S14P21A603-154`, `S14P21A603-155` |
-| 인프라/배포/품질 게이트 | `S14P21A603-413`, `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-535` |
-| Kafka/Outbox/배차 | `S14P21A603-353`, `S14P21A603-354`, `S14P21A603-355`~`S14P21A603-366`, `S14P21A603-377` |
-| LiveKit/진료 세션 | `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528` |
-| 로봇/MQTT/관제 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526`, `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
-| 본인확인/보안/시드 | `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518`, `S14P21A603-535` |
-| EMR/환자/Phone UX | `S14P21A603-515`, `S14P21A603-516`, `S14P21A603-528` |
 
 ## 트러블슈팅 정리
 
