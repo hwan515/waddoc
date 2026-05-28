@@ -40,11 +40,11 @@ Waddoc은 도서·산간 의료취약지 고령층이 스마트폰 앱 없이 �
 | CI/CD와 운영 모니터링/품질 게이트 구축 | 배포 후 컨테이너, Kafka, Redis, PostgreSQL, LiveKit 상태를 한 화면에서 확인하기 어렵고, FE/BE 품질 게이트와 Grafana 접근 보호도 필요한 문제 | Jenkins 변경 감지 배포, Node 22 기반 FE quality gate, Docker buildx image push, compose rolling update, Prometheus/Grafana, cAdvisor, exporter, Nginx `auth_request`를 함께 정리 | Jenkins stage 통과, 변경 서비스 단위 배포, Prometheus target `UP`, Grafana `operator-overview` 대시보드, `/grafana/` 미인증 403 검증 | `S14P21A603-520`, `S14P21A603-521`, `S14P21A603-535` |
 | 로봇 관제 통신 구조 개선 | polling/Zenoh 중심 구조에서 오프라인 감지, 명령 신뢰성, 최신 telemetry 반영이 불안정한 문제 | Mosquitto MQTT, Spring `robot-gateway`, ROS2 bridge, Last Will, retained message, SSE `updatedAt` ordering, mission cleanup까지 통신 경계를 재정리 | stale telemetry 덮어쓰기 방지, GPS 부재 시 pose fallback, 데모 시작 시 이전 활성 미션 정리 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526` |
 | Unity Camera 운영 장애 복구 | MediaMTX WebRTC 세션은 생성되지만 mixed content, ICE timeout, 보라색/검은 화면으로 브라우저 재생이 실패하는 문제 | edge/frontend Nginx forwarded header, `/unity_cam/` proxy, MediaMTX TCP fallback, H264 pixel format/profile, ROS camera topic fallback을 단계별로 분리 | 공개 HTTPS 경로 고정, `8189/tcp` fallback 추가, `yuv420p`/B-frame 비활성화, inner camera 미수신 시 front camera fallback | `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
-| AI 본인확인/IDV 연동 안정화 | 차량 단말에서 촬영한 얼굴/신분증 이미지의 OCR·얼굴 대조 결과를 진료 준비 단계와 안정적으로 연결해야 하는 문제 | Spring Boot -> GPU AI 서버 multipart 계약, IDV/OCR 응답 검증, timeout/failure/manual review 흐름, AI 서버 분리 배포 경계를 정리 | 얼굴 검출 실패와 OCR 일치 케이스를 분리하고, 본인확인 성공 캐시와 환자 토큰 발급 흐름을 연결 | `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518` |
+| AI 본인확인/IDV 서버 구현 및 연동 안정화 | 차량 단말에서 촬영한 얼굴/신분증 이미지의 OCR·얼굴 대조 결과를 진료 준비 단계와 안정적으로 연결해야 하는 문제 | FastAPI GPU AI-IDV 서버, SCRFD 얼굴 검출, AdaFace 임베딩 비교, PaddleOCR OCR, Spring Boot -> GPU AI 서버 multipart 계약, AdaFace ONNX FP16/INT8 양자화·비교 스크립트를 정리 | 얼굴 검출 실패와 OCR 일치 케이스를 분리하고, 본인확인 성공 캐시와 환자 토큰 발급 흐름을 연결했으며 양자화 모델 적용/검증 경로를 문서화 | `S14P21A603-451`, `S14P21A603-480`, `S14P21A603-517`, `S14P21A603-518` |
 
 ## 개인 기여 요약
 
-제가(정지환) 맡은 영역은 백엔드 RESTful API 설계, 백엔드 기반 구축, 실시간 진료 세션 안정화, Kafka/Outbox 기반 이벤트 처리, 로봇 관제/MQTT 전환, Jenkins 기반 CI/CD와 운영 인프라 품질 게이트, Prometheus/Grafana 기반 모니터링, AI 본인확인 연동까지 이어집니다.
+제가(정지환) 맡은 영역은 백엔드 RESTful API 설계, 백엔드 기반 구축, 실시간 진료 세션 안정화, Kafka/Outbox 기반 이벤트 처리, 로봇 관제/MQTT 전환, Jenkins 기반 CI/CD와 운영 인프라 품질 게이트, Prometheus/Grafana 기반 모니터링, AI-IDV 본인확인 서버 구현/연동까지 이어집니다.
 
 백엔드 API 영역에서는 `/api/v1` 기준으로 인증, 환자 식별, 인테이크, 예약, 케이스, 미션, 화상진료 세션, 보호자, 관리자, 로봇 운영 API를 리소스 중심으로 설계했습니다. DB 내부 PK는 외부로 노출하지 않고 `public_id`를 API 계약으로 사용하도록 정리했으며, 환자 무계정 인테이크 세션, 차량 단말 토큰, 관리자/의사/보호자 권한 경계를 분리했습니다. API 명세에는 요청/응답 DTO, 상태 enum, 에러 코드, SSE 스트림, 내부 서비스 API까지 함께 정리해 FE/BE 연동 기준으로 사용했습니다.
 
@@ -52,7 +52,7 @@ CI/CD 영역에서는 Jenkins가 변경 경로를 감지해 FE, FE-phone, BE, in
 
 모니터링 영역에서는 운영 compose에 Prometheus, Grafana, cAdvisor, PostgreSQL/Redis/Kafka exporter를 붙이고, Spring Actuator 기반 커스텀 메트릭을 `operator-overview` 대시보드에서 확인할 수 있도록 정리했습니다. Grafana는 외부에 그대로 열지 않고 관리자 세션에서 발급한 `monitoring_access` 쿠키와 Nginx `auth_request`로 접근을 제한하는 구조로 잡았습니다.
 
-특히 AI 영역에서는 IDV/OCR 본인확인 서버를 애플리케이션 내부에 섞지 않고 GPU 서버로 분리했습니다. Spring Boot는 차량 단말에서 촬영한 얼굴 이미지와 신분증 이미지를 multipart로 전달하고, AI 응답의 OCR 이름·생년월일·주소 일치 여부와 얼굴 대조 결과를 서버 도메인 규칙으로 재검증합니다. AI timeout, 호출 실패, 얼굴 검출 실패, OCR 일부 일치 케이스는 진료 플로우를 막지 않도록 manual review 또는 완화 조건으로 분리했습니다.
+특히 AI 영역에서는 IDV/OCR 본인확인 서버를 애플리케이션 내부에 섞지 않고 FastAPI 기반 GPU 서버로 분리했습니다. SCRFD로 얼굴을 검출하고, AdaFace로 얼굴 임베딩을 비교하며, PaddleOCR로 신분증 OCR을 수행하는 파이프라인을 구성했습니다. 또한 AdaFace checkpoint를 ONNX로 변환하고 FP16/INT8 양자화 및 FP32 대비 임베딩 유사도/latency 비교 스크립트를 정리했습니다. Spring Boot는 차량 단말에서 촬영한 얼굴 이미지와 신분증 이미지를 multipart로 전달하고, AI 응답의 OCR 이름·생년월일·주소 일치 여부와 얼굴 대조 결과를 서버 도메인 규칙으로 재검증합니다. AI timeout, 호출 실패, 얼굴 검출 실패, OCR 일부 일치 케이스는 진료 플로우를 막지 않도록 manual review 또는 완화 조건으로 분리했습니다.
 
 단순 기능 구현보다 장애 재현, 원인 분리, 운영 검증까지 남기는 방식으로 기여를 관리했습니다.
 
@@ -78,7 +78,7 @@ CI/CD 영역에서는 Jenkins가 변경 경로를 감지해 FE, FE-phone, BE, in
 | Kafka/Outbox/배차 | `S14P21A603-353`, `S14P21A603-354`, `S14P21A603-355`~`S14P21A603-366`, `S14P21A603-377` |
 | LiveKit/진료 세션 | `S14P21A603-441`, `S14P21A603-442`, `S14P21A603-444`, `S14P21A603-528` |
 | 로봇/MQTT/관제 | `S14P21A603-509`, `S14P21A603-510`, `S14P21A603-519`, `S14P21A603-526`, `S14P21A603-550`, `S14P21A603-551`, `S14P21A603-552`, `S14P21A603-553` |
-| 본인확인/보안/시드 | `S14P21A603-451`, `S14P21A603-517`, `S14P21A603-518`, `S14P21A603-535` |
+| 본인확인/보안/시드 | `S14P21A603-451`, `S14P21A603-480`, `S14P21A603-517`, `S14P21A603-518`, `S14P21A603-535` |
 | EMR/환자/Phone UX | `S14P21A603-515`, `S14P21A603-516`, `S14P21A603-528` |
 
 ## 시스템 구성
@@ -87,6 +87,7 @@ CI/CD 영역에서는 Jenkins가 변경 경로를 감지해 FE, FE-phone, BE, in
 | --- | --- |
 | `src/FE` | 의사, 관리자, 보호자, 관제 웹 UI |
 | `src/FE-phone` | 전화 예약 시뮬레이터 UI |
+| `src/AI-IDV` | FastAPI 기반 본인확인 GPU 서버, SCRFD/AdaFace/PaddleOCR 추론, AdaFace ONNX export/FP16·INT8 양자화 |
 | `src/BE` | Spring Boot 기반 API, 인증, 예약, 배차, 알림, 로봇 게이트웨이 |
 | `src/ros2_docker` | ROS2/Unity 연동, 카메라 스트리밍, 로봇 통신 |
 | `infra` | Docker Compose, Nginx, LiveKit, coturn, Kafka, Redis, PostgreSQL, Mosquitto, MediaMTX, monitoring |
